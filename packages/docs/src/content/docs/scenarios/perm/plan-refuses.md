@@ -21,6 +21,7 @@ scenario:
         text: >-
           ทุกโหมดได้ tool ชุดเดียวกัน `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และโมเดลเรียกได้ ทั้งที่ประกาศของโหมด Plan
           บอกแล้วว่าทำไม่ได้ ประกาศจาก run จริงด้านล่างเป็นแบบนี้
+        from: model
         to: engine
         sees:
           kind: payload
@@ -47,6 +48,8 @@ scenario:
         title: "แชตขึ้นขั้นของ call"
         text: >-
           Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
 
     - id: which
       lane: tool
@@ -55,6 +58,8 @@ scenario:
         title: "Geno อ่านโหมดตอน call รัน"
         text: >-
           Geno อ่านโหมดของ session ตอนที่ call รัน ได้ Plan ลองเลือกว่าโมเดลเรียกอะไร
+        from: engine
+        to: engine
         ask: "โมเดลเรียกอะไร"
       runs: 0
       do: >-
@@ -74,6 +79,8 @@ scenario:
                   text: >-
                     โหมด Plan ใช้แค่กฎในตัว ไม่อ่านกฎของ workspace `pnpm add zod` ไม่อยู่ในรายการคำสั่งปลอดภัยจึงถูกปฏิเสธ
                     ไม่ถามคุณและไม่มี classifier ผลบอกให้เปลี่ยนเป็น Ask หรือ Auto ถ้าจะแก้อะไร
+                  from: engine
+                  to: model
                 do: >-
                   `ruledDenial` ในโหมด Plan ใช้แค่คำตัดสินในตัว ไม่อ่านกฎของ workspace กฎ `unlisted` ในโหมด Plan คือ `deny`
                 ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -98,6 +105,8 @@ scenario:
                   title: "แชตขึ้นป้าย Denied by a rule"
                   text: >-
                     แชตเห็นว่าการปฏิเสธมาจากกฎ ไม่ใช่จากคุณ จึงขึ้นป้ายปฏิเสธพร้อมเหตุผล
+                  from: panel
+                  to: you
                   sees: { kind: step, label: pnpm add zod, status: denied, note: Denied by a rule · A command not on the safe list is not allowed here. }
                 alongside: true
                 do: >-
@@ -114,6 +123,8 @@ scenario:
                   title: "โหมด Plan ไม่มี edit ให้ใช้"
                   text: >-
                     `edit` ไม่อยู่ในรายการ tool ของโหมด Plan call ล้มเหลวทันทีก่อนอ่านไฟล์หรือดูกฎใดๆ และไม่มีบันทึกการปฏิเสธ
+                  from: engine
+                  to: model
                 do: >-
                   `inMode` เห็นว่า `AGENT_MODE_TOOLS.plan` ไม่มี `edit` จึงโยน `ToolError`
                   "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it."
@@ -132,6 +143,8 @@ scenario:
                   title: "แชตขึ้นขั้นล้มเหลวธรรมดา"
                   text: >-
                     ผลเป็น error ไม่ใช่การปฏิเสธ แชตจึงแสดงขั้นเป็นล้มเหลวธรรมดาโดยไม่มีป้าย
+                  from: panel
+                  to: you
                   sees: { kind: step, label: edit src/date.ts, status: failed, output: "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it." }
                 alongside: true
                 do: >-
@@ -148,6 +161,8 @@ scenario:
                   title: "โหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด"
                   text: >-
                     งานเบื้องหลังถูกปฏิเสธก่อนดูกฎใดๆ แม้คำสั่งนั้นจะอยู่ในรายการคำสั่งปลอดภัย
+                  from: engine
+                  to: model
                 do: >-
                   `approveCommand` ปฏิเสธงานเบื้องหลังในโหมด Plan ก่อนดูกฎใดๆ ด้วย `ToolError`
                   "background commands are not available: Plan mode is read-only; ... Do not retry it."
@@ -163,6 +178,7 @@ scenario:
         text: >-
           ไม่มีอะไรรันและไม่มีการ์ด การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียกโมเดลต่อ
           โมเดลอ่านเหตุผลแล้วทำแผนต่อ
+        from: engine
         to: model
         end: "model ทำแผนต่อ"
       do: >-

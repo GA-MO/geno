@@ -22,6 +22,8 @@ scenario:
         text: >-
           turn ที่แล้วจบโดยไม่มีข้อความหลังขั้นสุดท้าย ในทัวร์นี้คุณกด Stop ก่อนโมเดลตอบ แผงเลือกเหตุผลจากวิธีที่ turn
           จบ และใส่ปุ่มให้เพราะนี่คือ turn ล่าสุด
+        from: panel
+        to: you
         sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้ายของ turn และไม่มีบล็อก error จึงเลือกเหตุผลจากวิธีที่ turn จบ
@@ -37,6 +39,8 @@ scenario:
         title: "คุณเลือกปุ่ม"
         text: >-
           ทั้งสองปุ่มส่งข้อความใหม่เหมือนคุณพิมพ์เอง ต่างกันที่ข้อความ ลองเลือกดู
+        from: you
+        to: panel
         ask: "กดปุ่มไหน"
       do: ผู้ใช้กดปุ่มหนึ่งในสองปุ่ม
       fork:
@@ -53,6 +57,7 @@ scenario:
                   text: >-
                     แผงส่งข้อความคงที่ที่บอกโมเดลให้ทำต่อจากที่หยุดแล้วตอบให้จบ
                   from: you
+                  to: panel
                   sees: { kind: message, from: you, text: "Continue where you stopped, and finish with your answer." }
                 do: >-
                   ปุ่ม Continue โพสต์ `send` ด้วยข้อความคงที่ `CONTINUE_PROMPT` เหมือนผู้ใช้พิมพ์ส่งเอง
@@ -70,6 +75,7 @@ scenario:
                   text: >-
                     แผงส่งข้อความเดิมของ turn นั้นซ้ำ เฉพาะข้อความ ไฟล์แนบของ turn เดิมไม่ถูกส่งซ้ำ
                   from: you
+                  to: panel
                   sees: "บับเบิลใหม่ที่มีข้อความเดียวกับ turn ก่อน"
                 do: >-
                   ปุ่ม Retry โพสต์ `send` ด้วยข้อความเดิมของ turn นั้น ส่งเฉพาะข้อความ ไฟล์แนบของ turn เดิมไม่ถูกส่งซ้ำ
@@ -84,6 +90,7 @@ scenario:
         title: "VS Code เริ่ม turn ใหม่"
         text: >-
           ปุ่มทั้งสองหายไป เพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว VS Code ส่งข้อความใหม่ไปที่ session เดิม
+        from: panel
         to: engine
         sees: { kind: composer, state: working, header: working }
       do: >-
@@ -105,6 +112,8 @@ scenario:
         title: "Geno รับ turn ใหม่พร้อมขีดจำกัดเต็ม"
         text: >-
           engine รับเป็น turn ใหม่ที่มาจากคุณ จำนวนครั้งและค่าใช้จ่ายเริ่มนับใหม่ turn นี้จึงได้ 40 ครั้งและ $0.40 เต็ม
+        from: engine
+        to: engine
       do: >-
         `runTurn` รับเป็น turn ใหม่ที่มาจากผู้ใช้ และ `drive` เริ่มนับการเรียกโมเดลและค่าใช้จ่ายจาก seq ของ prompt ใหม่
         turn นี้จึงได้ 40 ครั้งและ $0.40 เต็ม (`runTurn` ยังล้างงบของงานตามเวลาที่อาจค้างไว้ด้วย)
@@ -118,6 +127,8 @@ scenario:
         title: "Geno บันทึกข้อความใหม่"
         text: >-
           Geno บันทึกข้อความใหม่ต่อท้ายบันทึกของ session แล้วตัดสินว่าขั้นต่อไปคือเรียกโมเดล
+        from: engine
+        to: engine
       do: >-
         `drive` บันทึก event `user` ของข้อความใหม่ต่อท้าย log
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
@@ -140,6 +151,8 @@ scenario:
         text: >-
           prompt เดิมยังไม่ได้คำตอบ Geno จึงรวมมันกับโน้ตที่บอกว่าคุณหยุด turn ที่แล้ว และข้อความใหม่ เป็นข้อความ user
           เดียว กด Continue โมเดลเห็นว่าคุณอนุญาตให้ทำต่อ กด Retry โมเดลเห็น prompt เดิมสองครั้ง
+        from: engine
+        to: engine
       do: >-
         `replayMessages` รวม prompt ที่ยังไม่ได้คำตอบ โน้ต `STOPPED_TURN_NOTE` และข้อความใหม่เป็นข้อความ user เดียว
         กด Retry โมเดลจึงเห็น prompt เดิมสองครั้งโดยมีโน้ตคั่น กด Continue โมเดลเห็น prompt เดิม โน้ต แล้ว `CONTINUE_PROMPT`
@@ -153,6 +166,7 @@ scenario:
         title: "Geno ส่งคำขอของ turn ใหม่"
         text: >-
           คำขอออกไปหาโมเดล จากตรงนี้ turn ใหม่เดินเหมือน turn ปกติ
+        from: engine
         to: model
         end: "turn ใหม่เริ่ม"
       do: >-

@@ -21,6 +21,7 @@ scenario:
         text: >-
           `monitor` เป็น tool ที่เลื่อนไว้ โมเดลเห็นแค่ชื่อและคำอธิบายสั้นในคำอธิบายของ `tool_search` ยังไม่รู้ input
           ของมัน ลองเลือกว่าโมเดลเรียกอะไรก่อน
+        from: model
         to: engine
         ask: "เรียกอะไรก่อน"
       do: >-
@@ -42,6 +43,7 @@ scenario:
                   text: >-
                     Geno บันทึกคำขอ แล้วแชตขึ้นขั้นของ `monitor` พร้อมจุดหมุน
                   from: model
+                  to: engine
                 do: >-
                   `drive` บันทึก event `assistant` ที่มีบล็อก `tool_use` ของ `monitor`
                 ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn\""
@@ -53,6 +55,8 @@ scenario:
                   title: "Geno ปฏิเสธเพราะยังไม่ได้โหลด"
                   text: >-
                     Geno อ่านบันทึกแล้วไม่พบว่าเคยโหลด `monitor` จึงไม่รัน ผลเป็น error ที่บอกให้เรียก `tool_search` ก่อน
+                  from: engine
+                  to: model
                   sees: { kind: step, label: monitor, status: failed }
                 runs: 0
                 do: >-
@@ -68,6 +72,7 @@ scenario:
                   title: "Geno เรียก model ต่อ"
                   text: >-
                     turn ไม่หยุด Geno เรียกโมเดลอีกรอบ โมเดลได้อ่านว่าต้องโหลดก่อน
+                  from: engine
                   to: model
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้อ่านว่าต้องโหลดก่อน
@@ -85,6 +90,7 @@ scenario:
         text: >-
           โมเดลเรียก `tool_search` ด้วยชื่อ tool ที่ต้องการ หรือด้วยคำบรรยายสิ่งที่ต้องการ run จริงด้านล่างโหลด
           `web_fetch` แบบเดียวกัน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -119,6 +125,7 @@ scenario:
         text: >-
           Geno หา tool ในรายการที่เลื่อนไว้ แล้วคืนนิยามเต็ม ทั้งชื่อ คำอธิบาย และ schema ของ input พร้อมจดว่าโหลดแล้ว
           ถ้าไม่พบอะไรเลย ผลเป็น error
+        from: engine
         to: model
         sees:
           kind: payload
@@ -142,6 +149,7 @@ scenario:
         title: "Geno จำว่าโหลดแล้วทั้ง session"
         text: >-
           การโหลดอยู่ในบันทึกของ session จึงมีผลตลอด session รวมถึงหลัง reload Geno เรียกโมเดลต่อ
+        from: engine
         to: model
       do: >-
         `loopStep` ตัดสิน `call-model` จากนี้ `loadedTools` อ่านพบ `monitor` ใน `tool-result` ที่สถานะ `ok`
@@ -158,6 +166,8 @@ scenario:
         text: >-
           คราวนี้ Geno ปล่อยผ่าน และแปลงค่าที่โมเดลเขียนเป็นข้อความ เช่น "2" หรือ "False" ให้เป็นชนิดตาม schema
           ก่อนส่งต่อ run จริงด้านล่างเรียก `web_fetch` ที่เพิ่งโหลด
+        from: model
+        to: engine
         end: "tool พร้อมใช้"
         sees:
           kind: payload

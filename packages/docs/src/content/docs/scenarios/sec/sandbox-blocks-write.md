@@ -21,6 +21,8 @@ scenario:
         title: "Geno ได้คำอนุญาตของคุณ"
         text: >-
           คุณกด Allow บนการ์ดแล้ว การอนุญาตตอบคำถามว่าให้รันไหม แต่ไม่ได้ขยายสิ่งที่คำสั่งแตะได้
+        from: engine
+        to: engine
       do: >-
         `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้ว `approveCommand` คืนบันทึกนั้น
         การอนุญาตตอบคำถามว่าให้รันไหม แต่ไม่ได้ขยายสิ่งที่คำสั่งแตะได้
@@ -50,6 +52,8 @@ scenario:
         title: "คำสั่งเริ่มรันใน sandbox"
         text: >-
           คำสั่งรันในกลุ่ม process ของตัวเอง ภายใต้ sandbox ของระบบปฏิบัติการ ลองเลือกว่ามันพยายามแตะอะไร
+        from: engine
+        to: machine
         ask: "แตะอะไร"
       do: >-
         `runShell` เริ่มคำสั่งใน process group ของตัวเอง ภายใต้ sandbox ของระบบปฏิบัติการ
@@ -68,6 +72,8 @@ scenario:
                   text: >-
                     คำสั่งพยายามเขียนลงโฟลเดอร์ global ของ npm sandbox ปฏิเสธการเขียน npm พิมพ์ว่า operation not permitted
                     แล้วจบด้วย exit code ที่ไม่ใช่ 0
+                  from: engine
+                  to: machine
                 do: >-
                   `npm install -g typescript` พยายามเขียนลงโฟลเดอร์ global ของ npm นอก workspace
                   sandbox ปฏิเสธการเขียน npm พิมพ์ error ว่า "operation not permitted" แล้วจบด้วย exit code ที่ไม่ใช่ 0
@@ -83,6 +89,8 @@ scenario:
                   title: "cat ~/.ssh ถูกปฏิเสธการอ่าน"
                   text: >-
                     `~/.ssh` อยู่ในรายการที่อ่านไม่ได้ `cat` พิมพ์ Operation not permitted และจบด้วย exit code 1
+                  from: engine
+                  to: machine
                 do: >-
                   `cat ~/.ssh/id_ed25519.pub` พยายามอ่านใน `~/.ssh` ซึ่งอยู่ใน `denyRead` sandbox ปฏิเสธการอ่าน
                   `cat` พิมพ์ "Operation not permitted" และจบด้วย exit code 1
@@ -98,6 +106,8 @@ scenario:
                   title: "curl ออกเน็ตไม่ได้"
                   text: >-
                     คำขอต้องผ่าน proxy ของ sandbox โฮสต์นี้ไม่อยู่ในรายการที่อนุญาต proxy จึงไม่ต่อให้ คำขอไม่ออกจากเครื่อง
+                  from: engine
+                  to: machine
                 do: >-
                   `curl https://api.github.com/repos/acme/app` ต้องผ่าน proxy ของ sandbox โฮสต์นี้ไม่อยู่ใน allowlist
                   proxy ไม่ยอมต่อให้ คำขอไม่ออกจากเครื่อง `curl` จบด้วย exit code ที่ไม่ใช่ 0
@@ -111,6 +121,8 @@ scenario:
         text: >-
           ผลขึ้นต้นด้วย Exit code 1 ตามด้วยสิ่งที่คำสั่งพิมพ์ บันทึกว่าคุณอนุญาตยังติดไปกับผล ไม่มีอะไรบอกแยกว่า sandbox
           เป็นคนกัน ใน run จริงด้านล่าง classifier อนุญาต `ps aux` แล้ว sandbox กันไว้แบบนี้
+        from: machine
+        to: engine
         sees:
           kind: payload
           direction: tool_result
@@ -129,6 +141,7 @@ scenario:
         title: "แชตขึ้นขั้นที่ล้มเหลว"
         text: >-
           ขั้นของคำสั่งหยุดหมุนและขึ้นว่าล้มเหลว output พับอยู่ข้างใต้
+        from: engine
         to: panel
         sees: { kind: step, label: npm install -g typescript, status: failed }
 
@@ -140,6 +153,7 @@ scenario:
         text: >-
           Geno เรียกโมเดลต่อ โมเดลอ่าน error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace
           หรือบอกคุณว่าต้องรันคำสั่งนี้เอง
+        from: engine
         to: model
         end: "sandbox กัน turn ทำต่อ"
       do: >-

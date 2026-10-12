@@ -23,6 +23,8 @@ scenario:
         text: >-
           turn ล่าสุดจบในโหมด Plan โมเดลเขียนแผนและตั้งรายการ todo ห้าข้อที่ยังไม่เริ่ม แผงวาดปุ่ม Start building ใต้
           turn นั้น เพราะ session ยังอยู่ในโหมด Plan
+        from: panel
+        to: you
         sees: "ปุ่ม \"Start building\" ไอคอน play ใต้แผน และป้าย \"Plan\" ข้างหัวข้อของ turn"
       do: >-
         แผงวาดปุ่ม Start building ใต้ turn ล่าสุดเมื่อ turn นั้นจบแบบ done ในโหมด Plan และ session ยังอยู่ในโหมด Plan
@@ -36,6 +38,7 @@ scenario:
         title: "คุณคลิก Start building"
         text: >-
           คุณอ่านแผนแล้วคลิกปุ่ม แผงส่งคำขอไปที่ VS Code
+        from: you
         to: panel
       do: ผู้ใช้คลิก Start building
 
@@ -55,6 +58,7 @@ scenario:
         text: >-
           ไม่มี turn ทำงานอยู่ VS Code เปลี่ยนโหมดเป็นโหมดของแชตใหม่ตามการตั้งค่า ซึ่งคือ Ask เว้นแต่คุณตั้งเป็น Auto
           engine เปลี่ยนโหมดและบันทึกลงบันทึกของ session
+        from: panel
         to: engine
       do: >-
         `startBuilding` ตรวจว่าไม่มี turn ทำงาน แล้วเรียก `setMode` ด้วยโหมดของแชตใหม่ตามการตั้งค่า (Ask เว้นแต่ตั้งเป็น Auto)
@@ -76,6 +80,8 @@ scenario:
         title: "ปุ่มโหมดเป็น Ask และปุ่ม Start building หาย"
         text: >-
           session ไม่อยู่ในโหมด Plan แล้ว ปุ่ม Start building จึงหายไป
+        from: panel
+        to: you
         sees: { kind: composer, state: idle }
       alongside: true
       do: >-
@@ -90,6 +96,7 @@ scenario:
         title: "VS Code ส่ง “Go ahead with the plan.”"
         text: >-
           VS Code ส่งข้อความคงที่ผ่านทางเดียวกับข้อความที่คุณพิมพ์ แชตขึ้นบับเบิลใหม่และหัวข้อ working
+        from: panel
         to: engine
         sees: { kind: message, from: you, text: Go ahead with the plan. }
       do: >-
@@ -107,6 +114,8 @@ scenario:
         text: >-
           engine รับเป็น turn ใหม่ที่คุณส่ง ทุก call ใน turn นี้ตัดสินด้วยโหมด Ask และขีดจำกัดเริ่มนับใหม่ Geno
           บันทึกข้อความแล้วตัดสินว่าขั้นต่อไปคือเรียกโมเดล
+        from: engine
+        to: engine
       do: >-
         `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง และเรียก `runAgent` ซึ่งตัดสินแต่ละ call ด้วยโหมด Ask ขีดจำกัดของรอบนับใหม่จาก prompt นี้
       ref: packages/engine/src/serve.ts#runTurn
@@ -137,6 +146,8 @@ scenario:
         text: >-
           ที่จุดปลอดภัย Geno เพิ่มประกาศหนึ่งก้อนที่รวมสองเรื่อง โหมดเปลี่ยนจาก Plan เป็น Ask และรายการ todo
           ของแผนยังไม่เสร็จ จึงแนบรายการเดิมมาด้วย
+        from: engine
+        to: model
       do: >-
         `deliver()` บันทึก `notice` หนึ่งตัวที่รวมสองเรื่อง: `noticeFor` เห็นว่าโหมดเปลี่ยนจาก Plan เป็น Ask
         และ `todoReminder` เห็นว่ารายการยังไม่เสร็จหลัง prompt ที่ผู้ใช้พิมพ์ จึงแนบรายการเดิมมาด้วย
@@ -150,6 +161,8 @@ scenario:
         title: "แชตปักรายการ todo ของแผน"
         text: >-
           turn ใหม่ยังไม่ได้ตั้งรายการของตัวเอง แชตจึงปักรายการที่ยังไม่เสร็จจาก turn ก่อนไว้ โดยไม่มีข้อไหนหมุน
+        from: panel
+        to: you
         sees: "กล่อง \"0 of 5 done · from an earlier turn\" ที่พับไว้"
       alongside: true
       do: >-
@@ -163,6 +176,7 @@ scenario:
         text: >-
           Geno เรียกโมเดล โมเดลอ่านว่าคุณเปลี่ยนเป็นโหมด Ask แล้วแก้โค้ดได้ ตามด้วยรายการ todo ของแผน
           แล้วเริ่มแก้โค้ดตามขั้นแรก
+        from: engine
         to: model
         end: "เริ่มสร้างตามแผน"
 

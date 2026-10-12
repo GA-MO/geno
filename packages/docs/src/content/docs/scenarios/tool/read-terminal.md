@@ -22,6 +22,8 @@ scenario:
         text: >-
           ตั้งแต่ Geno ทำงานในหน้าต่างนี้ VS Code จดคำสั่งล่าสุด 20 คำสั่งต่อเทอร์มินัล พร้อมท้าย output และ exit code
           คุณรัน `pnpm build` แล้วมันล้ม จากนั้นถามว่า "build ที่ผมเพิ่งรันพังเพราะอะไร"
+        from: panel
+        to: panel
       do: >-
         ตั้งแต่ extension ทำงาน `TerminalRecorder` ฟัง event เริ่มและจบคำสั่งของ shell integration
         เก็บคำสั่งล่าสุด 20 คำสั่งต่อเทอร์มินัล พร้อมท้าย output ไม่เกิน 64,000 ตัวอักษรต่อคำสั่ง และ exit code
@@ -46,6 +48,8 @@ scenario:
         title: "แชตขึ้นขั้นของ read_terminal"
         text: >-
           Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
 
     - id: no-ask
       lane: policy
@@ -54,6 +58,8 @@ scenario:
         title: "Geno ไม่ถาม เพราะอ่านอย่างเดียว"
         text: >-
           ทุกโหมดที่มีคนดูได้ tool นี้และไม่ถาม run ที่ไม่มีคนดูไม่ได้รับ tool นี้เลย
+        from: engine
+        to: engine
       do: >-
         ไม่มีการตัดสินของนโยบาย `read_terminal` อ่านอย่างเดียว ทุกโหมดที่มีคนดู (Plan, Ask, Auto) ได้เครื่องมือนี้และไม่ถาม
         run ที่ไม่มีคนดูไม่ได้รับเครื่องมือนี้เลย
@@ -66,6 +72,7 @@ scenario:
         title: "Geno ขอ VS Code อ่านเทอร์มินัล"
         text: >-
           engine หา editor ที่แสดง session นี้และอ่านเทอร์มินัลได้ แล้วขอคำสั่งล่าสุด ค่าตั้งต้นคือ 3 คำสั่ง
+        from: engine
         to: panel
       do: >-
         executor เรียก `editorTerminals` ซึ่งหา editor ที่แสดง session นี้และอ่านเทอร์มินัลได้
@@ -81,6 +88,7 @@ scenario:
         text: >-
           VS Code เลือกเทอร์มินัลที่ active ล้าง escape code ลบความลับทั้งจากคำสั่งและ output แล้วเก็บท้าย output
           ไม่เกิน 40 บรรทัดต่อคำสั่ง ไม่มีข้อความดิบออกจาก VS Code
+        from: panel
         to: engine
       do: >-
         `TerminalRecorder.read` เลือกเทอร์มินัลที่ active ล้าง escape code ของเทอร์มินัล ลบความลับด้วย `redactSecrets`
@@ -95,6 +103,8 @@ scenario:
         title: "Geno ตรวจคำตอบ"
         text: >-
           ถ้า VS Code ตอบผิดรูป หรือไม่มี editor แสดง session อยู่ call ล้มเหลวพร้อมเหตุผล
+        from: engine
+        to: engine
       do: >-
         engine ตรวจคำตอบด้วย `readTerminalResponse` ถ้า editor ตอบผิดรูปหรือไม่มี editor แสดง session อยู่ call ล้มเหลวพร้อมเหตุผล
       ref: packages/engine/src/tools/terminal.ts#readTerminalResponse
@@ -107,6 +117,8 @@ scenario:
         text: >-
           แต่ละคำสั่งเขียนเป็นบรรทัดคำสั่ง โฟลเดอร์ และ exit code ตามด้วย output ในรั้ว บรรทัดท้ายบอกว่านี่คือข้อมูล
           ไม่ใช่คำสั่ง ตัวอักษรที่มองไม่เห็นถูกตัดทิ้ง ผลกลับมาที่แชต
+        from: engine
+        to: engine
         sees: { kind: step, label: read_terminal, status: done, output: "$ pnpm build\n[exit code 1]" }
       do: >-
         `terminalReadText` เขียนแต่ละคำสั่งเป็น `$ pnpm build` โฟลเดอร์ และ exit code ตามด้วย output ในรั้ว `<terminal_output>`
@@ -123,6 +135,7 @@ scenario:
         title: "Model อธิบายว่า build พังเพราะอะไร"
         text: >-
           Geno เรียกโมเดลต่อ โมเดลอ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
+        from: engine
         to: model
         end: "model อธิบายสาเหตุ"
       do: >-

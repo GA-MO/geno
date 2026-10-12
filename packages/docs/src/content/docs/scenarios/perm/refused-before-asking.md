@@ -22,6 +22,7 @@ scenario:
         text: >-
           `.claude/settings.json` ของ repo ห้าม WebFetch ทั้งตัว และ workspace มีไฟล์ `.env` โมเดลขอเรียก tool
           แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียกเครื่องมือ และจบคำตอบด้วย `stop_reason: tool_use`
@@ -38,6 +39,8 @@ scenario:
         title: "Geno ดูรายการ tool ที่ถูกห้ามก่อน"
         text: >-
           ทุก tool ของ session ผ่านด่านที่ดูรายการ tool ที่ถูกห้ามก่อนตัว tool จะทำงาน ลองเลือกว่าโมเดลเรียกอะไร
+        from: engine
+        to: engine
         ask: "เรียกอะไร"
       runs: 0
       do: >-
@@ -56,6 +59,8 @@ scenario:
                   text: >-
                     Geno อ่านไฟล์ settings ทุกไฟล์ใหม่ทุกครั้ง แล้วแปลงชื่อ WebFetch ของ Claude Code เป็น `web_fetch` ของ Geno
                     กฎห้ามใช้ได้แม้ workspace ยังไม่ trusted เพราะมันแค่ห้าม
+                  from: engine
+                  to: engine
                 do: >-
                   `layeredPermissions` อ่านไฟล์ settings ทุกไฟล์ใหม่ทุกครั้งที่ถูกเรียก `claudePermissions` แปลง deny ของชื่อเปล่า
                   `WebFetch` เป็น `web_fetch` (`Bash` ครอบคลุม `bash`, `check`, `monitor` และ `preview_start` ส่วน `Edit` ครอบคลุม `edit` และ `notebook_edit`)
@@ -67,6 +72,8 @@ scenario:
                   title: "Geno ปฏิเสธก่อน tool ได้ตรวจ URL"
                   text: >-
                     Geno จดว่ากฎเป็นผู้ปฏิเสธ แล้วหยุด call ก่อน tool ได้ดู URL ไม่มีการ์ดและไม่มี classifier ในทุกโหมด
+                  from: engine
+                  to: model
                 do: >-
                   `deniedTool` คืนกฎนั้น `withPermissions` สร้างบันทึก `decidedBy: rule, verdict: deny` แบบ `workspace-deny`
                   แล้วโยน `ToolDenied` ก่อนเครื่องมือได้ตรวจ URL ไม่ถึง `settle` ไม่มีการ์ด และไม่มี classifier
@@ -79,7 +86,8 @@ scenario:
                   text: >-
                     ผลบอกโมเดลว่า call ตรงกับกฎห้าม WebFetch ที่คุณตั้งไว้ ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้
                     ผลกลับมาที่แชตพร้อมบันทึกของกฎ
-                  to: panel
+                  from: engine
+                  to: model
                 do: >-
                   ผลมีสถานะ `denied` ข้อความบอกโมเดลว่า call ตรงกับกฎ deny `WebFetch` ที่ผู้ใช้ตั้งใน `.claude/settings.json`
                   ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้ `ToolDenied` พาบันทึกของกฎ (`approval`) มากับผล
@@ -93,6 +101,8 @@ scenario:
                   title: "แชตขึ้นป้าย Denied by a rule"
                   text: >-
                     ขั้นของ call ขึ้นป้ายปฏิเสธของกฎ ข้อความเต็มที่โมเดลได้อยู่หลัง Show details
+                  from: panel
+                  to: you
                   sees: { kind: step, label: web_fetch https://date-fns.org, status: denied, note: Denied by a rule }
                 do: >-
                   `denialOf` เห็นว่าผู้ปฏิเสธคือกฎ ขั้นของ call ขึ้นป้ายปฏิเสธของกฎ ข้อความเต็มอยู่หลัง Show details
@@ -104,6 +114,7 @@ scenario:
                   title: "Model ทำต่อโดยไม่ใช้เว็บ"
                   text: >-
                     turn ไม่จบ Geno เรียกโมเดลต่อ โมเดลอ่านคำปฏิเสธแล้วทำงานต่อโดยไม่ใช้เว็บ
+                  from: engine
                   to: model
                   end: "กฎห้าม turn ทำต่อ"
                 do: >-
@@ -123,6 +134,8 @@ scenario:
                   text: >-
                     `grep` ไม่ได้ถูกห้าม จึงทำงาน แต่ `.env` ตรงกฎในตัวของ Geno สำหรับไฟล์เก็บรหัส การค้นถามคุณไม่ได้
                     ต่างจากการอ่านไฟล์เดียวกันที่ถามได้ จึงล้มทันที
+                  from: engine
+                  to: machine
                 do: >-
                   `grep` ไม่ได้ถูกห้าม จึงทำงาน `scopeOf` เห็นว่า path `.env` ตรงกฎในตัวของ Geno สำหรับไฟล์เก็บรหัส
                   จึงโยน `ToolError` ทันทีโดยไม่ถามใคร เพราะการค้นถามผู้ใช้ไม่ได้ (การ `read` ไฟล์เดียวกันถามได้)
@@ -135,6 +148,8 @@ scenario:
                   text: >-
                     ผลบอกว่าไฟล์นั้นห้ามค้น และบอกให้ถามคุณถ้างานต้องการค่าจากไฟล์นั้น ไม่มีบันทึกการปฏิเสธ run จริงด้านล่างใช้
                     `glob` และได้ข้อความแบบเดียวกัน
+                  from: engine
+                  to: model
                   sees:
                     kind: payload
                     direction: tool_result
@@ -151,6 +166,7 @@ scenario:
                   title: "Model ทำต่อ ขั้นของ grep ล้มเหลว"
                   text: >-
                     turn ไม่จบ แชตไม่ขึ้นป้ายปฏิเสธ ขั้นของ `grep` แสดงเป็นล้มเหลว Geno เรียกโมเดลต่อ
+                  from: engine
                   to: model
                   end: "ไฟล์ลับห้ามค้น turn ทำต่อ"
                   sees: { kind: step, label: grep API_KEY .env, status: failed }

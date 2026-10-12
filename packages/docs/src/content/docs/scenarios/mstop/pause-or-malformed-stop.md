@@ -19,6 +19,7 @@ scenario:
         title: "Geno ส่งบทสนทนาให้ model"
         text: >-
           turn กำลังทำงาน Geno ตรวจขีดจำกัดของ turn แล้วส่งคำขอให้โมเดลตามปกติ
+        from: engine
         to: model
 
     - id: answer
@@ -28,6 +29,8 @@ scenario:
         text: >-
           โมเดลเขียนคำตอบออกมา ข้อความขึ้นในแชตทีละส่วน แต่สัญญาณท้ายคำตอบไม่ใช่ end_turn และไม่ใช่ tool_use
           ที่มีการเรียก tool ตามมา
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: กำลังดูโครงสร้างของโปรเจกต์, streaming: true }
       do: >-
         โมเดล stream คำตอบออกมา gateway เก็บ stop reason ของผู้ให้บริการไว้ตามที่ได้มา
@@ -43,6 +46,8 @@ scenario:
         text: >-
           Geno ตัดสินขั้นต่อไปจาก stop reason ของคำตอบล่าสุดด้วยตาราง ทุก stop reason มีแถวของมัน
           ลองเลือกว่าคำตอบนี้จบด้วยอะไร
+        from: engine
+        to: engine
         ask: "stop reason อะไร"
       do: >-
         `loopStep` อ่านคำตอบล่าสุด ไม่มี `tool_use` ค้าง จึงถาม `AFTER_EVENT.assistant` ว่าหลัง stop reason นี้ทำอะไรต่อ
@@ -60,6 +65,7 @@ scenario:
                   text: >-
                     pause_turn แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง Geno เรียกโมเดลต่อทันทีโดยไม่ตอบอะไรแทน
                     คำขอถัดไปมีคำตอบที่พักไว้อยู่ท้ายบทสนทนา
+                  from: engine
                   to: model
                 do: >-
                   `pause_turn` แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง (เกิดกับเครื่องมือฝั่งเซิร์ฟเวอร์ของ Anthropic)
@@ -72,6 +78,8 @@ scenario:
                   title: "Model ทำต่อจากจุดเดิม"
                   text: >-
                     ผู้ให้บริการทำ turn ที่พักไว้ต่อ ในแชตคุณเห็นแค่ข้อความที่ขึ้นต่อไป การเรียกนี้นับเป็นหนึ่งในขีดจำกัดของ turn
+                  from: model
+                  to: engine
                   end: "turn ทำต่อ"
                 do: >-
                   ผู้ให้บริการทำ turn ที่พักไว้ต่อจากจุดเดิม การเรียกนี้นับเป็นหนึ่งใน 40 ครั้งของรอบเหมือนการเรียกอื่น
@@ -88,6 +96,8 @@ scenario:
                   text: >-
                     คำตอบบอก tool_use แต่ไม่มี tool ให้รัน หรือไม่มี stop reason เลย Geno ไม่เดาว่าโมเดลตั้งใจจบหรือยัง จึงจบ turn
                     แบบ error
+                  from: engine
+                  to: engine
                 do: >-
                   `tool_use` ที่ไม่มีบล็อก `tool_use` เหลือให้รัน ได้ `AFTER_STOP.tool_use` ซึ่งเป็น `done(error)`
                   คำตอบที่ stop reason เป็น `null` ก็ได้ `done(error)` เช่นกัน loop ไม่เดาว่าโมเดลตั้งใจจบหรือยังไม่จบ
@@ -100,6 +110,7 @@ scenario:
                   text: >-
                     Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น แผงรู้แค่ว่า
                     turn ล้มเหลว
+                  from: engine
                   to: panel
 
               - lane: panel
@@ -109,6 +120,8 @@ scenario:
                   text: >-
                     ถ้าคำตอบมีข้อความ แผงไม่แสดงอะไรเพิ่ม คุณเห็นแค่คำว่า Failed ถ้าไม่มีข้อความ
                     แผงขึ้นประกาศพร้อมปุ่มทำต่อหรือลองใหม่
+                  from: panel
+                  to: you
                   end: "turn ล้มเหลว"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-

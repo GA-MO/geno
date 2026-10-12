@@ -21,6 +21,7 @@ scenario:
         text: >-
           โมเดลขออ่าน `package.json` และ `src/date.ts` รัน `pnpm add zod` แล้วอ่าน `pnpm-lock.yaml` ตามลำดับ Geno
           บันทึกคำขอแล้วแชตขึ้นขั้นของแต่ละ call
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียกเครื่องมือสี่ตัวในคำตอบเดียว และจบด้วย `stop_reason: tool_use`
@@ -46,6 +47,8 @@ scenario:
         text: >-
           การอ่านที่ไม่แก้อะไรรันพร้อมกันได้ แต่ `bash` ไม่ได้ ชุดแรกจึงมีแค่ read สองตัว ทั้งสองอ่านพร้อมกัน และ Geno
           รอให้ทั้งชุดจบก่อนเริ่มชุดถัดไป
+        from: engine
+        to: machine
         sees: { kind: step, label: read package.json, status: done }
       do: >-
         ชุดแรกเริ่มที่ call แรก `concurrentAt` บอกว่า `read` สองตัวแรกรันพร้อมกันได้ แต่ `bash` ไม่ได้
@@ -74,6 +77,8 @@ scenario:
         title: "ชุดที่สองมี bash ตัวเดียว"
         text: >-
           `bash` รันพร้อมตัวอื่นไม่ได้ จึงเป็นชุดของตัวเอง แชตขึ้นขั้น pnpm add zod ที่กำลังหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm add zod, status: running }
       do: >-
         `nextToolBatch` เริ่มชุดที่สองที่ `bash` ซึ่งรันพร้อมตัวอื่นไม่ได้ จึงเป็นชุดที่มีมันตัวเดียว
@@ -88,6 +93,7 @@ scenario:
         text: >-
           `pnpm add` ไม่อยู่ในรายการคำสั่งปลอดภัยและไม่ตรงกฎของ workspace โหมด Ask จึงต้องถามคุณ ไม่มี hook ตอบแทน Geno
           หยุด turn แล้วส่งคำถามไปที่แชต งานใน Tasks เปลี่ยนเป็นรอคุณ
+        from: engine
         to: panel
       do: >-
         `approveCommand` ส่งคำสั่งให้ `ruledDenial` ผลคือ `unlisted` ซึ่งในโหมด Ask ต้องถามผู้ใช้
@@ -125,6 +131,7 @@ scenario:
         title: "คุณเห็นการ์ด “Run this command?”"
         text: >-
           การ์ดขึ้นใต้ขั้นของคำสั่ง read ตัวสุดท้ายยังไม่เริ่ม เพราะชุดของมันอยู่หลังคำสั่งนี้ ลองเลือกแต่ละทาง
+        from: panel
         to: you
         ask: "กดปุ่มไหน"
         sees: { kind: permission, command: pnpm add zod, reason: Geno asks because it uses a command not on the safe list. }
@@ -215,6 +222,8 @@ scenario:
                   text: >-
                     หลังชุดที่สอง Geno เห็นว่าคุณปฏิเสธ จึงไม่เริ่มชุดที่เหลือ แล้วบันทึกผลที่มี ขั้นของคำสั่งขึ้นป้าย Denied by
                     you
+                  from: engine
+                  to: panel
                   sees: { kind: step, label: pnpm add zod, status: denied, note: Denied by you }
                 do: >-
                   หลังชุดที่สอง `runTools` เห็นผลสถานะ `rejected` จึงไม่เริ่มชุดที่สาม แล้วบันทึกผลที่มีตามลำดับ:
@@ -229,6 +238,7 @@ scenario:
                   text: >-
                     read ตัวสุดท้ายได้คำตอบว่าคุณปฏิเสธ call ก่อนหน้าของ turn นี้ ขั้นของมันขึ้นว่าล้มเหลว แล้ว Geno จบ turn
                     โดยไม่เรียกโมเดลอีก Stop hook ไม่ทำงาน
+                  from: engine
                   to: panel
                 do: >-
                   `loopStep` เห็น call ที่ยังไม่มีผลหลังการปฏิเสธของผู้ใช้ จึงตัดสิน `answer-tools`
@@ -262,6 +272,8 @@ scenario:
                   text: >-
                     แผงดูขั้นสุดท้าย ซึ่งคือ read ที่ล้มเหลว ไม่ใช่คำสั่งที่ถูกปฏิเสธ จึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ
                     แทนที่จะบอกว่าหยุดที่ call ที่คุณปฏิเสธ
+                  from: panel
+                  to: you
                   end: "คุณปฏิเสธ turn จบ"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-
@@ -281,6 +293,8 @@ scenario:
         text: >-
           หลังคำสั่งจบ Geno เริ่มชุดที่สาม `read` อ่าน `pnpm-lock.yaml` ที่เพิ่งถูกเขียน แล้ว Geno
           บันทึกผลทั้งสี่ตามลำดับที่โมเดลขอ
+        from: engine
+        to: machine
       do: >-
         `runTools` เริ่มชุดที่สามหลังคำสั่งจบ `read pnpm-lock.yaml` อยู่ชุดนี้ตัวเดียวเพราะไม่มี call หลังมัน
       ref: packages/core/src/tool-batch.ts#nextToolBatch
@@ -302,6 +316,7 @@ scenario:
         title: "Geno ส่งผลทั้งสี่ให้ model"
         text: >-
           Geno เรียกโมเดลต่อ โมเดลได้ผลทั้งสี่เรียงตามที่มันขอ
+        from: engine
         to: model
         end: "ครบสามชุด model ทำต่อ"
       do: >-

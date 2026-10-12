@@ -20,6 +20,7 @@ scenario:
         text: >-
           โมเดลขอ `read` ไฟล์อย่าง `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o` ถ้าเป็น
           PDF ระบุหน้าได้ ถ้าเป็น notebook ระบุ cell ได้
+        from: model
         to: engine
       do: >-
         โมเดลขอ `read` ไฟล์หนึ่งไฟล์ (ใส่ `pages` ได้ถ้าเป็น PDF หรือ `cells` ถ้าเป็น notebook) จบด้วย `stop_reason: tool_use`
@@ -40,6 +41,8 @@ scenario:
         title: "แชตขึ้นขั้นของ read"
         text: >-
           Geno บันทึกคำขอแล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: read assets/logo.png, status: running }
 
     - id: kind
@@ -71,6 +74,8 @@ scenario:
                   text: >-
                     Geno เก็บรูปไว้กับ session รูปละไม่เกิน 5 MB แล้วคืนข้อความสั้นที่บอกขนาดพร้อมรูป
                     ในแชตรูปขึ้นเป็นภาพย่อใต้ขั้นที่คลิกเปิดได้
+                  from: engine
+                  to: machine
                 do: >-
                   `readImage` เก็บรูปลงที่เก็บไฟล์แนบของ session (รูปละไม่เกิน 5 MB) แล้วคืนข้อความสั้นพร้อมรูป
                   ("assets/logo.png is a 512x512 PNG image (34 KB), attached below.")
@@ -87,6 +92,8 @@ scenario:
                   text: >-
                     Geno คืน 10 หน้าแรกถ้าไม่ได้ระบุหน้า ครั้งละไม่เกิน 20 หน้า หน้าที่มีข้อความได้ข้อความ หน้าสแกนได้เป็นรูป
                     ท้ายผลบอกว่าจะอ่านหน้าต่อไปอย่างไร
+                  from: engine
+                  to: machine
                 do: >-
                   `readPdf` เปิด PDF (ไม่เกิน 64 MB) และคืน 10 หน้าแรกถ้าไม่ได้ระบุ `pages` ครั้งละไม่เกิน 20 หน้า
                   หน้าที่มีข้อความได้ข้อความ หน้าสแกนที่ไม่มีชั้นข้อความได้เป็นรูป (ไม่เกิน 8 รูปต่อครั้ง)
@@ -102,6 +109,8 @@ scenario:
                   title: "Notebook Geno แบ่งเป็น cell"
                   text: >-
                     Geno อ่าน notebook ผ่าน VS Code จึงได้การแก้ที่ยังไม่บันทึกด้วย แล้วแยกเป็น cell ที่มีหัวข้อบอกลำดับ
+                  from: engine
+                  to: machine
                 do: >-
                   `readNotebook` อ่านไฟล์ผ่าน editor (ได้การแก้ที่ยังไม่บันทึกด้วย) แยกเป็น cell แล้วคืนทุก cell
                   ถ้าไม่ได้ระบุ `cells` แต่ละ cell เป็นหนึ่งส่วนที่มีหัวข้อบอกลำดับ
@@ -116,6 +125,8 @@ scenario:
                   title: "ไฟล์ไบนารี Geno ไม่อ่าน"
                   text: >-
                     ช่วงต้นของไฟล์มีไบต์ NUL read จึงตอบว่าเป็นไฟล์ไบนารี ผลเป็น error และไม่มีเนื้อไฟล์
+                  from: engine
+                  to: machine
                 do: >-
                   ข้อความช่วงต้นของไฟล์มีไบต์ NUL `read` จึงโยน `ToolError` ว่า "build/app.o is a binary file"
                   ผลมีสถานะ `error` และไม่มีเนื้อไฟล์
@@ -129,6 +140,7 @@ scenario:
         title: "ผลของ read กลับมาที่แชต"
         text: >-
           รูปที่ได้ติดไปกับผลเป็นไฟล์แนบ ไม่ได้อยู่ในข้อความ Geno บันทึกผลแล้วขั้นในแชตหยุดหมุน
+        from: engine
         to: panel
         sees: { kind: step, label: read assets/logo.png, status: done, output: "assets/logo.png is a 512x512 PNG image (34 KB), attached below." }
       do: >-
@@ -145,6 +157,7 @@ scenario:
         text: >-
           Geno เรียกโมเดลต่อ รูปไปถึงโมเดลเป็นบล็อกภาพในผลของ tool โมเดลที่อ่านรูปได้จึงเห็นภาพจริง
           ผลที่ล้มเหลวไปถึงพร้อมป้ายว่าเป็น error
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

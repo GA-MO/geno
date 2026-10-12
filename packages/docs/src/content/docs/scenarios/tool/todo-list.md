@@ -20,6 +20,7 @@ scenario:
         text: >-
           งานนี้มีหลายขั้น โมเดลส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts`
           ในคำตอบเดียว run จริงด้านล่างส่ง todo กับ read คู่กันแบบนี้
+        from: model
         to: engine
         sees:
           kind: payload
@@ -47,6 +48,8 @@ scenario:
         title: "Geno จัด todo กับ read ไว้ชุดเดียว"
         text: >-
           todo ไม่เปลี่ยนอะไรบนเครื่องและไม่ถามใคร จึงรันพร้อมการอ่านไฟล์ได้
+        from: engine
+        to: engine
 
     - id: parse
       lane: tool
@@ -56,6 +59,8 @@ scenario:
         text: >-
           รายการต้องไม่ยาวเกินกำหนด id ไม่ซ้ำ และมีข้อที่กำลังทำได้ข้อเดียว ถ้าผิด call ล้มเหลวพร้อมบอกว่าผิดตรงไหน
           รอบนี้ผ่าน ผลสรุปว่าเสร็จกี่ข้อและข้อไหนกำลังทำ แบบในผลจาก run จริงด้านล่าง
+        from: engine
+        to: engine
         sees:
           kind: payload
           direction: tool_result
@@ -76,6 +81,7 @@ scenario:
         title: "Geno ส่งรายการไปที่แชตทันที"
         text: >-
           ทันทีที่ todo จบ Geno ส่งรายการไปที่แชต ไม่ต้องรอให้การอ่านไฟล์ในชุดเดียวกันจบ
+        from: engine
         to: panel
       do: >-
         ทันทีที่ `todo` จบ `watcher.toolEnd` ส่ง `tool_call_update` ที่มีรายการใน `TODO_META`
@@ -98,6 +104,8 @@ scenario:
         title: "แชตปักรายการไว้ท้าย turn"
         text: >-
           todo ไม่ขึ้นเป็นขั้นของ tool แต่แชตปักรายการล่าสุดไว้ก่อนขั้นสุดท้ายของ turn และเปิดไว้ให้เห็น
+        from: panel
+        to: you
         sees: "กล่อง \"1 of 4 done · write tests\" ข้อที่เสร็จมีเครื่องหมายถูก ข้อ \"Write tests\" มีไอคอนหมุน ข้อที่เหลือเป็นวงกลมว่าง"
       alongside: true
       do: >-
@@ -115,6 +123,7 @@ scenario:
         title: "Model ทำต่อ Geno เตือนถ้าลืมอัปเดต"
         text: >-
           Geno เรียกโมเดลต่อ ถ้าเรียกไป 10 ครั้งโดยที่โมเดลไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

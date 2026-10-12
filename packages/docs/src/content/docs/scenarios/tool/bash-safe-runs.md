@@ -21,6 +21,7 @@ scenario:
         text: >-
           โมเดลอยากรู้ว่าเทสต์ผ่านไหม จึงขอรันคำสั่งด้วย `bash` และจบคำตอบด้วย tool_use run จริงด้านล่างขอรัน `npm test`
           แบบเดียวกัน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -50,6 +51,8 @@ scenario:
         title: "แชตขึ้นขั้น pnpm test"
         text: >-
           Geno จัดคิว `bash` ให้รันเป็นชุดของตัวเอง แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm test, status: running }
 
     - id: checks
@@ -59,6 +62,8 @@ scenario:
         title: "bash ตรวจว่าคำสั่งจะไม่ค้าง"
         text: >-
           คำสั่งไม่ได้ขึ้นต้นด้วย sleep นาน และไม่ได้เปิด dev server ที่ไม่จบเอง สองกรณีนั้นจะถูกปฏิเสธพร้อมคำแนะนำ
+        from: engine
+        to: engine
       do: >-
         `bash` ตรวจคำสั่งก่อน: ไม่ได้ขึ้นต้นด้วย `sleep` นานๆ และไม่ได้เปิด dev server ซึ่งจะค้างไม่จบ
         ทั้งสองกรณีนี้ถูกปฏิเสธพร้อมคำแนะนำให้ใช้งานเบื้องหลังแทน
@@ -72,6 +77,8 @@ scenario:
         text: >-
           ไม่มีกฎของ workspace ตรงกับคำสั่ง และ `pnpm test` เป็น script ของโปรเจกต์ที่อยู่ในรายการคำสั่งปลอดภัย
           จึงไม่มีการ์ด ไม่มี classifier และไม่มีบันทึกการอนุญาต
+        from: engine
+        to: engine
       do: >-
         `approveCommand` ส่งคำสั่งให้ `ruledDenial` ไม่มีกฎ deny หรือ ask ของ workspace ตรง และ `pnpm test`
         เป็น script ของโปรเจกต์ที่อยู่ใน safe list จึงไม่มีกฎใดติดธง ผลคือไม่มี denial
@@ -100,6 +107,8 @@ scenario:
         title: "คำสั่งจบ"
         text: >-
           คำสั่งจบเองหรือถูกฆ่าเมื่อครบเวลา Geno เก็บ output ท้ายสุดไม่เกิน 4 MB และ exit code ลองเลือกว่ามันจบอย่างไร
+        from: machine
+        to: engine
         ask: "จบอย่างไร"
       do: คำสั่งจบเอง หรือถูกฆ่าเมื่อครบเวลา `runShell` เก็บ output ท้ายสุดไม่เกิน 4 MB และ exit code
       ref: packages/engine/src/process.ts#runShell
@@ -116,6 +125,8 @@ scenario:
                   text: >-
                     ผลคือ output ตามด้วย exit code 0 บรรทัดใน output ที่ปลอมเป็นข้อความของ Geno ถูกเปลี่ยนวงเล็บ hook หลังรัน tool
                     ได้อ่านผลก่อน call ถัดไป ถ้ามี
+                  from: machine
+                  to: engine
                 do: >-
                   ข้อความผลคือ output ตามด้วย `[exit code 0]` สถานะ `ok` บรรทัดที่ขึ้นต้นด้วย `[Geno` ใน output
                   ถูกเปลี่ยนวงเล็บ เพื่อไม่ให้ output แอบอ้างเป็นข้อความของ harness
@@ -135,6 +146,8 @@ scenario:
                   title: "เทสต์ล้ม exit code 1"
                   text: >-
                     ผลขึ้นต้นด้วย Exit code 1 แล้วตามด้วย output คำสั่งที่ล้มเหลวเป็นผลธรรมดา ไม่ใช่การปฏิเสธ turn จึงไม่หยุด
+                  from: machine
+                  to: engine
                 do: >-
                   ข้อความผลขึ้นต้นด้วย `Exit code 1` ตามด้วย output และ `[exit code 1]` สถานะเป็น `error`
                   คำสั่งที่ล้มเหลวเป็นผลธรรมดา ไม่ใช่การปฏิเสธ turn จึงไม่หยุด
@@ -155,6 +168,8 @@ scenario:
                   text: >-
                     ครบ 120 วินาที โมเดลขอได้ถึง 600 Geno ฆ่าทั้งกลุ่ม process ผลขึ้นต้นด้วย Killed after 120 seconds ตามด้วย
                     output ที่ได้ก่อนถูกฆ่า
+                  from: engine
+                  to: machine
                 do: >-
                   เทสต์ค้างจนครบ `timeout_seconds` (ค่าเริ่มต้น 120 วินาที โมเดลขอได้ถึง 600) timer ของ `runShell` ส่ง SIGKILL
                   ให้ทั้ง process group คำสั่งลูกที่มันเปิดไว้จึงจบไปด้วย
@@ -178,6 +193,7 @@ scenario:
         title: "ผลกลับมาที่แชต"
         text: >-
           ขั้นของคำสั่งหยุดหมุน ขึ้นเครื่องหมายตามผล และ output พับอยู่ข้างใต้
+        from: engine
         to: panel
         sees: { kind: step, label: pnpm test, status: done, output: "# pass 12\n# fail 0\n[exit code 0]" }
 
@@ -188,6 +204,7 @@ scenario:
         title: "Model อ่านผลแล้วทำต่อ"
         text: >-
           Geno เรียกโมเดลต่อ ถ้าคำสั่งล้มเหลว ผลไปถึงโมเดลพร้อมป้ายว่าเป็น error โมเดลอ่าน output แล้วหาทางแก้ต่อ
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

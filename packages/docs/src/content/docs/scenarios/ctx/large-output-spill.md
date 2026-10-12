@@ -19,6 +19,8 @@ scenario:
         title: "Geno เปิดขั้น pnpm test ในแชต"
         text: >-
           โมเดลขอรัน `pnpm test` ซึ่งอยู่ในรายการคำสั่งปลอดภัย จึงไม่ต้องถามคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm test, status: running }
 
     - id: run
@@ -28,7 +30,8 @@ scenario:
         title: "เทสต์ล้มหลายตัว ผลยาว 80,000 ตัวอักษร"
         text: >-
           `pnpm test` รันใน sandbox เทสต์ล้มหลายตัว และพิมพ์ผลออกมาประมาณ 80,000 ตัวอักษร
-        from: machine
+        from: engine
+        to: machine
       do: >-
         `bash` รัน `pnpm test` ใน sandbox ได้ข้อความผลลัพธ์ยาวประมาณ 80,000 ตัวอักษร ปิดท้ายด้วยบรรทัด `[exit code 1]`
       ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
@@ -41,6 +44,8 @@ scenario:
         text: >-
           ผลยาวกว่าขีดของโมเดล ค่าตั้งต้น 24,000 ตัวอักษร Geno จึงเขียนทั้งหมดลงไฟล์ในโฟลเดอร์ของตัวเอง แล้วเก็บไว้แค่
           2,000 ตัวอักษรแรก 2,000 ตัวอักษรท้าย ขนาด และที่อยู่ไฟล์
+        from: engine
+        to: engine
       do: >-
         ก่อนบันทึกผล `settle` เทียบความยาวกับ `spillChars` ของโมเดล (ค่าเริ่มต้น 24,000 ตัวอักษร)
         ยาวกว่าจึงเขียนข้อความทั้งหมดลงไฟล์ `spill/<session>/<seq>-bash.txt` ในโฟลเดอร์ของ Geno
@@ -53,6 +58,7 @@ scenario:
         title: "ผลกลับมาที่แชต"
         text: >-
           ขั้นของ `pnpm test` หยุดหมุน ผลพับอยู่ข้างใต้
+        from: engine
         to: panel
 
     - id: notice
@@ -62,6 +68,8 @@ scenario:
         title: "คุณเห็นสิ่งเดียวกับที่ model ได้"
         text: >-
           เมื่อเปิดผลของขั้นนั้น คุณเห็นประกาศว่าผลถูกเก็บลงไฟล์ ตามด้วยต้นและท้ายของผล
+        from: panel
+        to: you
         sees: { kind: step, label: pnpm test, status: done, output: "[The output was 80412 bytes, too long to show. The full text is in .../spill/<session>/12-bash.txt; read it with start_line and end_line to see more.]" }
       do: >-
         เมื่อผู้ใช้เปิดผลของขั้นนั้น จะเห็นข้อความเดียวกับที่โมเดลได้รับ คือประกาศว่าผลถูกเก็บลงไฟล์ ตามด้วยต้นและท้ายของผล
@@ -76,6 +84,7 @@ scenario:
         text: >-
           คำขอถัดไปมีแค่ประกาศ ต้น และท้ายของผล ไม่ใช่ทั้ง 80,000 ตัวอักษร ใน run จริงด้านล่าง ผลที่ยาวเกินมาจาก tool
           อีกตัว แต่ประกาศมีรูปเดียวกัน
+        from: engine
         to: model
         sees:
           kind: payload
@@ -91,6 +100,8 @@ scenario:
         title: "Model ขออ่านเฉพาะช่วงที่ต้องการ"
         text: >-
           โมเดลเห็นสรุปเทสต์ที่ล้มในส่วนท้าย จึงขออ่านไฟล์นั้นเฉพาะบรรทัดของเทสต์ตัวแรกที่ล้ม
+        from: model
+        to: engine
       do: >-
         `tool_result` ที่โมเดลได้รับมาจาก `toolResultText`: ประกาศ ต้น และท้ายของผล โมเดลเห็นสรุปเทสต์ที่ล้มในส่วนท้าย
         จึงขอเรียก `read` ไฟล์ spill ด้วย `start_line` และ `end_line` เฉพาะช่วงของเทสต์ตัวแรกที่ล้ม
@@ -106,6 +117,7 @@ scenario:
           ไฟล์อยู่นอก workspace แต่เป็นโฟลเดอร์ของ session นี้ที่อ่านได้ การอ่านจึงผ่านโดยไม่ต้องขออนุญาต
           และได้เฉพาะบรรทัดที่ขอ
         from: engine
+        to: machine
         end: "model อ่านทีละช่วง"
       do: >-
         `read` ตรวจ path ด้วย `resolveInside` โฟลเดอร์ spill ของ session นี้อยู่นอก workspace แต่เป็นที่ที่อ่านได้

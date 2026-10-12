@@ -22,6 +22,7 @@ scenario:
         text: >-
           โมเดลอยากให้คุณเลือกก่อนทำต่อ มันเรียก tool ถามคำถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก
           date-fns ที่มันแนะนำ และ dayjs
+        from: model
         to: engine
       do: >-
         โมเดลส่งบล็อก `tool_use` ของ `ask_user` ที่มี `questions` หนึ่งข้อ พร้อมตัวเลือกและคำอธิบาย จบด้วย `stop_reason: tool_use`
@@ -42,6 +43,8 @@ scenario:
         title: "แชตขึ้นขั้นของคำถาม"
         text: >-
           Geno จัดคิวคำถามนี้ให้รันทีละตัว เพราะต้องรอคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
 
     - id: mode
       lane: tool
@@ -51,6 +54,8 @@ scenario:
         text: >-
           Geno อ่านโหมดของ session ตอนที่ call รัน ไม่ใช่ตอนที่ turn เริ่ม แล้วตรวจคำถามและตัวเลือกตามขีดจำกัด
           ถ้าคุณสลับโหมดระหว่าง turn ผลจึงเปลี่ยนตาม
+        from: engine
+        to: engine
         ask: "โหมดไหน"
       runs: 0
       do: >-
@@ -73,6 +78,8 @@ scenario:
                   title: "โหมด Auto ไม่มีใครรอตอบ"
                   text: >-
                     โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันทีพร้อมข้อความบอกโมเดลว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
+                  from: engine
+                  to: model
                 do: >-
                   `USER_TOOL_MODES` ไม่ให้ `ask_user` ในโหมด Auto ซึ่งไม่มีใครรอตอบ call จึงล้มเหลวด้วย `ToolError`
                   "ask_user is not available in auto mode. Do not retry it." และไม่มีการ์ด
@@ -87,6 +94,7 @@ scenario:
         text: >-
           Geno ส่งอัปเดตที่ค้างออกไปก่อน แล้วส่งฟอร์มคำถามไปที่ VS Code งานในแผง Tasks เปลี่ยนเป็นรอคุณ VS Code
           ตรวจคำถามด้วยตัวตรวจเดียวกับ engine แล้วโฟกัสแผงแชต
+        from: engine
         to: panel
         sees: { kind: task, title: เพิ่มเทสต์ให้ parseDate, status: needs-input }
       runs: 1
@@ -112,6 +120,7 @@ scenario:
         title: "คุณเห็นการ์ดคำถาม"
         text: >-
           การ์ดแสดงตัวเลือกพร้อมช่อง Other ให้พิมพ์เอง และใช้แป้นพิมพ์เลือกได้ turn รออยู่ตรงนี้ ลองเลือกแต่ละทาง
+        from: panel
         to: you
         ask: "ทำอะไรกับการ์ด"
         sees: { kind: question, question: ใช้ไลบรารีไหนจัดการวันที่, options: [ date-fns (Recommended), dayjs, "Other: type your own answer" ] }
@@ -194,6 +203,8 @@ scenario:
         text: >-
           ผลของ call บอกคำตอบของคุณ หรือบอกว่าคุณไม่ตอบ ให้โมเดลใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
           หรือบอกว่าใช้ไม่ได้ในโหมด Auto ผลกลับมาที่แชตใต้ขั้นนั้น
+        from: engine
+        to: model
       do: >-
         `askUserResult` เขียนผลให้โมเดลอ่าน: "The user answered: date-fns" หรือถ้าข้าม
         "The user declined to answer. Go on with your best judgment and say what you assumed."
@@ -209,6 +220,7 @@ scenario:
         title: "Model ทำต่อตามผล"
         text: >-
           Geno เรียกโมเดลอีกรอบ โมเดลอ่านผลแล้วทำงานต่อใน turn เดิม
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

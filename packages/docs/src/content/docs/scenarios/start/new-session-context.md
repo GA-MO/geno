@@ -20,6 +20,7 @@ scenario:
         title: "คุณส่งข้อความแรกของหน้าต่างนี้"
         text: >-
           หน้าต่างนี้ยังไม่มี session คุณพิมพ์ "เพิ่มเทสต์ให้ฟังก์ชัน parseDate" แล้วกด Enter
+        from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความแรกแล้วกด Enter
       phase: idle
@@ -39,6 +40,8 @@ scenario:
         title: "แชตขึ้นข้อความของคุณกับแถว Thinking"
         text: >-
           แผงแสดงข้อความของคุณก่อนติดต่อ engine แล้ว VS Code เริ่มหา session ที่จะส่งข้อความนี้เข้าไป
+        from: panel
+        to: you
         sees: { kind: composer, state: working, header: working }
       do: >-
         `prompt()` ส่ง action `turn-start` ก่อนติดต่อ engine แล้วเรียก `link()`
@@ -54,6 +57,7 @@ scenario:
         text: >-
           ไม่มีแชตที่แสดงอยู่หรือที่จำไว้ VS Code จึงขอ session ใหม่ พร้อมโฟลเดอร์ของหน้าต่าง และ MCP server
           ที่คุณตั้งไว้ใน VS Code
+        from: panel
         to: engine
       do: >-
         `openSession` ไม่พบแชตที่แสดงอยู่หรือที่จำไว้ จึงเรียก `fresh()` ซึ่งส่งคำขอ ACP `session/new`
@@ -67,6 +71,8 @@ scenario:
         title: "Geno เลือก provider และ model"
         text: >-
           engine เลือก provider และโมเดลก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้และไม่มีไฟล์ session ค้างไว้
+        from: engine
+        to: engine
       do: >-
         `startSession` เลือก provider และโมเดลจาก `GCODE_PROVIDER` และ `GCODE_MODEL` (ค่าเริ่มต้น Model Studio)
         และสร้าง gateway ก่อนเขียนอะไร ถ้าคีย์ขาด error จะเกิดตรงนี้และไม่เหลือไฟล์ session ค้าง
@@ -80,6 +86,8 @@ scenario:
         text: >-
           Geno อ่านไฟล์คำสั่งของคุณก่อน แล้วเดินจากรากของดิสก์ลงมาถึง workspace เพื่อเก็บ `AGENTS.md` หรือ `CLAUDE.md`
           ของแต่ละโฟลเดอร์ ไฟล์หนึ่งดึงไฟล์อื่นเข้ามาด้วยบรรทัด `@path` ได้อีกหลายชั้น
+        from: engine
+        to: engine
       do: >-
         `loadProjectContext` อ่านไฟล์คำสั่ง: ไฟล์ของผู้ใช้ก่อน (`AGENTS.md` ใน home ของ Geno แล้ว `CLAUDE.md` ของ Claude Code)
         แล้วเดินจากรากของดิสก์ลงมาถึง workspace เอาไฟล์แรกที่มีในแต่ละโฟลเดอร์จาก `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`
@@ -94,6 +102,8 @@ scenario:
         text: >-
           พร้อมกันนั้น Geno โหลดรายการ skill ที่โมเดลเรียกได้ โน้ตใน memory ของคุณและของโปรเจกต์ และภาพของเครื่อง
           เช่นสถานะ git, shell และวันที่
+        from: engine
+        to: engine
       do: >-
         พร้อมกันนั้น `newSession` โหลดรายการสกิลที่โมเดลเรียกได้ โน้ตในหน่วยความจำของผู้ใช้และของโปรเจกต์
         และภาพสภาพแวดล้อม: สถานะ git, platform, shell, ไดเรกทอรี scratchpad, วันที่ และโมเดล
@@ -107,6 +117,8 @@ scenario:
         text: >-
           ทุกอย่างถูกบันทึกเป็นบรรทัดแรกของไฟล์ session และไม่ถูกอ่านใหม่อีก ทุกคำขอต่อจากนี้ส่งข้อความชุดนี้ซ้ำทุกไบต์
           prompt cache จึงไม่หลุด และการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
+        from: engine
+        to: engine
       do: >-
         ทั้งหมดถูกเขียนเป็น event `session-start` บรรทัดแรกของไฟล์ JSONL ของ session ทุกคำขอต่อจากนี้ส่งข้อความชุดนี้ซ้ำทุกไบต์
         prompt cache จึงไม่หลุด และการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
@@ -121,6 +133,7 @@ scenario:
         text: >-
           engine ตอบ id ของ session VS Code สลับโหมดให้ตรงกับที่แผงเลือกไว้ แล้วส่ง prompt ของคุณ คำขอนี้ค้างอยู่จนกว่า
           turn จะจบ
+        from: panel
         to: engine
       do: >-
         engine ตอบ id ของ session โหมด และตัวเลือก effort `fresh()` สลับเป็นโหมดที่แผงเลือกไว้ก่อนมี session
@@ -142,6 +155,7 @@ scenario:
         title: "Geno เริ่ม turn และตั้งชื่อแชต"
         text: >-
           engine รับ turn เปิดงานในแผง Tasks และตั้งชื่อแชตจากข้อความแรกของคุณ
+        from: engine
         to: panel
       do: >-
         `runTurn` รับ turn เริ่มงานในแผง Tasks และส่ง `session_info_update` ที่ตั้งชื่อแชตจากข้อความแรก
@@ -157,6 +171,8 @@ scenario:
         text: >-
           ถ้าคุณตั้ง SessionStart hook ไว้ มันทำงานครั้งแรกตรงนี้ สิ่งที่ hook พิมพ์ออกมาถูกบันทึก
           และไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ข้ามไป
+        from: engine
+        to: machine
         sees:
           kind: payload
           direction: request
@@ -175,6 +191,8 @@ scenario:
         title: "Geno บันทึก prompt ต่อจากส่วนเปิด"
         text: >-
           Geno บันทึกข้อความของคุณต่อจากบรรทัดแรก แล้วตัดสินจากบันทึกว่าขั้นต่อไปคือเรียกโมเดล
+        from: engine
+        to: engine
       do: >-
         `drive` บันทึก event `user` ต่อจาก `session-start` แล้ว UserPromptSubmit hooks ได้อ่าน prompt ก่อนโมเดล
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
@@ -197,6 +215,7 @@ scenario:
         text: >-
           ข้อความ user แรกเรียงคำสั่งของคุณ คำสั่งของโปรเจกต์ รายการ skill, memory และสภาพแวดล้อมไว้ก่อน แล้วจึงต่อด้วย
           prompt ของคุณ system prompt เหมือนเดิมทุก session ส่วนเปิดนี้จึงถูก cache ไปด้วย
+        from: engine
         to: model
         sees:
           kind: payload
@@ -228,6 +247,8 @@ scenario:
         title: "Model อ่านคำสั่งก่อนเริ่มงาน"
         text: >-
           โมเดลอ่านคำสั่งของคุณและของโปรเจกต์ก่อนถึงคำขอ แล้วเริ่มทำงาน จากตรงนี้ turn เดินเหมือน turn ปกติ
+        from: model
+        to: engine
         end: "turn ทำต่อตามปกติ"
       do: >-
         โมเดลอ่านคำสั่งของผู้ใช้และของโปรเจกต์ก่อนคำขอ แล้วเริ่มทำงานตามข้อความ turn ดำเนินต่อเหมือน turn ปกติ

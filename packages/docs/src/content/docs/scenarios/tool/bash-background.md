@@ -21,6 +21,7 @@ scenario:
         text: >-
           `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง โมเดลจึงขอรันเป็นงานเบื้องหลัง run จริงด้านล่างขอรัน dev server
           แบบเดียวกัน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -50,6 +51,8 @@ scenario:
         title: "แชตขึ้นขั้นของคำสั่ง"
         text: >-
           Geno จัดคิว `bash` ให้รันทีละตัว แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm tsc --watch, status: running }
 
     - id: checks
@@ -61,6 +64,8 @@ scenario:
           คำสั่งเบื้องหลังไม่ต้องผ่านการตรวจ sleep และ dev server ที่ใช้กับคำสั่งรอผล
           แต่ผ่านกฎสิทธิ์ชุดเดียวกับคำสั่งปกติ ต่างกันข้อเดียวคือโหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด
           คำสั่งนี้ไม่ติดกฎใด จึงไม่มีการ์ด
+        from: engine
+        to: engine
       do: >-
         `bash` เห็น `run_in_background` จึงข้ามการตรวจ `sleep` นำหน้าและการเปิด dev server ซึ่งปฏิเสธเฉพาะคำสั่งที่รันแบบรอผล
       ref: "packages/engine/src/tools/agent.ts#\"const background = run_in_background ? tools.background : undefined;\""
@@ -115,6 +120,8 @@ scenario:
         text: >-
           ทุกครั้งที่งานเปลี่ยนสถานะหรือพิมพ์ output แผง Tasks และแชตได้รับแจ้ง ใต้กล่องของคำสั่งมีแถวสถานะ และปุ่ม Stop
           ของงานนั้นเอง ซึ่งไม่ใช่ปุ่ม Stop ของ turn
+        from: panel
+        to: you
         sees: "แถว \"Running in background as bg-1\" ไอคอนจุดทึบ และปุ่ม Stop ที่ชี้แล้วขึ้น \"Stop bg-1: SIGTERM, then SIGKILL\""
       alongside: true
       do: >-
@@ -130,6 +137,7 @@ scenario:
         title: "bash คืนผลทันทีโดยไม่รอ"
         text: >-
           ผลบอกชื่องานและที่อยู่ไฟล์ output และบอกโมเดลว่าไม่ต้องคอยถาม Geno จะบอกเองเมื่องานจบ
+        from: engine
         to: model
         sees:
           kind: payload
@@ -152,6 +160,8 @@ scenario:
         title: "Model ทำงานอื่นต่อ"
         text: >-
           Geno เรียกโมเดลต่อ ขณะที่ bg-1 ยังรันอยู่ โมเดลทำอย่างอื่นใน turn เดิมได้
+        from: engine
+        to: model
         end: "งานรันต่อเบื้องหลัง"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลทำงานอื่นต่อขณะที่ `bg-1` ยังรันอยู่

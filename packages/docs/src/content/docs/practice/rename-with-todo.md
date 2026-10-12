@@ -21,7 +21,8 @@ scenario:
         title: "คุณของานสามอย่างในประโยคเดียว"
         text: >-
           เปลี่ยนชื่อทุกที่ ให้เทสต์ยังผ่าน และเขียน CHANGELOG งานแบบนี้ต้องใช้ tool หลายครั้งในหลายรอบของ loop
-        to: engine
+        from: you
+        to: panel
       do: ผู้ใช้รัน `gcode agent` พร้อมคำสั่ง
       phase: idle
 
@@ -31,6 +32,7 @@ scenario:
         text: >-
           คำอธิบายของ `todo` บอก model ให้ใช้มันเป็น call แรกเมื่องานมีสามขั้นขึ้นไป และยกตัวอย่างที่แทบตรงกับคำขอนี้:
           "rename it everywhere, make sure the tests pass, and add a changelog line"
+        from: engine
         to: model
         sees:
           kind: payload
@@ -48,6 +50,7 @@ scenario:
           model ไม่ได้เรียก `todo` เป็น call แรก มันขอ `list` กับ `grep` แล้วขอ `read` หกไฟล์ในคำตอบเดียว
           สองไฟล์ใน `web` เดาชื่อจาก `core` ผิด ไฟล์จริงชื่อ `profile.js` `read` ส่ง error กลับ
           model จึง `list` โฟลเดอร์ `web` แล้วอ่านใหม่ การสำรวจใช้ไปสี่รอบ
+        from: model
         to: engine
         sees:
           kind: payload
@@ -131,6 +134,7 @@ scenario:
         text: >-
           ใน call ที่ห้า model เขียนรายการตรงกับสามงานที่คุณขอ ข้อแรก in_progress ที่เหลือ pending
           Geno ตอบสั้นๆ ว่าอัปเดตรายการแล้ว ในแผงแชตของ VS Code รายการนี้จะปักไว้ให้คุณเห็นตลอด
+        from: model
         to: engine
         sees:
           kind: payload
@@ -160,6 +164,7 @@ scenario:
         text: >-
           model อ่านทุกไฟล์แล้ว จึงขอ `edit` สี่ตัวในคำตอบเดียว แต่ละตัวบอกข้อความเดิม (`old_str`) และข้อความใหม่
           ทั้งสี่สำเร็จ และผลบอกว่าไม่ต้องอ่านไฟล์ซ้ำ
+        from: model
         to: engine
         sees:
           kind: payload
@@ -190,6 +195,7 @@ scenario:
         text: >-
           model ขอ `grep` ซ้ำ (ไม่เหลือ `getUser`) กับ `check` แต่ workspace นี้ไม่ได้ตั้งคำสั่ง check ไว้
           ผลของ `check` บอกให้ใช้ `bash` แทน รอบถัดมา model จึงรัน `node --test` เทสต์ผ่านทั้งสี่ตัว
+        from: model
         to: engine
         sees:
           kind: payload
@@ -238,6 +244,7 @@ scenario:
         text: >-
           สี่รอบถัดมา model อ่าน `CHANGELOG.md` เพิ่มบรรทัดใต้ Unreleased ดู `git diff --stat`
           แล้วเรียก `todo` อีกครั้งให้ทั้งสามข้อเป็น done
+        from: model
         to: engine
         sees:
           kind: payload
@@ -318,6 +325,7 @@ scenario:
         text: >-
           รายการครบแล้ว แต่ model ยัง `grep` และรันเทสต์ซ้ำ แล้วสงสัยผล `grep` ของตัวเอง จึงใช้ `grep -rn` ใน `bash` อีกสองครั้ง
           ครั้งแรกได้ exit 1 เพราะ `grep -v` ไม่เหลืออะไร ครั้งที่สอง Geno ต่อโน้ตท้ายผลว่าครั้งหน้าให้ใช้ tool `grep`
+        from: model
         to: engine
         sees:
           kind: payload
@@ -384,7 +392,8 @@ scenario:
         text: >-
           call ที่ 16 เป็นข้อความอย่างเดียว บอกว่าเปลี่ยนชื่อที่ไหน เทสต์ผ่าน และเพิ่มบรรทัด CHANGELOG แล้ว
           request สุดท้ายอ่านจาก cache ได้ 11,127 token ทั้ง turn ใช้ $0.024
-        to: you
+        from: model
+        to: engine
         end: จบ turn
         sees:
           kind: payload

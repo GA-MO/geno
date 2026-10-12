@@ -20,6 +20,7 @@ scenario:
         title: "คุณส่งข้อความแรก “สวัสดี”"
         text: >-
           คุณเพิ่งติดตั้ง Geno และพิมพ์ "สวัสดี" แล้วกด Enter ทันที แผงไม่มี turn ค้างอยู่ จึงส่งข้อความต่อให้ VS Code
+        from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความแรกในช่องพิมพ์แล้วกด Enter
       phase: idle
@@ -39,6 +40,8 @@ scenario:
         title: "แชตขึ้นข้อความของคุณทันที"
         text: >-
           แผงแสดงข้อความของคุณก่อนติดต่อ engine ด้วยซ้ำ หัวข้อขึ้น working และปุ่ม Stop มาแทน Send
+        from: panel
+        to: you
         sees: { kind: composer, state: working, header: working }
       do: >-
         `Chat.send` ส่งต่อให้ `prompt()` ซึ่งส่ง action `turn-start` ไปที่แผงก่อนติดต่อ engine
@@ -55,6 +58,8 @@ scenario:
         text: >-
           ก่อนเปิด engine ครั้งแรก Geno อ่าน provider โมเดล และ API key แล้วตรวจว่าครบไหม provider ตั้งต้นคือ Model
           Studio และช่องแรกที่ขาดคือ API key
+        from: panel
+        to: panel
       do: >-
         `prompt()` เรียก `link()` ซึ่งเรียก `Engine.connection()` การเชื่อมต่อครั้งแรกเริ่มที่ `engineSettings`
         ซึ่งอ่าน provider โมเดล และคีย์ แล้วให้ `setupProblem` ตรวจ ช่องที่ขาดช่องแรกของ Model Studio คือ API key
@@ -67,6 +72,8 @@ scenario:
         title: "VS Code ขึ้น toast ว่ายังไม่มี API key"
         text: >-
           Geno แสดง toast พร้อมปุ่มที่แก้ปัญหานั้นตรงๆ แล้วหยุด ไม่มี engine ถูกเปิด และไม่มี session ถูกสร้าง
+        from: panel
+        to: you
         sees: { kind: toast, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", actions: [ Set API Key ] }
       do: >-
         `engineSettings` แสดง toast เตือนพร้อมปุ่มที่แก้ปัญหานั้น แล้วโยน error ที่มีข้อความเดียวกัน
@@ -82,6 +89,7 @@ scenario:
         title: "Turn นี้ล้มเหลวทันที"
         text: >-
           VS Code บอกแผงว่า turn ล้มเหลว พร้อมข้อความเดียวกับใน toast
+        from: panel
         to: panel
       do: >-
         `prompt()` จับ error ได้ จึงส่ง action `error` ที่มีข้อความเดียวกับ toast แล้วส่ง `turn-end` สถานะ `failed`
@@ -96,6 +104,8 @@ scenario:
         text: >-
           ใต้ข้อความของคุณมีบรรทัด error สีแดง หัวข้อบอกว่าล้มเหลวในเสี้ยววินาที และปุ่ม Send กลับมา
           ไม่มีการเรียกโมเดลเลย
+        from: panel
+        to: you
         sees: { kind: notice, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", tone: error }
       do: >-
         turn ขึ้นบล็อก error และท้าย turn บอกว่าล้มเหลว `missingReply` ไม่แสดงประกาศ "stopped without a reply"
@@ -111,6 +121,8 @@ scenario:
         title: "คุณเลือกว่าจะกดปุ่มบน toast ไหม"
         text: >-
           toast ยังค้างอยู่มุมขวาล่าง ลองเลือกแต่ละทางเพื่อดูว่าไปต่อที่ไหน
+        from: you
+        to: panel
         ask: "กดปุ่มบน toast ไหม"
       do: ผู้ใช้เห็น toast และเลือกว่าจะกดปุ่มหรือไม่
       fork:
@@ -126,6 +138,7 @@ scenario:
                   text: >-
                     ปุ่มนี้เปิดคำสั่งเดียวกับ "Geno: Set API Key" ใน Command Palette ทัวร์ต่อไปเล่าว่า Geno เก็บคีย์ไว้ที่ไหน
                   from: you
+                  to: panel
                   end: "ไปตั้ง API key"
                 do: >-
                   ปุ่มบน toast เรียกคำสั่ง `gcode.setApiKey` (คำสั่งเดียวกับ "Geno: Set API Key" ใน Command Palette)
@@ -141,6 +154,7 @@ scenario:
                   text: >-
                     toast หายไป turn ที่ล้มเหลวยังอยู่ในแผง ข้อความถัดไปจะเดินทางเดิมและได้ toast เดิม จนกว่าคุณจะตั้งคีย์
                   from: you
+                  to: panel
                   end: "ยังไม่มีคีย์ turn ล้มเหลว"
                 do: >-
                   toast หายไป turn ที่ล้มเหลวยังอยู่ในแผง ข้อความถัดไปที่ส่งจะเดินทางเดิมและได้ toast เดิม จนกว่าจะตั้งคีย์

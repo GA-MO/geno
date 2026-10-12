@@ -22,7 +22,8 @@ scenario:
         text: >-
           คุณรัน `gcode agent` ในโหมด Ask คำสั่งมีสองงาน ลบโฟลเดอร์ แล้วรันเทสต์
           โหมด Ask แปลว่าคำสั่งเสี่ยงต้องถามคุณก่อนรัน
-        to: engine
+        from: you
+        to: panel
       do: ผู้ใช้รัน `gcode agent --mode ask` พร้อมคำสั่ง
       phase: idle
 
@@ -40,6 +41,7 @@ scenario:
         text: >-
           request มีคำสั่งของคุณ และคำอธิบายของ tool `bash` ซึ่งบอก model ไว้ก่อนแล้วว่าคำสั่งที่ลบแบบ recursive
           ต้องได้ approval จากผู้ใช้ และอาจถูกปฏิเสธ การ์ดข้างล่างตัดมาเฉพาะประโยคนั้นจาก `tools[0]`
+        from: engine
         to: model
         sees:
           kind: payload
@@ -57,6 +59,7 @@ scenario:
         text: >-
           model ยังไม่ลบ มันบอกว่าโฟลเดอร์นี้ไม่อยู่ใน git และมันไม่ได้สร้างเอง จึงขอ `bash` ดูข้างในและดู git status ก่อน
           system prompt สั่งไว้ว่าเจอไฟล์ที่ไม่รู้จักให้ดูก่อนลบ
+        from: model
         to: engine
         sees:
           kind: payload
@@ -103,6 +106,7 @@ scenario:
         title: "Geno ส่งรายการในโฟลเดอร์กลับให้ model"
         text: >-
           ผลของ `bash` ต่อท้าย request ที่สอง ซึ่งยังมีทุกอย่างของ request แรก
+        from: engine
         to: model
 
     - id: wants-cat
@@ -112,6 +116,7 @@ scenario:
         text: >-
           model ขออ่านไฟล์เดียวในโฟลเดอร์ Geno รันให้โดยไม่ถาม เพราะ `cat` อยู่ในรายการที่อ่านอย่างเดียว ได้ `// old build` กลับมา
           แต่ check ของ campaign นับเป็นข้อเสีย เพราะ tool `read` ทำงานนี้ได้ตรงกว่า
+        from: model
         to: engine
         sees:
           kind: payload
@@ -137,6 +142,7 @@ scenario:
         title: "Geno เรียก model เป็นครั้งที่สาม"
         text: >-
           request ที่สามมีเนื้อไฟล์ต่อท้าย นี่เป็น request สุดท้ายของ run นี้
+        from: engine
         to: model
 
     - id: wants-rm
@@ -145,6 +151,7 @@ scenario:
         title: "Model ขอรัน `rm -rf build/`"
         text: >-
           model สรุปว่าเป็นไฟล์ build เก่าขนาด 13 byte ที่ไม่อยู่ใน git ลบได้ตามที่คุณขอ แล้วขอ `bash` ลบโฟลเดอร์
+        from: model
         to: engine
         sees:
           kind: payload
@@ -166,6 +173,7 @@ scenario:
           กฎ "rm -rf ของ path ใน workspace" ให้ผลต่างกันตามโหมด: Plan ปฏิเสธ Ask ถาม Auto ส่งให้ classifier
           และ run ที่ไม่มีใครถามได้ (non-interactive) ปล่อยให้รันใน sandbox โหมดนี้คือ Ask จึงต้องถามคุณ
         from: engine
+        to: engine
       do: >-
         `ruledDenial` พบกฎ `rm-rf-in-workspace` ที่ให้ `ask` ในโหมด Ask
       ref: "packages/core/src/approval.ts#\"'rm-rf-in-workspace': {\""
@@ -187,6 +195,7 @@ scenario:
           ใน CLI การ์ดขอ permission คือคำถาม y/N บนเทอร์มินัล แต่ stdin ของ run นี้ไม่ใช่เทอร์มินัล
           คำตอบจึงเป็น "ไม่" ทันที ใน engine ของรอบนี้ไม่มีอะไรพิมพ์บอกเลย ตอนนี้ Geno เขียนเหตุลง stderr แล้ว
         from: panel
+        to: you
         sees: >-
           ตอนนี้ stderr เขียนว่า "Allow `rm -rf build/`? It uses rm -rf of a path inside the workspace. There is no terminal to answer, so it was refused."
       do: >-
@@ -202,6 +211,7 @@ scenario:
           คำตอบ "ไม่" จากตัวถามนับเป็นคำตอบของผู้ใช้ ผลของ tool จึงมี `decidedBy: user` และข้อความบอก model
           ให้หยุดแล้วรอผู้ใช้ ไม่ใช่ให้หาทางอื่น
         from: engine
+        to: model
         sees:
           kind: payload
           direction: tool_result
@@ -221,7 +231,8 @@ scenario:
         text: >-
           เมื่อผู้ใช้ปฏิเสธ loop จบ turn ทันที model ไม่ได้รอบที่สี่ จึงไม่มีโอกาสลบด้วยวิธีอื่น
           wire log มี request แค่สามก้อน `build/` ยังอยู่ และเทสต์ไม่ได้รัน
-        to: you
+        from: engine
+        to: panel
         end: จบ turn หลังถูกปฏิเสธ
       do: >-
         `loopStep` เห็นผลที่ `rejected` ใน turn นี้ จึงคืน `done(end_turn)`

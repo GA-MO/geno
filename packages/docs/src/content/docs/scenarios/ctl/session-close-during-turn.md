@@ -21,6 +21,7 @@ scenario:
         title: "คุณคลิก New Chat ในหน้าต่าง A"
         text: >-
           หน้าต่าง B เริ่ม turn ในแชต X และกำลังรัน `pnpm test` หน้าต่าง A แสดงแชตเดียวกัน คุณคลิก New Chat ในหน้าต่าง A
+        from: you
         to: panel
       do: ผู้ใช้ในหน้าต่าง A คลิก New Chat
       phase: running-tools
@@ -33,6 +34,7 @@ scenario:
         text: >-
           หน้าต่าง A เปิด session ใหม่แล้วปิด session ที่ออกมา A ไม่ได้ถือ turn ของแชต X จึงขอ engine ให้ปิดแชต X
           เพื่อหยุด MCP server ของมัน
+        from: panel
         to: engine
       do: >-
         `moveTo` ของหน้าต่าง A เปิด session ใหม่ แล้วปิด session ที่ออกมา แผงของ A ไม่ได้ถือ turn ของแชต X
@@ -47,6 +49,8 @@ scenario:
         text: >-
           engine ไม่ได้ดูว่าใครเริ่ม turn มันหยุด turn ของแชต X ด้วยสัญญาณเดียวกับปุ่ม Stop เลิกส่งอัปเดตให้ผู้ดู และปิด
           MCP server ของ session
+        from: engine
+        to: engine
       do: >-
         handler ของ `session/close` ไม่ได้ดูว่าใครเริ่ม turn มัน abort `AbortController` ของแชต X ลบ session ออกจากทะเบียน `turns`
         เลิกส่งอัปเดตให้ผู้ดู ถอดรายการคำสั่ง ปิด agent ภายนอก และปิด MCP server ของ session
@@ -59,6 +63,8 @@ scenario:
         title: "คำสั่งที่รันอยู่ถูกหยุดกลางทาง"
         text: >-
           `pnpm test` ถูกหยุดระหว่างรัน และอาจรันไปบางส่วนแล้ว Geno บันทึกว่า turn ถูกหยุด
+        from: engine
+        to: machine
       do: >-
         signal เดียวกับที่ Stop ใช้ไปถึง batch ที่รันอยู่ `pnpm test` ได้คำตอบว่าถูกหยุดระหว่างรันและอาจรันไปบางส่วน
         `drive` บันทึก event `error` ชนิด `abort` แล้ว `loopStep` ให้ `done(error)`
@@ -73,6 +79,7 @@ scenario:
         title: "Engine ตอบหน้าต่าง B ว่า turn ถูกยกเลิก"
         text: >-
           engine ตอบคำขอของหน้าต่าง B ว่า turn ถูกยกเลิก งานจบแบบ stopped และแชต X ยังปิดอยู่
+        from: engine
         to: panel
       do: >-
         `runTurn` เห็นว่า signal ถูก abort จึงตอบคำขอของหน้าต่าง B ด้วย `stopReason: cancelled` และงานจบแบบ stopped
@@ -96,6 +103,8 @@ scenario:
         text: >-
           แผงของหน้าต่าง B แสดง turn ที่ถูกหยุดเหมือนมีคนกด Stop ใน B ทั้งที่ไม่มีใครกด ผลของ `pnpm test` ไม่มาถึง B
           เพราะ B ถูกถอดจากผู้ดูแล้ว
+        from: panel
+        to: you
         end: "turn ของ B ถูกหยุด"
         sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-

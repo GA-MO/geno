@@ -20,6 +20,7 @@ scenario:
         title: "Model ขอรันคำสั่งนอก safe list"
         text: >-
           session อยู่ในโหมด Auto โมเดลขอรันคำสั่งด้วย `bash` แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -37,6 +38,8 @@ scenario:
         text: >-
           Geno ดูกฎห้ามและกฎถามของ workspace ก่อน แล้วจึงดูกฎในตัวของ Geno ปกติโหมด Auto ส่งให้ classifier
           แต่มีสามทางที่คำสั่งไปถึงคุณ ลองเลือกดู
+        from: engine
+        to: engine
         ask: "ทำไมถึงถามคุณ"
       do: >-
         `approveCommand` ให้ `ruledDenial` ตัดสินตามลำดับ: กฎ deny และ ask ของ workspace ก่อน แล้วกฎในตัวของ Geno
@@ -55,6 +58,8 @@ scenario:
                   text: >-
                     `node scripts/build-icons.mjs` ไปที่ classifier ซึ่งไม่แน่ใจ ก่อนหน้านี้ classifier บล็อกครบ 3 ครั้งติดกัน
                     Auto จึงพักอยู่ ความไม่แน่ใจจึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier แทนการบล็อก
+                  from: engine
+                  to: engine
                 do: >-
                   คำสั่งติดกฎ `unlisted` ซึ่งในโหมด Auto คือ `classify` `ruledDenial` แนบรูปแบบ `node scripts/build-icons.mjs` ไว้ให้บันทึกเป็นกฎ
                 ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -82,6 +87,8 @@ scenario:
                   text: >-
                     `rm -rf ../old-build` ลบนอก workspace กฎนี้ถามเสมอแม้ในโหมด Auto จึงไม่มี classifier กฎอนุญาตและ hook
                     ครอบคำสั่งนี้ไม่ได้ และไม่มีรูปแบบให้บันทึก
+                  from: engine
+                  to: engine
                 do: >-
                   กฎ `rm-rf-outside-workspace` ครอบคลุม `rm -rf` ของ workspace เอง `.git` หรือ path นอก workspace
                   คำตัดสินเป็น `ALWAYS_ASK`: Auto ก็ `ask` ไม่ใช่ `classify` จึงไม่มี classifier
@@ -99,6 +106,8 @@ scenario:
                   text: >-
                     คุณตั้งกฎถาม `pnpm publish` ไว้ใน Settings กฎของ workspace มาก่อนกฎในตัว โหมด Auto จึงถามเหมือนโหมด Ask
                     ไม่ส่งให้ classifier
+                  from: engine
+                  to: engine
                 do: >-
                   ผู้ใช้ตั้งกฎ ask `pnpm publish` ไว้ใน Settings `caughtBy` เจอกฎนี้ก่อนกฎในตัว จึงคืน denial `workspace-ask`
                   คำตัดสินเป็น `ask` ในโหมด Auto เช่นเดียวกับ Ask ไม่ส่งให้ classifier (โหมด Plan จะกลายเป็นปฏิเสธ)
@@ -112,6 +121,7 @@ scenario:
         title: "Geno หยุด turn แล้วถามคุณ"
         text: >-
           Geno ส่งคำถามไปที่แชต หัวข้อมีเหตุผลของ classifier ถ้ามี งานในแผง Tasks เปลี่ยนเป็นรอคุณ
+        from: engine
         to: panel
       do: >-
         `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` หัวข้อของ call มาจาก `approvalQuestion`
@@ -135,6 +145,7 @@ scenario:
         title: "คุณเห็นการ์ด “Run this command?”"
         text: >-
           การ์ดเหมือนในโหมด Ask เหตุผลบอกว่ากฎไหนทำให้ถาม ปุ่ม Always allow ขึ้นเฉพาะเมื่อมีรูปแบบให้บันทึก
+        from: panel
         to: you
         ask: "กดปุ่มไหน"
         sees: { kind: permission, command: rm -rf ../old-build, reason: "Geno asks because it uses rm -rf of the workspace, its .git or a path outside it.", options: [ Allow, Deny, "No, and tell the agent…" ] }
@@ -194,6 +205,7 @@ scenario:
                   text: >-
                     turn จบรอคุณเหมือนการปฏิเสธในโหมด Ask Auto ที่พักอยู่ยังพักต่อ ทัวร์นั้นเล่าต่อ
                   from: you
+                  to: panel
                   end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
@@ -238,6 +250,7 @@ scenario:
         title: "Model อ่านผลของคำสั่ง"
         text: >-
           Geno เรียกโมเดลต่อ โมเดลได้อ่านผลของคำสั่ง
+        from: engine
         to: model
         end: "คุณอนุญาต turn ทำต่อ"
       do: >-

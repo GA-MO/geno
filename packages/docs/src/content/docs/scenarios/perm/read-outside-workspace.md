@@ -21,6 +21,7 @@ scenario:
         text: >-
           โมเดลขอ `read` ไฟล์ `/Users/me/shared-lib/src/date.ts` ซึ่งอยู่นอก workspace และยังไม่เคยอนุญาตใน session นี้
           แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: model
         to: engine
       do: >-
         โมเดลขอ `read` ไฟล์ด้วย path แบบเต็มนอก workspace จบด้วย `stop_reason: tool_use`
@@ -46,6 +47,8 @@ scenario:
         text: >-
           การอ่านที่อาจออกนอก workspace รันตัวเดียวในชุด Geno หา path จริงแล้วพบว่าไม่อยู่ในโฟลเดอร์ใดที่อ่านได้
           ไม่มีกฎห้ามอ่านตรง จึงต้องถาม
+        from: engine
+        to: engine
       runs: 0
       do: >-
         `read` ถูกห่อด้วย `withReach` ซึ่งรันมันตัวเดียวในชุดเพราะ path อาจออกนอก workspace
@@ -60,6 +63,7 @@ scenario:
         text: >-
           กฎของ path นอก workspace ในโหมด Ask คือถาม Geno เสนอโฟลเดอร์ `/Users/me/shared-lib/src` ให้อนุญาตตลอด session
           เพราะ path ไม่ใช่ไฟล์ลับ แล้วส่งคำถามไปที่แชต run จริงด้านล่างไม่มีคนดู กฎเดียวกันจึงปฏิเสธเอง
+        from: engine
         to: panel
         sees:
           kind: payload
@@ -107,6 +111,7 @@ scenario:
         title: "คุณเห็นการ์ด “Read outside the workspace?”"
         text: >-
           การ์ดของการอ่านนอก workspace มีปุ่มอนุญาตทั้งโฟลเดอร์แทนปุ่มบันทึกกฎ ลองเลือกแต่ละทาง
+        from: panel
         to: you
         ask: "กดปุ่มไหน"
         sees: "การ์ด \"Read outside the workspace?\" \"Geno asks about a path outside the workspace.\" ปุ่ม Allow, Allow this directory for the session, Deny และ No, and tell the agent…"
@@ -189,6 +194,7 @@ scenario:
                   text: >-
                     ไฟล์ไม่ถูกอ่าน turn จบรอคุณเหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อ
                   from: you
+                  to: panel
                   end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
@@ -234,6 +240,7 @@ scenario:
         title: "Model อ่านไฟล์แล้วทำต่อ"
         text: >-
           Geno เรียกโมเดลต่อ โมเดลได้เนื้อไฟล์จากโปรเจกต์อื่น
+        from: engine
         to: model
         end: "คุณอนุญาต turn ทำต่อ"
       do: >-

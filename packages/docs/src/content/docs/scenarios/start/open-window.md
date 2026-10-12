@@ -21,6 +21,8 @@ scenario:
         title: "VS Code เปิดเสร็จแล้วปลุก Geno"
         text: >-
           เมื่อ VS Code เปิดโฟลเดอร์เสร็จ Geno ลงทะเบียนแผงแชตและคำสั่งของตัวเอง ตอนนี้ยังไม่มีอะไรต่อ engine เลย
+        from: panel
+        to: panel
       do: >-
         เมื่อ VS Code เปิดเสร็จ (`onStartupFinished`) `activate` เรียก `registerChat` ซึ่งสร้าง `Chat` กับตัวเชื่อม `Engine`
         ลงทะเบียนแผงแชต `gcode.chat` คำสั่งของ Geno และตัวฟังการเปลี่ยนคีย์กับการตั้งค่า ตอนนี้ยังไม่มีอะไรต่อ engine
@@ -35,6 +37,8 @@ scenario:
         text: >-
           Geno รับแชตที่หน้าต่างอื่นส่งต่อมาให้ถ้ามี แล้วอ่านว่าครั้งก่อนหน้าต่างนี้เปิดแชตไหนค้างไว้ คำตอบนี้ตัดสินว่า
           Geno จะต่อ engine ตอนไหน
+        from: panel
+        to: panel
         ask: "จำแชตไว้ไหม"
       do: >-
         งานตอนเริ่มรับ session ที่หน้าต่างอื่นส่งต่อมาให้ (`takeHandoff`) ถ้ามี แล้วอ่านไฟล์ `session-id`
@@ -52,6 +56,8 @@ scenario:
                   title: "Geno ต่อ engine ทันทีโดยไม่รอคุณ"
                   text: >-
                     หน้าต่างนี้จำแชตไว้ Geno จึงเริ่มต่อ engine ตั้งแต่ตอนนี้ โดยไม่รอให้คุณเปิดแผง บทสนทนาเดิมจะพร้อมก่อนคุณมองหา
+                  from: panel
+                  to: panel
                 do: >-
                   เรียก `chat.link()` ทันทีโดยไม่รอให้ผู้ใช้เปิดแผง บทสนทนาและสถานะ review จึงกลับมาพร้อมหน้าต่าง
                 ref: packages/extension/src/chat/chat.ts#Chat.link
@@ -61,6 +67,7 @@ scenario:
                   text: >-
                     Geno ตรวจว่าตั้ง API key แล้ว แล้วต่อ socket ของ engine ที่หน้าต่างอื่นของโฟลเดอร์นี้อาจเปิดไว้แล้ว
                     ถ้ายังไม่มี Geno เปิด engine เป็น process แยกที่อยู่ต่อได้แม้หน้าต่างปิด
+                  from: panel
                   to: engine
 
               - lane: editor
@@ -69,6 +76,7 @@ scenario:
                   title: "Geno ขอโหลดแชตที่จำไว้"
                   text: >-
                     VS Code ขอ engine ให้โหลดแชตนั้น ถ้าบันทึกของแชตหายไปแล้ว Geno เริ่มแชตใหม่แทน
+                  from: panel
                   to: engine
                 do: >-
                   `openSession` เห็นว่ายังไม่มีแชตที่แสดงอยู่ จึงโหลดแชตที่จำไว้ด้วยคำขอ ACP `session/load`
@@ -81,6 +89,7 @@ scenario:
                   text: >-
                     engine ตรวจว่าแชตเป็นของโฟลเดอร์นี้ แล้วส่งบันทึกทีละรายการกลับมา ปิดท้ายด้วยชื่อแชต VS Code เก็บบทสนทนาไว้รอ
                     เพราะแผงยังไม่เปิด
+                  from: engine
                   to: panel
                 do: >-
                   engine ตรวจว่า session เป็นของ workspace นี้ แล้วเล่น log ซ้ำเป็น `session/update` ทีละรายการ
@@ -100,6 +109,7 @@ scenario:
                   text: >-
                     คุณคลิกไอคอน Geno ใน activity bar เมื่อแผงพร้อม VS Code ส่งบทสนทนาทั้งชุดเข้าไปในครั้งเดียว
                     แล้วจึงส่งอัปเดตสดตามมา
+                  from: you
                   to: panel
                 do: ผู้ใช้คลิกไอคอน Geno ใน activity bar เพื่อเปิดแผงแชต
               - lane: editor
@@ -116,6 +126,8 @@ scenario:
                   text: >-
                     แผงวาดบทสนทนาเดิมทั้งหมด ชื่อแชตอยู่บนหัวแผง และท้ายแต่ละ turn บอกโมเดล token และค่าใช้จ่าย
                     คุณพิมพ์ต่อได้ทันที
+                  from: panel
+                  to: you
                   end: "แชตเดิมกลับมา"
                   sees: { kind: composer, state: idle }
                 do: แผงวาดบทสนทนาเดิมทั้งหมด พร้อมท้าย turn ที่บอกโมเดล token และค่าใช้จ่ายของแต่ละ turn
@@ -132,6 +144,7 @@ scenario:
                   text: >-
                     หน้าต่างนี้ไม่ได้จำแชตไว้ จึงยังไม่มีอะไรต่อ engine จนคุณคลิกไอคอน Geno ใน activity bar VS Code
                     ส่งหน้าแผงที่ยังว่างพร้อมชื่อโปรเจกต์ branch และโหมดเข้าไป
+                  from: you
                   to: panel
                 do: ผู้ใช้คลิกไอคอน Geno ใน activity bar เพื่อเปิดแผงแชต
               - lane: editor
@@ -147,6 +160,8 @@ scenario:
                   title: "แผงวาดหน้าเริ่มต้นแล้วขอรายการแชต"
                   text: >-
                     บทสนทนายังว่าง แผงจึงวาดหน้าเริ่มต้น แล้วขอรายการแชตเก่าของโปรเจกต์นี้มาแสดง
+                  from: panel
+                  to: panel
                 do: >-
                   `render()` เห็นบทสนทนาว่างจึงวาดหน้าเริ่มต้น แล้วหน้าเริ่มต้นขอรายการแชตของโปรเจกต์นี้ด้วยข้อความ `list-sessions`
                 ref: "packages/extension/src/chat/start-page.ts#\"refresh: () => post({ type: 'list-sessions', scope: 'project' }),\""
@@ -158,6 +173,8 @@ scenario:
                   text: >-
                     การขอรายการแชตต้องใช้ engine และแถบสถานะ PR ก็เพิ่งขอ engine ไปเหมือนกัน ทั้งสองรอการต่อครั้งแรกตัวเดียวกัน
                     ยังไม่มี session ใหม่เกิดขึ้น แชตใหม่จะเกิดตอนคุณส่งข้อความแรก
+                  from: panel
+                  to: panel
                 do: >-
                   `listSessions` ต้องใช้ engine ตอน `ready` แผงสั่งดึงสถานะ PR (`prStatus.refresh(true)`) ไปแล้ว
                   ซึ่งเรียก `Engine.connection()` ก่อน ทั้งสองจึงรอการต่อ engine ครั้งแรกตัวเดียวกัน
@@ -169,6 +186,7 @@ scenario:
                   text: >-
                     Geno ตรวจว่าตั้ง API key แล้ว แล้วต่อ socket ของ engine ถ้ายังไม่มี engine ฟังอยู่ Geno เปิดขึ้นมาเป็น process
                     แยก
+                  from: panel
                   to: engine
 
               - lane: editor
@@ -177,6 +195,7 @@ scenario:
                   title: "Engine ตอบรายการแชตของโฟลเดอร์นี้"
                   text: >-
                     VS Code ขอรายการแชตของโฟลเดอร์ engine อ่านบันทึกทุกแชตแล้วตอบชื่อ จำนวน turn ค่าใช้จ่าย และเวลาแก้ล่าสุด
+                  from: engine
                   to: panel
                 do: ส่งคำขอ ACP `session/list` พร้อมโฟลเดอร์ของหน้าต่าง
                 ref: packages/extension/src/chat/chat.ts#Chat.listSessions
@@ -192,6 +211,8 @@ scenario:
                   text: >-
                     แผงเลือกแชตของโปรเจกต์นี้ที่มี turn แล้ว ใหม่สุด 3 แชต มาแสดงใต้หัวข้อ Continue ไดโนเสาร์ Noodle เดินไปมา
                     และช่องพิมพ์รอข้อความแรก
+                  from: panel
+                  to: you
                   end: "หน้าเริ่มต้นพร้อม"
                   sees: { kind: composer, state: idle }
                 do: >-
