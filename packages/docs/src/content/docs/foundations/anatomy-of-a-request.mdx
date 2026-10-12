@@ -14,6 +14,14 @@ payloads:
       - tools
       - system
       - messages
+  forcedReport:
+    source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=9
+    highlight:
+      - tool_choice
+    collapse:
+      - tools
+      - system
+      - messages
 ---
 import Payload from '../../../components/Payload.astro';
 
@@ -70,6 +78,11 @@ field ชุดเดียวกันนี้ประกอบได้ห�
 | 2 | `tool_choice` บังคับ `report` | subagent ถูกบังคับให้ส่งรายงานกลับ |
 | 2 | ไม่มี `tools` | การเรียกเพื่อสรุปบทสนทนาตอน compaction |
 | 1 | ไม่มี `tools` `max_tokens` 1,200 | model ตัวช่วยของ `web_fetch` อ่านหน้าเว็บ |
+
+request ที่บังคับ `report` เป็นแบบนี้: subagent `explore` ใช้รอบจนเหลือการเรียก model ครั้งสุดท้าย Geno จึงส่ง `tool_choice`
+ที่บังคับ tool `report` ทั้งที่รายการ `tools` ยังมีครบ model ตอบได้ทางเดียวคือส่งรายงาน
+
+<Payload of={frontmatter.payloads.forcedReport} />
 
 ตัวอย่างละหนึ่งไฟล์: `A01-fix-failing-test/fix-a2/wire.jsonl` บรรทัด 1, `A11-explore-subagent/fix-a1/wire.jsonl` บรรทัด 3 และ 9,
 `A09-auto-classifier/fix-a1/wire.jsonl.gz` บรรทัด 15, `A17-budget-reminder/fix-a1/wire.jsonl.gz` บรรทัด 11,

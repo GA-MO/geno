@@ -18,6 +18,16 @@ payloads:
   system:
     source: docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=1
     select: system
+  childSystem:
+    source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=3
+    select: system[0]
+    highlight:
+      - text
+  reportNote:
+    source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
+    select: messages[4]
+    highlight:
+      - "content[0].text"
 ---
 import Payload from '../../../components/Payload.astro';
 
@@ -91,6 +101,18 @@ Geno จึงไม่ให้มันมีน้ำหนักเท่า
 โน้ตแบบอื่นที่ Geno แทรก (ทั้งหมดประกอบใน `replayMessages` ของ `packages/core/src/session.ts`):
 ข้อความที่คุณพิมพ์แทรกระหว่าง turn ไฟล์ที่ model อ่านไปแล้วถูกแก้บนดิสก์ คำสั่งเบื้องหลังจบ รายงานจาก subagent
 memory ใหม่ MCP tool ใหม่ คำเตือนว่างบเหลือไม่ถึง 20% และ "This is the last model call this run's limits allow" ในรอบสุดท้าย
+
+รายงานของ subagent ที่รันเบื้องหลังมาถึงเป็นโน้ตแบบนี้: บรรทัดแรกบอกว่าไม่ใช่ข้อความของผู้ใช้ รายงานอยู่ในรั้ว `<subagent_report>`
+ทุกบรรทัดเยื้อง และท้ายรั้วคือคำเตือนว่ารายงานอนุมัติอะไรไม่ได้ การ์ดนี้บันทึกจาก engine จริงกับ model จำลอง
+
+<Payload of={frontmatter.payloads.reportNote} />
+
+subagent ได้ system prompt ของตัวเอง ไม่ใช่ของแม่: กรอบสั้นๆ ว่ามันคือ subagent ที่ต้องจบด้วย `report`
+ตามด้วย role จากนิยามของมัน (ของ `explore` อยู่ใน `BUILTIN_AGENTS` ของ `packages/core/src/subagent.ts`
+ส่วน role ที่โปรเจกต์นิยามอยู่ในไฟล์ `.claude/agents/*.md` หรือ `.agents/agents/*.md`) ข้อความแรกของมันมีแค่ environment กับ task
+ไม่มีบทสนทนาของแม่ เว้นแต่จะเป็น fork ([fork subagent จากบทสนทนา](/scenarios/sub/fork/))
+
+<Payload of={frontmatter.payloads.childSystem} />
 
 ### ใครปลอมเป็น `[Geno]` ไม่ได้
 
