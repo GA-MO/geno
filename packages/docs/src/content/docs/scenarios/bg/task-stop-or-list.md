@@ -75,7 +75,7 @@ scenario:
               - lane: server
                 at: updates
                 do: >-
-                  `acpChildHost.ended` ส่ง `subagent_update` แถวของลูกขึ้น Cancelled
+                  `acpChildHost.ended` ส่ง `subagent_update` แถวของลูกขึ้นไอคอน cancelled
                 ref: packages/engine/src/subagent-acp.ts#acpChildHost
                 emits: [subagent_update]
               - lane: tool
@@ -144,8 +144,9 @@ scenario:
       at: tasks
       alongside: true
       do: >-
-        งานของ session ในแผง Tasks เลิกแสดงสิ่งที่หยุดแล้วใน "Wakes on ..."
-      sees: แถวของ session ไม่มีตัวที่หยุดแล้วในรายการที่รอ
+        สิ่งที่หยุดแล้วหายจากการรอของงานใน engine ระหว่างที่ turn ยังรัน แถวของ session ในแผง Tasks ไม่แสดง "Wakes on ..." อยู่แล้ว
+        (`wakesOf` ข้ามงานที่ยังรัน) เมื่อ turn จบ บรรทัดนั้นไม่มีตัวที่หยุดไป
+      sees: หลัง turn จบ แถวของ session ไม่มีตัวที่หยุดแล้วในรายการที่รอ
       ref: packages/core/src/wake.ts#waitsForText
 
     - use: model-call

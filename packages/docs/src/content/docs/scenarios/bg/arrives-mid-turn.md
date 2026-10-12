@@ -27,7 +27,7 @@ scenario:
       lane: server
       at: updates
       do: >-
-        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` แถวของ explore ขึ้น Done ทันที
+        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` ทันที
       ref: packages/engine/src/subagent-acp.ts#acpChildHost
       emits: [subagent_update, idle]
 
@@ -36,7 +36,7 @@ scenario:
       at: rail
       alongside: true
       do: แถวของลูกหยุดหมุน
-      sees: แถว "explore · <โมเดล> · 0:41" ขึ้น Done พร้อมค่าใช้จ่าย
+      sees: แถว "✓ explore · <โมเดล> · 41s · <ค่าใช้จ่าย>"
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: put
@@ -104,7 +104,7 @@ scenario:
       lane: loop
       at: model-call
       do: >-
-        `callModel` ประกอบคำขอ รายงานถูกห่อด้วย `arrivalText`: บรรทัดแรกบอกว่าข้อความนี้ไม่ใช่ของผู้ใช้ ตามด้วยรั้ว `<subagent_report ...>`
+        `buildRequest` ประกอบคำขอจาก log `replayMessages` ห่อ steer ที่มาจากลูกด้วย `arrivalText`: บรรทัดแรกบอกว่าข้อความนี้ไม่ใช่ของผู้ใช้ ตามด้วยรั้ว `<subagent_report ...>`
       ref: packages/core/src/fence.ts#arrivalText
 
     - id: reads

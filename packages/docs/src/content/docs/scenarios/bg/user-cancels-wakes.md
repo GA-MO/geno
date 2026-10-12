@@ -46,14 +46,6 @@ scenario:
         คำสั่งเบื้องหลังอื่นของ session ยังรันต่อ แต่ถูกจดว่าเงียบ จบแล้วไม่ปลุก
       ref: packages/engine/src/wakes.ts#Wakes.cancel
 
-    - id: child-ends
-      lane: child@explore
-      at: loop
-      do: >-
-        explore ถูก abort ระหว่างทำงาน จบแบบ `cancelled` `child-end` ยังถูกบันทึก แต่ไม่มีรายงานให้โมเดลได้ยิน
-      ref: "packages/engine/src/subagents.ts#\"const report = async (text: string, ended: ChildEndNote | undefined) => {\""
-      emits: [cancelled, child-end]
-
     - id: logged
       lane: server
       at: wakes
@@ -69,6 +61,15 @@ scenario:
       do: >-
         `wakes.soon` ดูประตูอีกครั้ง `unwokenOf` เห็นโน้ต `cancelled` เป็นเส้นแบ่ง จึงไม่มีอะไรรอปลุก งานในแผง Tasks อัปเดต
       ref: packages/core/src/wake.ts#unwokenOf
+
+    - id: child-ends
+      lane: child@explore
+      at: loop
+      do: >-
+        หลังจากนั้น explore ที่ถูก abort ปิดตัวเสร็จ จบแบบ `cancelled` `child-end` มาถึงทางกล่องข้อความและถูกบันทึกลง log หลังโน้ต `cancelled`
+        ไม่มีรายงานให้โมเดลได้ยิน และ `child-end` ไม่ใช่สิ่งที่ปลุก
+      ref: "packages/engine/src/subagents.ts#\"const report = async (text: string, ended: ChildEndNote | undefined) => {\""
+      emits: [cancelled, child-end]
 
     - id: row
       lane: panel

@@ -78,7 +78,8 @@ scenario:
       at: sessions
       do: >-
         `startScheduled` เปิด session ใหม่ชื่อตามงาน งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan
-        (งานที่แก้ไฟล์ได้ lane ใหม่และรันโหมด Auto) ขีดจำกัดของ turn คืองบของงาน ไม่ใช่ $0.40 ปกติ
+        (งานที่แก้ไฟล์ได้ lane ใหม่และรันโหมด Auto) ขีดจำกัดของ turn คืองบของงาน ไม่ใช่ 40 ครั้งและ $0.40 ของ `gcode serve`
+        ในทัวร์นี้คือเรียกโมเดลได้ 20 ครั้ง และ $0.20 การตรวจขีดจำกัดก่อนเรียกโมเดลแต่ละครั้งในขั้นถัดไปใช้ตัวเลขนี้
       ref: "packages/engine/src/serve.ts#\"const startScheduled = async (workspace: string, task: ScheduledTask) => {\""
       phase: starting
 

@@ -108,8 +108,9 @@ scenario:
                 at: wakes
                 do: >-
                   นาฬิกาครบ monitor เลิกดู (`dev server` ยังรันต่อ) แล้วใส่โน้ต `wake` ชนิด `monitor` ผล `timed-out` ลงกล่องข้อความของ session
+                  โน้ตนี้ถูกบันทึกลง log เป็น event `wake` ในขั้นถัดไป
                 ref: packages/engine/src/wakes.ts#Wakes.monitor
-                emits: [monitor, timed-out]
+                emits: [wake, monitor, timed-out]
               - use: bg-wake-starts
               - use: model-call
               - lane: model
@@ -136,9 +137,9 @@ scenario:
       at: wakes
       do: >-
         `bg-1` พิมพ์ "ready on http://localhost:3000" monitor จบ แล้วใส่โน้ต `wake` ชนิด `monitor` ผล `matched` พร้อมบรรทัดนั้น
-        ลงกล่องข้อความของ session ตัวอักษรที่มองไม่เห็นในบรรทัดถูกทำให้มองเห็น
+        ลงกล่องข้อความของ session ตัวอักษรที่มองไม่เห็นในบรรทัดถูกทำให้มองเห็น โน้ตนี้ถูกบันทึกลง log เป็น event `wake` ในขั้นถัดไป
       ref: packages/engine/src/wakes.ts#Wakes.monitor
-      emits: [monitor, matched]
+      emits: [wake, monitor, matched]
 
     - use: bg-wake-starts
     - use: model-call

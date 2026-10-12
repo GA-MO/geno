@@ -137,8 +137,8 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        turn ที่ถูกถือไว้ไปที่ `deliver()` ซึ่งบันทึกรายงานเป็น event `user` แบบ steer `from: 'child'` แล้วเรียกโมเดลอีกรอบ
-        แม้ขั้นของลูปจะเป็น `done` ขีดจำกัด 40 ครั้งและ $0.40 ยังนับต่อ
+        turn ที่ถูกถือไว้ไปที่ `deliver()` แม้ขั้นของลูปจะเป็น `done` `deliver()` บันทึกรายงานเป็น event `user` แบบ steer `from: 'child'`
+        ลูปดู log อีกรอบ `loopStep` เห็น event `user` ล่าสุดจึงตัดสิน `call-model` และเรียกโมเดล ขีดจำกัด 40 ครั้งและ $0.40 ยังนับต่อ
       ref: "packages/engine/src/drive.ts#\"} else if (step.kind === 'call-model' || held !== undefined) {\""
       emits: [user]
       phase: calling-model
@@ -165,7 +165,7 @@ scenario:
       do: >-
         `finish` พิมพ์บรรทัด usage และ process จบด้วย exit code 0
       sees: >-
-        "usage: ... turns=2" แล้วเทอร์มินัลกลับมาที่ prompt
+        "usage: ... turns=3" (เรียกโมเดลสามครั้ง: ขอ `agent` บอกว่ารอ และเล่ารายงาน) แล้วเทอร์มินัลกลับมาที่ prompt
       ref: packages/engine/src/drive.ts#terminalSurface
       end: { turn: done, reason: end_turn }
 ---
