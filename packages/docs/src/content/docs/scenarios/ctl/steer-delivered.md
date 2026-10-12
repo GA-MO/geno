@@ -20,6 +20,7 @@ scenario:
         title: "คุณพิมพ์แล้วกด Send now"
         text: >-
           `pnpm test` กำลังรันอยู่ คุณพิมพ์ "อย่าแก้ไฟล์ test นะ" แล้วคลิกลูกศรขึ้นข้างปุ่ม Stop หรือกด Cmd-Enter
+        from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความแล้วกด Send now ขณะที่คำสั่งยังรันอยู่
       phase: running-tools
@@ -31,6 +32,8 @@ scenario:
         title: "แผงขึ้นป้าย Sending now"
         text: >-
           ข้อความย้ายออกจากช่องพิมพ์ไปเป็นข้อความที่กำลังส่ง แผงส่งต่อให้ VS Code
+        from: panel
+        to: you
         sees: "ช่องพิมพ์ว่าง ป้าย \"Sending now\" เหนือช่องพิมพ์ ชี้แล้วขึ้น \"Lands at the next tool round, between the step running now and the model’s next answer\""
       do: >-
         `steerNow` ย้ายข้อความออกจากช่องพิมพ์ไปเป็นข้อความที่กำลังส่ง แล้วโพสต์ `steer` ถึงแชตนี้ไปให้ extension host
@@ -46,6 +49,7 @@ scenario:
         title: "VS Code ส่งข้อความเป็น steer"
         text: >-
           turn ยังทำงานอยู่ VS Code จึงส่งข้อความพร้อมป้ายว่าเป็น steer ไม่ใช่ prompt ใหม่
+        from: panel
         to: engine
       do: >-
         `SteerHost.steerChat` เห็นว่ามี turn ทำงานอยู่ จึงส่งคำขอ ACP `session/prompt` ที่มี `_meta` `STEER_META` เป็น `true`
@@ -60,6 +64,8 @@ scenario:
         title: "Geno เก็บข้อความไว้ใน inbox ของ turn"
         text: >-
           engine ไม่เริ่ม turn ใหม่ มันตรวจว่าเป็นข้อความล้วนและไม่ว่าง แล้วใส่ไว้ใน inbox ของ turn ที่ทำงานอยู่
+        from: engine
+        to: engine
       do: >-
         engine เห็น `STEER_META` จึงไม่เริ่ม turn ใหม่ `steerRunning` ตรวจว่าเป็นข้อความล้วนและไม่ว่าง แล้วใส่ไว้ใน inbox ของ turn
         คำขอนี้ค้างอยู่จนกว่า loop จะรับข้อความ
@@ -72,6 +78,8 @@ scenario:
         title: "Geno ไม่ขัดคำสั่งที่รันอยู่"
         text: >-
           ระหว่างรัน tool Geno ถือข้อความไว้ก่อน `pnpm test` รันต่อจนจบโดยไม่ถูกขัด
+        from: engine
+        to: engine
       do: >-
         loop กำลังรันเครื่องมือ ตาราง `STEER_AT` บอกว่าระหว่าง `run-tools` ให้ถือข้อความไว้ก่อน คำสั่งที่รันอยู่ไม่ถูกขัด
       ref: packages/core/src/steer.ts#STEER_AT
@@ -81,7 +89,8 @@ scenario:
         title: "ผลของ pnpm test กลับมาที่แชต"
         text: >-
           คำสั่งจบ Geno บันทึกผลแล้วส่งไปที่แชต ขั้นนั้นหยุดหมุน
-        from: machine
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm test, status: done, output: Tests  12 passed (12) }
 
     - id: decide
@@ -91,6 +100,8 @@ scenario:
         title: "ถึงจุดปลอดภัยก่อนเรียก model"
         text: >-
           ผลของ tool กลับมาครบ ขั้นต่อไปคือเรียกโมเดล ตรงนี้คือจุดเดียวที่ข้อความแทรกเข้า turn ได้
+        from: engine
+        to: engine
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ซึ่งเป็นจุดเดียวที่ `STEER_AT` ให้ส่งข้อความเข้า
       ref: packages/core/src/loop.ts#loopStep
@@ -105,6 +116,7 @@ scenario:
         text: >-
           Geno รับข้อความจาก inbox แล้วบันทึกต่อจากผลของ tool เพราะมีของใหม่มาถึง Geno จึงอ่านบันทึกอีกรอบก่อนเรียกโมเดล
           แล้วแจ้งแชตว่าข้อความเข้า turn แล้ว
+        from: engine
         to: panel
       do: >-
         `deliver()` รับข้อความจาก inbox บันทึกเป็น event `user` ที่มี `steer: true` ต่อจากผลของเครื่องมือ
@@ -136,6 +148,8 @@ scenario:
         text: >-
           ข้อความของคุณขึ้นตรงตำแหน่งที่มันเข้า turn จริง คือใต้ขั้นของ `pnpm test` คำขอ steer ได้คำตอบว่าส่งถึงแล้ว
           และป้าย Sending now หายไป คำตอบนี้ไม่ได้แปลว่า turn จบ
+        from: panel
+        to: you
         sees: { kind: message, from: you, text: อย่าแก้ไฟล์ test นะ, footer: [ Sent mid-turn ] }
       alongside: true
       do: >-
@@ -164,6 +178,7 @@ scenario:
         title: "Geno ส่งผลและข้อความของคุณให้ model"
         text: >-
           คำขอรอบนี้มีผลของ `pnpm test` ตามด้วยข้อความของคุณ ที่ Geno ห่อไว้ว่าเป็นข้อความที่คุณส่งมาระหว่างทำงาน
+        from: engine
         to: model
 
     - id: reads
@@ -172,6 +187,8 @@ scenario:
         title: "Model ปรับงานตามที่คุณบอก"
         text: >-
           โมเดลอ่านข้อความของคุณแล้วปรับงานใน turn เดิม ไม่ต้องรอ turn ใหม่
+        from: model
+        to: engine
         end: "turn ทำต่อตามที่คุณบอก"
       do: >-
         คำขอนี้มีผลของ `pnpm test` ตามด้วยข้อความของผู้ใช้ห่อด้วย `userSteerText`

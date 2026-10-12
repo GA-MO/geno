@@ -20,6 +20,8 @@ scenario:
         text: >-
           engine อ่าน API key และการตั้งค่าได้ครั้งเดียวตอนเริ่ม process
           การเปลี่ยนสองอย่างนี้จึงทำให้หน้าต่างต้องย้ายไปหา engine ตัวใหม่ ลองเลือกว่าคุณเปลี่ยนอะไร
+        from: you
+        to: panel
         ask: "เปลี่ยนอะไร"
       do: ผู้ใช้เปลี่ยนสิ่งที่ engine ต้องใช้
       phase: idle
@@ -37,6 +39,8 @@ scenario:
                   text: >-
                     คุณรันคำสั่ง "Geno: Set API Key" หรือกดปุ่มบน toast Geno เปิด quick pick ที่มีช่องลับของทุก provider ช่องของ
                     provider ที่แชตใช้อยู่ขึ้นก่อน คุณเลือก "Model Studio: API key"
+                  from: panel
+                  to: you
                   sees: "quick pick หัวเรื่อง \"Set a Geno key\" ถามว่า \"Which key?\" แถวแรกคือ \"Model Studio: API key  chat\""
                 do: >-
                   `pickSecret` เปิด quick pick ที่มีช่องลับของทุก provider ช่องของ provider ที่ใช้แชตอยู่ขึ้นก่อนและมีคำว่า chat กำกับ
@@ -52,6 +56,8 @@ scenario:
                   title: "คุณวางคีย์ในช่องที่ซ่อนตัวอักษร"
                   text: >-
                     VS Code เปิดช่องรับรหัสผ่านที่แสดงตัวอักษรเป็นจุด และไม่หายเมื่อคุณคลิกที่อื่น คุณวางคีย์แล้วกด Enter
+                  from: you
+                  to: panel
                   sees: "ช่องกรอกด้านบนของหน้าต่าง \"Your Model Studio API key\" ตัวอักษรแสดงเป็นจุด"
                 do: >-
                   `setApiKey` เปิดช่องรับรหัสผ่านที่ซ่อนตัวอักษร และไม่หายไปเมื่อคลิกที่อื่น
@@ -66,6 +72,8 @@ scenario:
                   text: >-
                     คีย์ไม่ถูกเขียนลงไฟล์การตั้งค่า VS Code เก็บไว้ในที่เก็บความลับของมัน แล้ว Geno เห็นว่าคีย์ของ engine เปลี่ยน
                     จึงสั่งย้าย engine
+                  from: panel
+                  to: panel
                 do: >-
                   คีย์ที่ตัดช่องว่างหัวท้ายแล้วถูกเก็บใน SecretStorage ของ VS Code ใต้ชื่อ `gcode.apiKey.modelstudio`
                   ไม่มีการเขียนลงไฟล์การตั้งค่า
@@ -87,6 +95,8 @@ scenario:
                   text: >-
                     คุณเปลี่ยน `gcode.model` หรือการตั้งค่าอื่นที่ engine ใช้ เช่น provider หรือโดเมนของ sandbox Geno จึงสั่งย้าย
                     engine เหมือนตอนเปลี่ยนคีย์
+                  from: panel
+                  to: panel
                 do: >-
                   ตัวฟัง `onDidChangeConfiguration` เห็นว่าการตั้งค่าที่เปลี่ยนอยู่ใน `ENGINE_SETTINGS`
                   (provider, baseUrl, model, providers, roles, การ resume, การปลุก, โดเมนของ sandbox, ไดเรกทอรีเพิ่ม)
@@ -101,6 +111,8 @@ scenario:
         text: >-
           Geno ปิดการเชื่อมต่อปัจจุบัน ครั้งหน้าที่ต่อจะไปหา engine ที่การตั้งค่าใหม่ชี้ ช่องพิมพ์ขึ้นชื่อโมเดลใหม่
           และรายการโมเดลโหลดใหม่
+        from: panel
+        to: engine
         ask: "ต่อ engine อยู่ก่อนไหม"
       do: >-
         `resetEngine` ทำลาย socket ของการเชื่อมต่อปัจจุบัน (ถ้ามี) เพื่อให้การเชื่อมต่อครั้งหน้าไปหา engine ที่การตั้งค่าใหม่ชี้
@@ -126,6 +138,7 @@ scenario:
                   text: >-
                     หน้าต่างนี้ต่อ engine อยู่ เมื่อสายถูกตัด Geno นัดต่อใหม่ ที่อยู่ของ engine คำนวณจาก hash ของการตั้งค่าและคีย์
                     การตั้งค่าชุดใหม่จึงได้ socket ใหม่และ engine ตัวใหม่
+                  from: panel
                   to: engine
                 do: >-
                   socket ปิด ตัวฟัง `close` เขียน "engine: connection closed" ลง output channel ล้างการเชื่อมต่อเดิม
@@ -139,6 +152,8 @@ scenario:
                   text: >-
                     Geno ไม่ปิด engine ตัวเก่า turn ที่ค้างอยู่บนตัวเก่าทำต่อจนจบ แล้วมันออกเองเมื่อไม่มีหน้าต่างต่อและไม่มีงานครบ
                     10 วินาที แชตที่แสดงอยู่จะไปต่อบนตัวใหม่เมื่อคุณส่งข้อความถัดไป
+                  from: engine
+                  to: engine
                   end: "ย้ายไป engine ตัวใหม่"
                 do: >-
                   ที่อยู่ socket มาจาก hash ของการตั้งค่าและคีย์ การตั้งค่าใหม่จึงได้ engine อีกตัว
@@ -155,6 +170,8 @@ scenario:
                   text: >-
                     หน้าต่างนี้ยังไม่เคยต่อ engine เช่นเพิ่งติดตั้ง ข้อความถัดไปที่คุณส่งจะอ่านคีย์ใหม่และเปิด engine
                     ด้วยการตั้งค่าใหม่
+                  from: panel
+                  to: panel
                   end: "ใช้คีย์ใหม่ครั้งหน้า"
                 do: >-
                   ไม่มี socket ให้ปิด จึงไม่มีอะไรเกิดขึ้นตอนนี้ ข้อความถัดไปที่ส่งจะเรียก `Engine.connection()`

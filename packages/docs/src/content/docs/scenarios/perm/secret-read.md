@@ -20,6 +20,7 @@ scenario:
         title: "Model ขออ่าน .env"
         text: >-
           โมเดลขอ `read` ไฟล์ `.env` ไม่มีกฎของ workspace ตรงกับ path นี้ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: model
         to: engine
       do: >-
         โมเดลขอ `read` ไฟล์ `.env` จบด้วย `stop_reason: tool_use`
@@ -45,6 +46,8 @@ scenario:
         text: >-
           การอ่านไฟล์ที่ดูเป็นไฟล์ลับรันตัวเดียวในชุด เพราะอาจต้องถาม read ตรวจทั้งชื่อที่ขอและไฟล์ที่ชื่อนั้นชี้ไปจริง
           ลิงก์ที่ชี้ไป `.env` จึงผ่านด่านเดียวกัน
+        from: engine
+        to: engine
       runs: 0
       do: >-
         `read` ของ path ที่ดูเป็นไฟล์ลับรันตัวเดียวในชุด เพราะอาจต้องถาม มันตรวจทั้งชื่อที่ขอและไฟล์ที่ชื่อนั้นชี้ไปจริง
@@ -59,6 +62,8 @@ scenario:
         text: >-
           กฎของไฟล์เก็บรหัสตัดสินตามโหมด และ hook ที่อนุญาต call นี้ข้ามด่านนี้ไม่ได้ บันทึกจาก run จริงในโหมด Auto
           ด้านล่างเป็นตอนที่ classifier ปฏิเสธ ลองเลือกโหมด
+        from: engine
+        to: engine
         ask: "โหมดไหน"
         sees:
           kind: payload
@@ -86,6 +91,7 @@ scenario:
                   title: "โหมด Ask ถามคุณ"
                   text: >-
                     Geno ส่งคำถามไปที่แชต การ์ดไม่มีปุ่มบันทึกกฎ เพราะไฟล์ลับไม่มีรูปแบบให้อนุญาตถาวร
+                  from: engine
                   to: panel
                 do: >-
                   `settle` ส่งคำถามต่อให้ผู้ใช้ผ่าน `approval.approve`
@@ -109,6 +115,7 @@ scenario:
                   title: "คุณเห็นการ์ด “Run this command?”"
                   text: >-
                     การ์ดแสดงการอ่าน `.env` พร้อมเหตุผล turn รออยู่ตรงนี้ ลองเลือกแต่ละทาง
+                  from: panel
                   to: you
                   ask: "กดปุ่มไหน"
                   sees: { kind: permission, command: read .env, reason: Geno asks because it uses a credentials file such as .env., options: [ Allow, Deny, "No, and tell the agent…" ] }
@@ -158,6 +165,7 @@ scenario:
                             text: >-
                               ไฟล์ไม่ถูกเปิด turn จบรอคุณเหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อ
                             from: you
+                            to: panel
                             end: "คุณปฏิเสธ turn จบ"
                           do: >-
                             `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
@@ -187,6 +195,8 @@ scenario:
                   text: >-
                     classifier ได้บริบทของ turn แล้วอนุญาต เช่นงานต้องรู้ชื่อตัวแปรใน `.env` ถ้ามันปฏิเสธหรือไม่แน่ใจ
                     ทางเป็นแบบเดียวกับคำสั่งในโหมด Auto
+                  from: engine
+                  to: engine
                 do: >-
                   `settle` ส่งคำขอให้ classifier พร้อมบริบทของ turn classifier ตอบว่าอนุญาต (เช่น งานต้องรู้ชื่อตัวแปรใน `.env`)
                   ถ้า classifier ปฏิเสธหรือไม่แน่ใจ ทางจะเป็นแบบเดียวกับคำสั่งในโหมด Auto
@@ -202,6 +212,8 @@ scenario:
                   title: "โหมด Plan ปฏิเสธเอง"
                   text: >-
                     โหมด Plan ปฏิเสธไฟล์ลับโดยไม่ถาม แชตขึ้นป้าย Denied by a rule ผลกลับมาที่แชต
+                  from: engine
+                  to: panel
                   sees: { kind: step, label: read .env, status: denied, note: Denied by a rule }
                 do: >-
                   คำตัดสินของ `secret-path` ในโหมด Plan คือ `deny` `settle` ปฏิเสธเองโดยไม่ถาม `refusalOf` สร้าง `ToolDenied`
@@ -216,6 +228,7 @@ scenario:
                   title: "Model ทำต่อโดยไม่ได้อ่านไฟล์"
                   text: >-
                     Geno เรียกโมเดลต่อ โมเดลทำแผนต่อโดยไม่ได้อ่าน `.env`
+                  from: engine
                   to: model
                   end: "Plan ปฏิเสธ turn ทำต่อ"
                 do: >-
@@ -250,6 +263,7 @@ scenario:
         title: "ค่าในไฟล์ไปถึง model"
         text: >-
           Geno เรียกโมเดลต่อ ค่าใน `.env` อยู่ในบันทึกของ session และในคำขอถัดไปที่ส่งให้ผู้ให้บริการ
+        from: engine
         to: model
         end: "อ่านไฟล์ลับแล้ว turn ทำต่อ"
       do: >-

@@ -20,6 +20,7 @@ scenario:
         title: "Model จบคำตอบโดยไม่มีข้อความ"
         text: >-
           โมเดลคิดอยู่พักหนึ่ง แล้วจบคำตอบด้วยสัญญาณ end_turn โดยไม่มีข้อความให้อ่าน และไม่ขอใช้ tool
+        from: model
         to: engine
       do: >-
         โมเดลส่งบล็อกความคิดออกมาแล้วจบด้วย `end_turn` ไม่มีข้อความที่ไม่ว่าง และไม่ขอเรียกเครื่องมือ
@@ -34,6 +35,8 @@ scenario:
         title: "แชตยังขึ้นแค่ Thinking"
         text: >-
           Geno บันทึกคำตอบนี้ตามปกติ ความคิดของโมเดลไม่แสดงเป็นข้อความ คุณจึงยังเห็นแค่แถว Thinking
+        from: panel
+        to: you
         sees: { kind: composer, state: working, header: working }
       do: >-
         `drive` บันทึก event `assistant` ตามปกติ ความคิดไม่เคยแสดงเป็นข้อความในแผง ผู้ใช้จึงยังเห็นแค่แถว "Thinking"
@@ -48,6 +51,8 @@ scenario:
         text: >-
           ปกติ end_turn แปลว่า turn จบ แต่คำตอบนี้ไม่มีอะไรให้คุณอ่าน และ Geno ยังไม่เคยกระตุ้นโมเดลใน turn นี้
           จึงเลือกกระตุ้นแทนการจบ
+        from: engine
+        to: engine
       do: >-
         `loopStep` เห็นว่า `end_turn` ให้ `done(end_turn)` แต่ `answerless` บอกว่าคำตอบนี้ไม่มีอะไรให้ผู้ใช้อ่าน
         event ก่อนหน้าไม่ใช่คำกระตุ้นแบบเปล่า และยังไม่ถึงขีดจำกัด จึงตัดสิน `nudge` แบบ `empty` แทนการจบ
@@ -62,6 +67,8 @@ scenario:
         text: >-
           Geno บันทึกคำกระตุ้นที่บอกโมเดลว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ คำกระตุ้นนี้ไม่ขึ้นในแชต
           คุณเห็นแค่ว่า turn ยังทำงานต่อ
+        from: engine
+        to: engine
       do: >-
         `drive` บันทึก event `report-nudge` ที่มี `empty: true` server ไม่ส่ง event ชนิดนี้ให้ editor แผงจึงไม่เห็นอะไรเปลี่ยน
         แต่คำขอถัดไปจะมีข้อความ `EMPTY_TURN_NUDGE` ต่อท้าย ("Your last response ended with no text and no tool call...")
@@ -73,6 +80,7 @@ scenario:
         title: "Geno เรียก model อีกรอบ"
         text: >-
           คำขอรอบนี้มีคำกระตุ้นต่อท้ายบทสนทนา การเรียกนี้นับเป็นหนึ่งในขีดจำกัดของ turn เหมือนการเรียกอื่น
+        from: engine
         to: model
 
     - id: again
@@ -81,6 +89,8 @@ scenario:
         title: "Model ตอบอีกครั้ง"
         text: >-
           โมเดลอ่านคำกระตุ้นแล้วตอบใหม่ ลองเลือกว่ารอบนี้มีข้อความหรือยังเปล่าอยู่
+        from: model
+        to: engine
         ask: "รอบนี้มีข้อความไหม"
       do: >-
         โมเดลอ่านคำกระตุ้นแล้วตอบอีกครั้ง
@@ -105,6 +115,7 @@ scenario:
                   title: "Turn จบ"
                   text: >-
                     Geno จบ turn ตามปกติ ปุ่ม Send กลับมาแทน Stop
+                  from: engine
                   to: panel
                   end: "Model ตอบ turn จบ"
                   sees: { kind: composer, state: idle }
@@ -118,6 +129,8 @@ scenario:
                   title: "เปล่าอีกครั้ง Geno เลิกกระตุ้น"
                   text: >-
                     คำตอบรอบนี้ก็เปล่าอีก และสิ่งที่อยู่ก่อนหน้าคือคำกระตุ้น Geno จึงไม่กระตุ้นซ้ำ แต่จบ turn แบบ error
+                  from: engine
+                  to: engine
                 do: >-
                   `loopStep` เห็นคำตอบเปล่าอีกครั้ง และ event ก่อนหน้าคือคำกระตุ้นแบบเปล่า จึงตัดสิน `done(error)`
                   ไม่กระตุ้นซ้ำเป็นครั้งที่สอง
@@ -131,6 +144,7 @@ scenario:
                   text: >-
                     Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น แผงรู้แค่ว่า
                     turn ล้มเหลว
+                  from: engine
                   to: panel
                 do: >-
                   `finish` ไม่บันทึก event `error` เพราะไม่ใช่ขีดจำกัด มันแค่เขียนลง stderr ของ engine
@@ -156,6 +170,8 @@ scenario:
                   text: >-
                     แผงเห็นว่าไม่มีข้อความ ไม่มี error และคุณไม่ได้กด Stop จึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ
                     และให้ปุ่มทำต่อหรือลองใหม่
+                  from: panel
+                  to: you
                   end: "เปล่าสองครั้ง turn ล้มเหลว"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-

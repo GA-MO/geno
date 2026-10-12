@@ -20,7 +20,8 @@ scenario:
         text: >-
           คุณถามว่า "อธิบายฟังก์ชัน loopStep ให้หน่อย" แผงแชตแสดงข้อความของคุณทันที และปุ่ม Stop มาแทนปุ่ม Send Geno
           เปิด turn ใหม่และจดคำถามลงบันทึกของ session
-        to: engine
+        from: you
+        to: panel
         sees: { kind: composer, state: working, header: working }
 
     - use: model-call
@@ -29,6 +30,7 @@ scenario:
         text: >-
           Geno ตรวจว่ายังไม่เกินจำนวนรอบและงบของ turn แล้วส่งบทสนทนาทั้งหมดไปให้โมเดล พร้อมรายชื่อ tool ที่โมเดลใช้ได้
           ตัวอย่างนี้มาจาก run จริงที่ผู้ใช้ถามเป็นภาษาไทย
+        from: engine
         to: model
         sees:
           kind: payload
@@ -43,6 +45,8 @@ scenario:
         text: >-
           โมเดลคิดก่อน ความคิดนั้นไม่ขึ้นเป็นข้อความในแชต แล้วเขียนคำตอบออกมาทีละส่วน มันจบด้วยสัญญาณ end_turn
           ซึ่งแปลว่าตอบเสร็จแล้วและไม่ขอใช้ tool
+        from: model
+        to: engine
         sees:
           kind: payload
           direction: response
@@ -70,6 +74,7 @@ scenario:
         text: >-
           โมเดลไม่ขออะไรเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop และท้ายคำตอบมีแถวสรุปรุ่นโมเดล จำนวน token
           และค่าใช้จ่าย
+        from: engine
         to: panel
         end: "Turn จบแบบ done"
         sees: { kind: message, from: geno, text: loopStep อ่านบันทึกของ turn แล้วตัดสินว่าขั้นต่อไปคืออะไร, footer: [ worked for 8s, claude-sonnet-4.5, 3.1k tokens, $0.01 ] }

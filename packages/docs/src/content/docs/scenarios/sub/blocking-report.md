@@ -21,6 +21,7 @@ scenario:
         text: >-
           แทนที่จะเขียนเทสต์เอง โมเดลขอให้ Geno ส่งงานนี้ให้เอเจนต์ลูกชื่อ worker
           มันเขียนคำสั่งงานให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียก `agent` ด้วย `agent: "worker"` และ `task` ที่เขียนให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
@@ -47,6 +48,7 @@ scenario:
         text: >-
           ลูกได้บันทึกของตัวเองและงบที่แบ่งมาจากงบของ turn นี้ ไม่เกิน 30 รอบและ $0.20
           เพราะ worker แก้ไฟล์ได้ Geno จึงให้มันทำงานทีละตัวบนโฟลเดอร์หลัก
+        from: engine
         to: model
       do: >-
         executor ของ `agent` เรียก `launch` `worker` แก้ไฟล์ได้ จึงรันทีละตัวบน checkout หลัก (ลูกแบบอ่านอย่างเดียวรันพร้อมกันได้ 4 ตัว)
@@ -77,6 +79,8 @@ scenario:
         text: >-
           ใต้ขั้นที่ส่งงานขึ้นแถวของลูกพร้อมนาฬิกาและปุ่ม Cancel แผง Tasks ก็มีงานของลูกเพิ่มขึ้น
           คลิกแถวเพื่อเปิดบทสนทนาของลูกได้
+        from: engine
+        to: panel
         sees: { kind: task, title: worker, status: running, detail: "0:04", actions: [Cancel] }
       do: >-
         `acpChildHost.started` ลงทะเบียนตัวยกเลิกของลูก เพิ่มงานของลูกในแผง Tasks
@@ -111,6 +115,7 @@ scenario:
         text: >-
           ลูกคุยกับโมเดลผ่านการเชื่อมต่อเดียวกับแม่ มันอ่านไฟล์ แล้วขอรัน `pnpm add -D vitest`
           ซึ่งเป็นคำสั่งที่ต้องขออนุญาต
+        from: model
         to: engine
       do: >-
         ลูกเรียกโมเดลผ่าน gateway ของแม่ system prompt ของลูกคือ `childSystemPrompt`: กรอบงาน คำสั่งให้จบด้วย `report`
@@ -126,6 +131,7 @@ scenario:
         text: >-
           ลูกใช้กฎและโหมดเดียวกับแม่ คำสั่งนี้ไม่อยู่ในรายการปลอดภัย Geno จึงหยุดลูกไว้และส่งคำถามมาที่แชตของแม่
           แถวของงานใน Tasks ขึ้นว่ารอคุณ
+        from: engine
         to: panel
         sees: { kind: task, title: worker, status: needs-input }
       do: >-
@@ -160,6 +166,7 @@ scenario:
         text: >-
           การ์ดเดียวกับที่แม่ใช้ขึ้นในแชตของแม่ ทั้งแม่และลูกรอคำตอบของคุณ
           การ์ดไม่บอกว่าลูกตัวไหนเป็นคนขอ
+        from: panel
         to: you
         ask: กดปุ่มไหน
         sees: { kind: permission, command: pnpm add -D vitest, reason: Geno asks because it uses a command not on the safe list. }
@@ -235,6 +242,7 @@ scenario:
                   text: >-
                     ลูกจบทันทีโดยไม่มีรายงาน Geno ถือว่าคำปฏิเสธนี้เป็นของแม่ด้วย
                     งานที่แม่ส่งให้ลูกจึงล้มเหลวแบบเดียวกับที่คุณปฏิเสธคำสั่งของแม่เอง
+                  from: model
                   to: engine
                 do: >-
                   ผลของ call ในลูกมีสถานะ `rejected` `loopStep` ของลูกจบ `done(end_turn)` ทันทีเพราะผู้ใช้เป็นคนพูดต่อ
@@ -255,6 +263,7 @@ scenario:
                   text: >-
                     Geno จบ turn โดยไม่เรียกโมเดลอีก แถวของลูกขึ้นว่าเสร็จ แต่ประกาศในแชตบอกว่าคำตอบไม่มีข้อความ
                     แทนที่จะบอกว่าหยุดเพราะคุณปฏิเสธ
+                  from: engine
                   to: panel
                   end: Turn จบเพราะคุณกด Deny
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [Continue, Retry], tone: warning }
@@ -288,6 +297,7 @@ scenario:
         text: >-
           เมื่อเทสต์ผ่าน ลูกส่งรายงานว่าแก้อะไรที่ไหนและตรวจอย่างไร แล้วจบงานของตัวเอง
           Geno คืนงบส่วนที่ลูกไม่ได้ใช้ให้ turn ของแม่
+        from: model
         to: engine
       do: >-
         เมื่อเทสต์ผ่าน โมเดลของลูกเรียก `report` พร้อมข้อความว่าแก้อะไรที่ไหนและตรวจอย่างไร
@@ -310,6 +320,8 @@ scenario:
         title: "แชตติดเครื่องหมายว่า worker เสร็จ"
         text: >-
           แถวของลูกหยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย ปุ่ม Cancel หายไป
+        from: engine
+        to: panel
         sees: { kind: task, title: worker, status: done, detail: 1m 48s · $0.06 }
       do: >-
         `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` พร้อม stop reason และจำนวนรอบกับค่าใช้จ่าย งานของลูกใน Tasks จบ
@@ -332,6 +344,7 @@ scenario:
         text: >-
           รายงานกลับมาเป็นผลของเครื่องมือที่แม่เรียก Geno ล้อมรายงานไว้ในรั้วและเตือนว่ามันไม่ใช่คำสั่งของคุณ
           ข้อความที่ลูกไปเจอในไฟล์จึงปลอมเป็นคุณไม่ได้ แล้ว Geno ส่งทั้งหมดให้โมเดลของแม่อ่าน
+        from: engine
         to: model
       do: >-
         `launch` บันทึก `child-end` ลง log ของแม่ แล้วคืน `childReport` เป็นผลของ call `agent`:
@@ -349,7 +362,8 @@ scenario:
         title: "Model เล่าให้คุณฟังว่า worker ทำอะไร"
         text: >-
           โมเดลของแม่อ่านรายงานแล้วเล่าให้คุณฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหน และเทสต์ผ่านอย่างไร
-        to: panel
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: "worker ติดตั้ง vitest และเพิ่มไฟล์เทสต์ของ parser แล้ว เทสต์ผ่านทั้งหมด", streaming: true }
       do: >-
         โมเดลของแม่อ่านรายงานในรั้ว แล้วเล่าให้ผู้ใช้ฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหนและเทสต์ผ่านอย่างไร
@@ -363,6 +377,7 @@ scenario:
         title: "Turn จบ"
         text: >-
           โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมา และค่าใช้จ่ายท้าย turn รวมของลูกไว้ด้วย
+        from: engine
         to: panel
         sees: { kind: composer, state: idle }
 ---

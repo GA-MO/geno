@@ -20,6 +20,7 @@ scenario:
         title: "Model เรียก tool ตามความเคยชิน"
         text: >-
           ชื่อหรือ input ของ tool call นี้มาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการ tool ของ Geno
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียกเครื่องมือ ชื่อหรือ input ของมันมาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการเครื่องมือของ Geno
@@ -32,6 +33,8 @@ scenario:
         title: "แชตขึ้นขั้นของ call"
         text: >-
           Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
 
     - id: lookup
       lane: tool
@@ -40,6 +43,8 @@ scenario:
         title: "Geno หา tool แล้วตรวจ input ก่อนทำอะไร"
         text: >-
           Geno หา tool ตามชื่อ แล้วตรวจ input กับ schema ของมันก่อนรัน ลองเลือกว่า call นี้ผิดตรงไหน
+        from: engine
+        to: engine
         ask: "ผิดตรงไหน"
       runs: 0
       do: >-
@@ -59,6 +64,8 @@ scenario:
                   text: >-
                     Geno รู้ว่าเป็นชื่อ tool เขียนไฟล์ของ harness อื่น จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน
                     ตามด้วยรายชื่อ tool ทั้งหมด ชื่อขั้นในแชตเป็นชื่อกับ JSON ของ input
+                  from: engine
+                  to: model
                   sees: { kind: step, label: 'write_file {"path":"src/date.ts","content":"..."}', status: failed }
                 do: >-
                   ไม่มี executor ชื่อ `write_file` `unknownTool` เห็นว่าเป็นชื่อเครื่องมือเขียนไฟล์ของ harness อื่น
@@ -76,6 +83,8 @@ scenario:
                   title: "input ของ bash ไม่ตรง schema"
                   text: >-
                     `bash` ได้ `cmd` แทน `command` schema ไม่รับฟิลด์ที่ไม่รู้จัก ผลบอกฟิลด์ที่ขาดและฟิลด์ที่ไม่รู้จัก
+                  from: engine
+                  to: model
                   sees: { kind: step, label: 'bash {"cmd":"ls"}', status: failed }
                 do: >-
                   `bash` ได้ `{"cmd": "ls"}` แทน `command` schema ของมันเป็น `strictObject` จึงไม่ผ่าน executor โยน `ToolError`
@@ -92,6 +101,8 @@ scenario:
         title: "ไม่มีอะไรรัน ผลเป็น error ที่บอกทางแก้"
         text: >-
           ทั้งสองทางไม่รันอะไร ไม่ผ่านกฎสิทธิ์ และไม่มีการ์ด Geno บันทึกผลเป็น error แล้วส่งไปที่แชต
+        from: engine
+        to: panel
       do: >-
         ทั้งสองทางได้ผลสถานะ `error` พร้อมข้อความนั้น ไม่มีอะไรรัน ไม่ผ่านนโยบาย และไม่มีการ์ด
       ref: packages/engine/src/tools/index.ts#runTool
@@ -105,6 +116,7 @@ scenario:
         title: "Model อ่านวิธีที่ถูกแล้วเรียกใหม่"
         text: >-
           turn ไม่หยุด Geno เรียกโมเดลต่อ โมเดลได้ผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก
+        from: engine
         to: model
         end: "model เรียกใหม่"
       do: >-

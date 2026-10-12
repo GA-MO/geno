@@ -22,6 +22,7 @@ scenario:
         text: >-
           คุณตั้งกฎไว้ใน Settings ส่วน Permissions สองข้อ อนุญาต `make` และห้าม `git push`
           โมเดลขอรันคำสั่งที่กฎข้อใดข้อหนึ่งครอบ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: model
         to: engine
       do: >-
         โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -46,6 +47,8 @@ scenario:
         title: "Geno ตรวจกฎตามลำดับ"
         text: >-
           Geno ดูกฎห้ามก่อน แล้วกฎถาม แล้วกฎในตัวของ Geno แล้วจึงกฎอนุญาต ลองเลือกคำสั่ง
+        from: engine
+        to: engine
         ask: "คำสั่งไหน"
       do: >-
         `approveCommand` อ่านกฎของ workspace แล้วให้ `ruledDenial` ตัดสินตามลำดับ: กฎ deny ก่อน แล้วกฎ ask
@@ -64,6 +67,8 @@ scenario:
                   text: >-
                     `make check` ไม่อยู่ในรายการคำสั่งปลอดภัย แต่กฎ `make` ของคุณครอบคำสั่งนี้ จึงไม่มีการ์ด ไม่มี classifier
                     และไม่มีบันทึกการอนุญาตติดไปกับผล
+                  from: engine
+                  to: engine
                 do: >-
                   ไม่มีกฎ deny หรือ ask ตรง กฎในตัวติดธง `make check` ว่า `unlisted` เพราะไม่อยู่ใน safe list
                   แต่กฎ allow `make` ครอบคลุมคำสั่งนี้ (คำของคำสั่งขึ้นต้นด้วยรูปแบบของกฎ และไม่ใช่คำสั่งที่ต้องถามเสมอ)
@@ -88,6 +93,7 @@ scenario:
                   title: "Model อ่านผลของคำสั่ง"
                   text: >-
                     Geno เรียกโมเดลต่อ โมเดลได้อ่านผล
+                  from: engine
                   to: model
                   end: "กฎอนุญาต turn ทำต่อ"
                 do: >-
@@ -106,6 +112,8 @@ scenario:
                   text: >-
                     กฎห้ามของคุณตรงกับ `git push origin main` ก่อนถึงกฎในตัว Geno จดรูปแบบของกฎและที่เก็บกฎไว้ run
                     จริงด้านล่างโดนกฎห้ามของ workspace แบบเดียวกัน
+                  from: engine
+                  to: engine
                   sees:
                     kind: payload
                     direction: tool_result
@@ -125,6 +133,8 @@ scenario:
                   title: "Geno ปฏิเสธเองโดยไม่ถามใคร"
                   text: >-
                     ไม่ถามคุณ ไม่ส่งให้ classifier และ hook ก็ตอบแทนไม่ได้ การปฏิเสธนี้ไม่จบ turn
+                  from: engine
+                  to: model
                 do: >-
                   `settle` เห็น verdict `deny` จึงปฏิเสธเองโดยไม่ถามใคร ไม่ส่งให้ classifier และ PermissionRequest hook ก็ตอบแทนไม่ได้
                   บันทึก `decidedBy: rule` แล้ว `refusalOf` สร้าง `ToolDenied` ซึ่งไม่จบ turn
@@ -137,7 +147,8 @@ scenario:
                   text: >-
                     ผลบอกโมเดลว่ากฎของ workspace ห้ามคำสั่งนี้ อย่าลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎหยุดไว้ Geno
                     บันทึกผลพร้อมบันทึกการปฏิเสธแล้วส่งไปที่แชต
-                  to: panel
+                  from: engine
+                  to: model
                 runs: 0
                 do: >-
                   คำสั่งไม่ได้รัน ข้อความผลบอกโมเดลว่าอย่าลองซ้ำ ("denied: `git push origin main` matches the workspace rule
@@ -168,6 +179,8 @@ scenario:
                   title: "แชตขึ้นป้าย Denied by a rule (git push)"
                   text: >-
                     VS Code รู้ว่าเป็นกฎของคุณเอง จึงแสดงชื่อกฎ คำอธิบาย และปุ่มดูข้อความที่โมเดลได้รับ
+                  from: panel
+                  to: you
                   sees: { kind: step, label: git push origin main, status: denied, note: Denied by a rule (git push) · Your rule in Settings under Permissions blocks it. }
                 alongside: true
                 do: >-
@@ -181,6 +194,7 @@ scenario:
                   title: "Model หาทางอื่นหรือบอกคุณ"
                   text: >-
                     คุณไม่ได้เป็นคนปฏิเสธ turn จึงไม่จบ Geno เรียกโมเดลต่อ โมเดลอ่านว่ากฎหยุดมันไว้
+                  from: engine
                   to: model
                   end: "กฎห้าม turn ทำต่อ"
                 do: >-

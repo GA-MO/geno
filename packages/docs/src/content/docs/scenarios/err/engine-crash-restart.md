@@ -23,6 +23,8 @@ scenario:
           engine ถูก kill หรือหน่วยความจำหมด ทุกอย่างของ turn ที่อยู่ในหน่วยความจำหายไปพร้อม process
           ที่เหลือคือบันทึกของ session ซึ่ง Geno เขียนทีละเหตุการณ์ ถ้าบรรทัดสุดท้ายเขียนไม่จบ
           ครั้งหน้าที่เปิดบันทึกจะตัดมันทิ้ง
+        from: engine
+        to: engine
       do: >-
         ทุกอย่างของ turn ที่อยู่ในหน่วยความจำหายไปพร้อม process: `AbortController` ข้อความที่กำลัง stream และคำสั่งที่กำลังรัน
         ที่เหลืออยู่คือ log ของ session ซึ่ง `record` เขียนทีละ event ถ้า process ตายกลางบรรทัด บรรทัดสุดท้ายจะขาด
@@ -37,6 +39,8 @@ scenario:
         title: "VS Code เห็นว่าสายหลุด"
         text: >-
           socket ปิด VS Code เขียนลง output channel ว่าการเชื่อมต่อปิด แล้วนัดเชื่อมใหม่ในอีก 1 วินาที
+        from: panel
+        to: panel
       do: >-
         socket ปิด `Engine` เขียน "engine: connection closed" ลง output channel ล้างการเชื่อมต่อปัจจุบัน
         แล้วตั้งเวลาเชื่อมใหม่ใน 1 วินาที
@@ -49,6 +53,7 @@ scenario:
         title: "คำขอของ turn นี้ถูกปฏิเสธ"
         text: >-
           ทุกคำขอที่ค้างบนสายนั้นล้มพร้อมกัน รวมถึงคำขอของ turn นี้ VS Code บอกแผงว่า turn ล้มเหลว
+        from: panel
         to: panel
       do: >-
         ACP SDK ปฏิเสธทุกคำขอที่ค้างบนการเชื่อมต่อนั้นด้วย "ACP connection closed" รวมถึง `session/prompt` ของ turn นี้
@@ -64,6 +69,8 @@ scenario:
         text: >-
           turn จบเป็น failed ข้อความที่ stream มาแล้วยังค้างอยู่ และขั้นที่ยังหมุนเปลี่ยนเป็น cancelled
           แถบบอกแค่ว่าสายปิด เหตุผลที่ engine ตายอยู่ในไฟล์ log ของ engine
+        from: panel
+        to: you
         sees: { kind: notice, text: ACP connection closed, tone: error }
       do: >-
         turn ในแผงจบเป็น failed ข้อความที่ stream มาแล้วยังค้างอยู่ ขั้นที่ยังหมุนเปลี่ยนเป็น cancelled
@@ -77,6 +84,7 @@ scenario:
         title: "VS Code เปิด engine ตัวใหม่"
         text: >-
           ครบ 1 วินาที VS Code ขอเชื่อมใหม่ ไม่มีอะไรฟังที่ socket เดิมแล้ว จึงเปิด engine ตัวใหม่และต่อเข้าไป
+        from: panel
         to: engine
       do: >-
         ครบ 1 วินาที `restart` ขอการเชื่อมต่อใหม่ ไม่มีอะไรฟังที่ socket เดิมแล้ว จึงเปิด engine ตัวใหม่
@@ -92,6 +100,8 @@ scenario:
         text: >-
           engine ตัวใหม่อ่านบันทึก ตอบงานของ subagent ที่ถูกตัด และรับช่วงการปลุกที่ตั้งไว้ แต่มันไม่รู้ว่า turn
           ไหนกำลังทำอะไรตอนตัวเก่าตาย
+        from: engine
+        to: engine
         ask: "บันทึกจบด้วยอะไร"
       do: >-
         การเชื่อมต่อแรกของ engine ตัวใหม่เรียก `takeUpWaits`: `recoverInterrupted` ตอบ call ที่ค้างใน log ของเอเจนต์ลูกที่ถูกตัด
@@ -112,6 +122,8 @@ scenario:
                   text: >-
                     turn ที่ตายกำลังรอเครือข่ายหรือ rate limit การรอนั้นอยู่ในบันทึก engine จึงเปิด turn ต่อเองโดยไม่ต้องมี prompt
                     ใหม่ งานกลับมาในแผง Tasks
+                  from: engine
+                  to: engine
                 do: >-
                   `waitsLeft` พบว่า log จบด้วย event `wait` ที่ยังไม่ปิด engine จึงเปิด turn แบบ `resume` โดยไม่มี prompt ใหม่
                   งานของแชตกลับมาในแผง Tasks
@@ -123,6 +135,7 @@ scenario:
                   title: "Geno เรียก model ต่อหลังรอ"
                   text: >-
                     การรอเครือข่ายตรวจ host ทันที การรอ rate limit รอต่อจนถึงเวลาเดิม แล้วการเรียกโมเดลออกไปตามปกติ
+                  from: engine
                   to: model
                   end: "Geno ทำ turn ต่อเอง"
                 do: >-
@@ -141,6 +154,8 @@ scenario:
                   text: >-
                     turn ตายระหว่างเรียกโมเดลหรือรัน tool engine ตัวใหม่ไม่ทำต่อเอง บันทึกยังจบที่ prompt ที่ไม่มีคำตอบ หรือที่
                     tool call ที่ไม่มีผล
+                  from: engine
+                  to: engine
                 do: >-
                   ไม่มีอะไรรับช่วง turn นี้ engine ใหม่ไม่ทำต่อเอง log ยังจบที่ prompt ที่ไม่มีคำตอบ หรือที่ `tool_use` ที่ไม่มีผล
                 ref: packages/engine/src/serve.ts#takeUpWaits
@@ -149,6 +164,7 @@ scenario:
                   title: "คุณส่งข้อความถัดไป"
                   text: >-
                     คุณพิมพ์ว่า "ทำต่อ" แล้วกด Enter
+                  from: you
                   to: panel
                   sees: { kind: message, from: you, text: ทำต่อ }
                 do: ผู้ใช้ส่งข้อความถัดไป เช่น "ทำต่อ"
@@ -159,6 +175,7 @@ scenario:
                   title: "VS Code เปิดแชตเดิมบน engine ใหม่"
                   text: >-
                     สายใหม่ยังไม่มี session VS Code จึงเปิดแชตที่แผงแสดงอยู่บน engine ใหม่ก่อน แล้วจึงส่ง prompt
+                  from: panel
                   to: engine
                 do: >-
                   การเชื่อมต่อนี้ยังไม่มี session `openSession` จึงส่ง `session/resume` ถึงแชตที่แผงแสดงอยู่ก่อน แล้วจึงส่ง `session/prompt`
@@ -170,6 +187,8 @@ scenario:
                   text: >-
                     ถ้า engine ตายขณะ tool รัน tool call นั้นยังไม่มีผล Geno จึงรันคำสั่งเดิมซ้ำก่อนโมเดลจะเห็นข้อความใหม่
                     คำสั่งที่มีผลข้างเคียงอาจรันสองครั้ง ถ้าตายขณะเรียกโมเดล โมเดลเห็นทั้ง prompt เดิมและ prompt ใหม่
+                  from: engine
+                  to: machine
                   end: "turn ใหม่ทำต่อ"
                 do: >-
                   `drive` บันทึก prompt ใหม่ แล้ว `loopStep` หา `tool_use` ของคำตอบล่าสุดที่ยังไม่มีผล ถ้า engine ตายขณะเครื่องมือรัน

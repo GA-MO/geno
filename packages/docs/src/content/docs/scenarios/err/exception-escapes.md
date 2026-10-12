@@ -19,6 +19,7 @@ scenario:
         title: "Geno ส่งคำขอให้ model"
         text: >-
           turn กำลังทำงาน ผู้ให้บริการเป็น Anthropic และโมเดลเริ่ม stream คำตอบกลับมา
+        from: engine
         to: model
 
     - id: torn
@@ -27,6 +28,8 @@ scenario:
         title: "Stream ขาดกลางคำตอบ"
         text: >-
           ข้อความส่วนแรกขึ้นในแชตแล้ว แต่การเชื่อมต่อปิดก่อนคำตอบจะครบ Geno ประกอบคำตอบจากส่วนที่ได้ไม่ได้
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: ไฟล์นี้มีฟังก์ชันหลักสามตัว ตัวแรกคือ, streaming: true }
       do: >-
         ข้อความส่วนแรกของคำตอบ stream มาถึงแผงแล้ว แต่ stream ปิดก่อนคำตอบจะครบ `messageFromEvents` ประกอบคำตอบจาก event ที่ได้ไม่ได้
@@ -41,6 +44,8 @@ scenario:
         text: >-
           error นี้ไม่ใช่ error ของผู้ให้บริการ จึงไม่ผ่านตัวแยกชนิดที่ตัดสินว่าจะลองใหม่ไหม ทั้งที่ stream
           ขาดแบบนี้ควรนับเป็นข้อผิดพลาดชั่วคราว
+        from: engine
+        to: engine
       do: >-
         wire โยน `EngineError` "Anthropic ended the answer's stream before the answer was complete"
         error นี้ไม่ใช่ `AnthropicError` จึงไม่ผ่าน `classifyFailure` ทั้งที่ข้อความแบบนี้ควรนับเป็นข้อผิดพลาดชั่วคราว
@@ -55,6 +60,8 @@ scenario:
         text: >-
           ไม่มีอะไรจับ error ระหว่างทาง Geno ไม่ได้บันทึกทั้ง error และคำตอบ ข้อความที่ stream มาแล้วหายจากประวัติ และ
           prompt ของคุณค้างอยู่โดยไม่มีคำตอบ
+        from: engine
+        to: engine
       do: >-
         exception หลุดออกจาก `callModel` และ `drive` ไม่มี event `error` หรือ `assistant` ถูกบันทึก
         ข้อความที่ stream มาแล้วหายไปจากประวัติ prompt ของผู้ใช้ยังค้างอยู่ใน log โดยไม่มีคำตอบ
@@ -68,6 +75,8 @@ scenario:
         title: "Geno เก็บกวาดสิ่งที่เปิดไว้"
         text: >-
           แม้ loop ล้ม Geno ยังปิดทางรับข้อความแทรก หยุด subagent เบื้องหลัง และปิด sandbox
+        from: engine
+        to: engine
       do: >-
         `finally` ของ `runAgent` ยังทำงาน: ปิดประตู steer (steer ที่ค้างกลายเป็น turn ถัดไป) หยุดเอเจนต์ลูกเบื้องหลัง
         และปิด sandbox
@@ -81,6 +90,7 @@ scenario:
         text: >-
           งานในแผง Tasks จบเป็น failed และ session พร้อมรับ turn ถัดไป คำขอของ turn ตอบกลับเป็น error
           ที่ข้อความจริงถูกซ่อนไว้ใต้คำว่า Internal error และไม่มีอะไรเขียนลง log ของ engine
+        from: engine
         to: panel
       do: >-
         `finally` ของ `runTurn` ปิดงานในแผง Tasks แบบ `failed` และปลด lock ของ session
@@ -105,6 +115,8 @@ scenario:
         text: >-
           ข้อความครึ่งเดียวยังค้างในแผงนี้จนกว่าจะ reload แถบ error ไม่บอกเหตุผล ข้อความที่รอในคิวกลับไปที่ช่องพิมพ์
           ครั้งหน้าที่คุณส่ง โมเดลจะเห็นทั้ง prompt เดิมและข้อความใหม่
+        from: panel
+        to: you
         end: "turn ล้มเหลวโดยไม่บอกเหตุ"
         sees: { kind: notice, text: Internal error, tone: error }
       do: >-

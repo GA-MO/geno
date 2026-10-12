@@ -20,7 +20,8 @@ scenario:
         text: >-
           คุณพิมพ์คำถามแล้วกด Enter แผงแชตแสดงข้อความของคุณทันที และปุ่ม Stop มาแทนปุ่ม Send
           Geno เปิด turn ใหม่และจดคำถามลงบันทึกของ session
-        to: engine
+        from: you
+        to: panel
         sees: { kind: composer, state: working, header: working }
 
     - use: model-call
@@ -29,6 +30,7 @@ scenario:
         text: >-
           Geno ตรวจว่ายังไม่เกินจำนวนรอบและงบของ turn แล้วส่งบทสนทนาทั้งหมดไปให้โมเดล
           พร้อมรายชื่อเครื่องมือที่โมเดลขอใช้ได้
+        from: engine
         to: model
         sees:
           kind: payload
@@ -43,6 +45,8 @@ scenario:
         text: >-
           โมเดลยังไม่ตอบทันที มันเขียนสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอใช้เครื่องมือสองตัว
           ตัวหนึ่งอ่าน `package.json` อีกตัวค้นหาคำว่า vitest ข้อความสั้นนั้นขึ้นในแชตของคุณ
+        from: model
+        to: engine
         sees:
           kind: payload
           direction: response
@@ -62,6 +66,8 @@ scenario:
         text: >-
           Geno จัดสองคำขอไว้ในชุดเดียวกัน เพราะเป็นการอ่านที่ไม่แก้อะไรและไม่ต้องขอสิทธิ์
           แชตของคุณขึ้นสองขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: read package.json, status: running }
 
     - id: run
@@ -74,6 +80,7 @@ scenario:
           การอ่านไฟล์และการค้นหารันพร้อมกัน การอ่านไฟล์ใน workspace ที่ไม่ใช่ไฟล์ลับไม่ต้องถามคุณ
           และถ้าไฟล์เปิดค้างอยู่ใน editor Geno อ่านเนื้อหาที่ยังไม่บันทึกด้วย
         from: engine
+        to: machine
       do: >-
         `read` กับ `grep` อยู่ในชุดเดียวกันจึงรันพร้อมกัน การอ่านใน workspace ที่ไม่ใช่ไฟล์ลับไม่ต้องขอสิทธิ์
         `read` อ่านผ่าน editor จึงได้เนื้อหาของ buffer ที่ยังไม่บันทึกด้วย
@@ -84,7 +91,8 @@ scenario:
         title: "ผลลัพธ์กลับมาที่แชต"
         text: >-
           Geno เก็บผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ขั้นในแชตหยุดหมุน และผลลัพธ์พับอยู่ใต้แต่ละขั้น
-        from: machine
+        from: engine
+        to: panel
         sees: { kind: step, label: read package.json, status: done, output: "\"test\": \"vitest run\"" }
 
     - use: model-call
@@ -93,6 +101,7 @@ scenario:
         text: >-
           Geno เรียกโมเดลอีกรอบ คราวนี้คำขอมีผลของเครื่องมือทั้งสองต่อท้ายบทสนทนา
           ถ้าคุณพิมพ์ข้อความแทรกระหว่างที่เครื่องมือรัน ข้อความนั้นก็เข้ามาตรงนี้
+        from: engine
         to: model
         sees:
           kind: payload
@@ -108,6 +117,8 @@ scenario:
         title: "Model เขียนคำตอบ"
         text: >-
           โมเดลอ่านผลทั้งสองแล้วตอบว่าโปรเจกต์ใช้ vitest คำตอบค่อยๆ ขึ้นในแชตของคุณระหว่างที่โมเดลเขียน
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", streaming: true }
       do: >-
         โมเดลอ่าน `tool_result` ทั้งสองบล็อก แล้ว stream คำตอบสุดท้ายว่าโปรเจกต์ใช้ vitest
@@ -122,6 +133,7 @@ scenario:
         text: >-
           โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
           และท้ายคำตอบมีแถวสรุปรุ่นโมเดล จำนวน token และค่าใช้จ่าย
+        from: engine
         to: panel
         sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", footer: [worked for 8s, claude-sonnet-4.5, 12.4k tokens, $0.02] }
 ---

@@ -20,6 +20,8 @@ scenario:
         title: "Model กำลังเขียนคำตอบ"
         text: >-
           ข้อความแต่ละส่วนขึ้นในแชตทันที แต่ Geno ยังไม่บันทึกอะไรลงบันทึกของ session จนกว่าคำตอบจะจบ
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, streaming: true }
       do: >-
         โมเดลกำลัง stream คำตอบ ข้อความแต่ละส่วนไปถึงแผงทันที แต่ยังไม่มีอะไรถูกบันทึกลง log จนกว่าคำตอบจะจบ
@@ -32,6 +34,7 @@ scenario:
         title: "คุณกด Stop"
         text: >-
           คุณคลิกปุ่มสี่เหลี่ยม กด Escape หรือรันคำสั่ง "Geno: Stop the Chat Turn" แผงส่งคำสั่งหยุดให้ VS Code
+        from: you
         to: panel
         sees: { kind: composer, state: working, header: working }
       do: ผู้ใช้กด Stop
@@ -51,6 +54,7 @@ scenario:
         title: "VS Code ตอบการ์ดที่ค้างแล้วสั่งหยุด"
         text: >-
           ถ้ามีการ์ดขออนุญาตหรือคำถามเปิดอยู่ VS Code ตอบว่ายกเลิกก่อน แล้วสั่ง engine ให้หยุด turn
+        from: panel
         to: engine
       do: >-
         `Chat.stop` ตอบการ์ดขออนุญาตและคำถามที่เปิดอยู่ว่า cancelled ก่อน (ACP กำหนดให้ทำ) แล้วส่ง notification ACP `session/cancel`
@@ -63,6 +67,8 @@ scenario:
         title: "Geno ยกเลิก turn"
         text: >-
           engine ส่งสัญญาณหยุดไปทุกที่ที่ turn กำลังทำงาน ทั้งการเรียกโมเดล การรอ การรัน tool และ compaction
+        from: engine
+        to: engine
       do: >-
         engine หา `AbortController` ของ turn นี้ในทะเบียน `turns` แล้วสั่ง abort (ถ้า session id เป็นของเอเจนต์ลูก
         `childCancels` หยุดลูกตัวนั้นแทน) สัญญาณนี้ไปถึง gateway การรอ backoff การรันเครื่องมือ และ compaction
@@ -75,6 +81,8 @@ scenario:
         title: "Stream ถูกตัด Geno ไม่ retry"
         text: >-
           การเรียกโมเดลถูกตัดกลางทาง Geno ไม่ลองใหม่ เพราะรู้ว่าคุณเป็นคนหยุด
+        from: engine
+        to: engine
       do: >-
         stream ถูกตัด SDK โยน `APIUserAbortError` gateway ไม่ลองใหม่ แต่คืนผล `abort` พร้อมข้อความ "interrupted by the user"
       ref: packages/engine/src/gateway.ts#ABORTED
@@ -88,6 +96,8 @@ scenario:
         text: >-
           Geno บันทึกว่าคุณหยุด turn ข้อความที่ stream มาแล้วไม่ถูกบันทึก เพราะบันทึกเก็บคำตอบเฉพาะตอนที่คำตอบจบ
           แผงไม่ขึ้นแถบ error เพราะปุ่ม Stop บอกอยู่แล้ว
+        from: engine
+        to: engine
       do: >-
         `callModel` บันทึก event `error` ชนิด `abort` ลง log ข้อความที่ stream มาแล้วไม่ถูกบันทึก เพราะ log เก็บคำตอบเฉพาะตอนที่คำตอบจบ
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message, ...timing });\""
@@ -117,6 +127,7 @@ scenario:
         title: "Geno จบ turn แบบ stopped"
         text: >-
           Stop hook ไม่ทำงานในทางนี้ engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped
+        from: engine
         to: panel
       do: >-
         `loopStep` เห็น event ล่าสุดเป็น error `abort` ตาราง `ERROR_REASON` ให้ `done(error)` Stop hook ไม่ทำงานในทางนี้
@@ -150,6 +161,8 @@ scenario:
         text: >-
           tool ที่ยังหมุนเปลี่ยนเป็น cancelled การ์ดที่ค้างเปลี่ยนเป็น Cancelled และข้อความในคิวกลับไปที่ช่องพิมพ์
           แผงดูว่ามีข้อความตอบอยู่ไหม
+        from: panel
+        to: panel
         ask: "เขียนไปแล้วไหม"
       do: >-
         reducer ของ `turn-end` เปลี่ยนเครื่องมือที่ยังหมุนเป็น cancelled และการ์ดที่เปิดค้างเป็น Cancelled
@@ -167,6 +180,8 @@ scenario:
                   title: "ข้อความครึ่งเดียวค้างในแชต"
                   text: >-
                     ข้อความที่ขึ้นมาแล้วยังอยู่ในแผง แต่ไม่อยู่ในบันทึก reload แล้วจะหายไป และโมเดลก็ไม่เห็นมันในคำขอถัดไป
+                  from: panel
+                  to: you
                   end: "คุณหยุด ข้อความค้างครึ่ง"
                   sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, footer: [ stopped after 6.2s, Stopped by you ] }
                 do: >-
@@ -185,6 +200,8 @@ scenario:
                   title: "แชตขึ้นว่าคุณหยุดก่อน Geno ตอบ"
                   text: >-
                     ไม่มีข้อความตอบและไม่มีแถบ error แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อหรือลองใหม่
+                  from: panel
+                  to: you
                   end: "คุณหยุดก่อนได้คำตอบ"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
                 do: >-

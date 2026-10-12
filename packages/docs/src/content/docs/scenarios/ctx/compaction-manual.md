@@ -20,7 +20,8 @@ scenario:
         text: >-
           ไม่มี turn ทำงานอยู่ และวงแหวน context เกิน 80% คุณพิมพ์ `/compact เก็บรายละเอียดเรื่อง migration ไว้`
           หรือกดปุ่ม Compact ซึ่งส่งคำสั่งเดียวกัน
-        to: engine
+        from: you
+        to: panel
         sees: { kind: composer, state: idle, text: /compact เก็บรายละเอียดเรื่อง migration ไว้ }
 
     - id: builtin
@@ -31,6 +32,8 @@ scenario:
         text: >-
           `/compact` เป็นคำสั่งที่ engine ทำเอง มันจองช่อง turn ของ session ไว้เหมือน turn จริง ปุ่ม Stop จึงหยุดได้ และ
           prompt อื่นเริ่มไม่ได้ระหว่างนี้
+        from: engine
+        to: engine
       do: >-
         `/compact` เป็นคำสั่ง `builtin` ที่ engine ทำ `runBuiltin` ส่งต่อให้ `compactBetweenTurns` พร้อม focus ที่ผู้ใช้พิมพ์
         ซึ่งลงทะเบียน `AbortController` ไว้ใน `turns` เหมือน turn จริง (Stop จึงหยุดได้ และ prompt อื่นเริ่มไม่ได้)
@@ -45,6 +48,7 @@ scenario:
         title: "แชตขึ้น Compacting the context"
         text: >-
           engine แจ้งหน้าต่างที่แสดง session นี้อยู่ ใต้ชิป `/compact` ขึ้นแถวประกาศพร้อมไอคอนหมุน
+        from: engine
         to: panel
         sees: { kind: notice, text: Compacting the context, tone: info }
       do: >-
@@ -69,6 +73,8 @@ scenario:
         text: >-
           Geno วางจุดตัดแบบเดียวกับ compaction อัตโนมัติ แล้วเรียกโมเดลหนึ่งครั้งโดยไม่มี tool
           เรื่องที่คุณพิมพ์ไปกับคำขอ ให้สรุปเน้นเรื่องนั้น
+        from: engine
+        to: model
         ask: "ผลเป็นอย่างไร"
       do: >-
         `compactContext` (ตัวเดียวกับที่ loop ใช้) วางจุดตัดด้วย `planCompaction` แล้วเรียกโมเดลหนึ่งครั้งด้วย `SUMMARY_SYSTEM`
@@ -85,6 +91,7 @@ scenario:
                   title: "Model เขียนสรุปที่เน้น migration"
                   text: >-
                     โมเดลสรุปส่วนเก่าของบทสนทนา โดยเก็บรายละเอียดเรื่อง migration ไว้ตามที่คุณขอ
+                  from: model
                   to: engine
                 do: >-
                   โมเดลเขียนสรุปส่วนเก่าของบทสนทนา โดยเน้นเรื่อง migration ตามที่ผู้ใช้ขอ
@@ -96,6 +103,7 @@ scenario:
                   text: >-
                     engine บันทึกสรุปพร้อมเรื่องที่ให้เน้นต่อท้ายบันทึกของ session แล้วแจ้งแชต SessionStart hook ได้รันหลัง
                     compaction และขนาด context ใหม่ถูกส่งไปที่ช่องพิมพ์
+                  from: engine
                   to: panel
                 do: >-
                   engine ต่อท้าย log ด้วย event `compact` (trigger `manual` พร้อม focus) โดยตรง ไม่ผ่าน `drive`
@@ -125,6 +133,8 @@ scenario:
                   title: "แชตขึ้นเส้นคั่นพร้อม Focus"
                   text: >-
                     แชตวาดเส้นคั่นที่พับได้ เปิดแล้วเห็น Focus สรุป และรายการไฟล์ วงแหวน context ลดลงและปุ่ม Compact หายไป
+                  from: panel
+                  to: you
                   sees: "เส้นคั่น \"Context compacted · 184,213 → about 31,400 tokens\" และ Focus \"เก็บรายละเอียดเรื่อง migration ไว้\""
                 alongside: true
                 do: >-
@@ -139,6 +149,7 @@ scenario:
                   title: "Engine ตอบว่าคำสั่งจบ"
                   text: >-
                     engine ตอบว่างานจบแบบ done ค่าใช้จ่ายของการสรุปไปกับคำตอบนี้ VS Code ส่งต่อให้แผง
+                  from: engine
                   to: panel
                 do: >-
                   `runTurn` ตอบ `session/prompt` ด้วย `stopReason: end_turn` และงานจบแบบ `done` ค่าใช้จ่ายของการสรุปไปกับคำตอบ
@@ -158,6 +169,8 @@ scenario:
                   text: >-
                     turn ไม่มีข้อความหลังเส้นคั่น แผงจึงถือว่าคำตอบไม่มีข้อความ และขึ้นประกาศพร้อมปุ่ม Continue กับ Retry
                     ทั้งที่การสรุปสำเร็จแล้ว
+                  from: panel
+                  to: you
                   end: "สรุปสำเร็จ"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-
@@ -178,6 +191,8 @@ scenario:
                   title: "ยังไม่มีอะไรให้สรุป"
                   text: >-
                     บทสนทนายังสั้น หรือโมเดลยังไม่เคยตอบ Geno หาจุดตัดไม่ได้ จึงไม่เรียกโมเดล
+                  from: engine
+                  to: engine
                 do: >-
                   `planCompaction` หาจุดตัดไม่ได้ เช่นบทสนทนายังสั้นหรือยังไม่มีคำตอบของโมเดล ไม่มีการเรียกโมเดล
                   คำตอบของคำสั่งคือ "Nothing to compact yet: the conversation is short enough to keep as it is."
@@ -207,6 +222,8 @@ scenario:
                   title: "Geno ยกเลิกการสรุป"
                   text: >-
                     การเรียกโมเดลเพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก context ยังเหมือนเดิม
+                  from: engine
+                  to: engine
                 do: >-
                   engine abort controller ที่ `/compact` ลงทะเบียนไว้ การเรียกโมเดลเพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก
                   คำตอบของคำสั่งคือ "Stopped. The context is as it was."
@@ -220,6 +237,7 @@ scenario:
         text: >-
           engine ส่งคำตอบของคำสั่งเป็นข้อความ แล้วตอบว่างานจบแบบ done แม้คุณจะกด Stop เพราะคำสั่งที่ engine
           ทำเองตอบแบบนี้เสมอ
+        from: engine
         to: panel
       do: >-
         `runTurn` ส่งคำตอบของคำสั่งเป็น `agent_message_chunk` แล้วตอบ `session/prompt` ด้วย `stopReason: end_turn`
@@ -243,6 +261,8 @@ scenario:
         title: "แชตขึ้นคำตอบของคำสั่ง"
         text: >-
           คำตอบขึ้นเป็นข้อความของ Geno และหัวข้อเป็น worked for แม้ในทางที่คุณกด Stop
+        from: panel
+        to: you
         end: "ไม่ได้สรุป context เหมือนเดิม"
         sees: { kind: message, from: geno, text: "Nothing to compact yet: the conversation is short enough to keep as it is." }
       do: >-

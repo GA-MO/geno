@@ -21,6 +21,8 @@ scenario:
         text: >-
           context ถึง 80% ของหน้าต่าง Geno จึงส่งส่วนเก่าของบทสนทนาให้โมเดลสรุปก่อนเรียกรอบถัดไป แชตขึ้นแถว Compacting
           the context พร้อมไอคอนหมุน
+        from: engine
+        to: model
         sees: { kind: notice, text: Compacting the context, tone: info }
       do: >-
         `compactContext` ส่งส่วนเก่าของบทสนทนาไปให้โมเดลสรุป การเรียกนี้ใช้ signal เดียวกับ turn
@@ -54,6 +56,8 @@ scenario:
         text: >-
           engine ยกเลิก turn การเรียกเพื่อสรุปใช้สัญญาณเดียวกับ turn จึงจบทันที ไม่มีอะไรถูกบันทึก context
           ยังเหมือนเดิมทุกอย่าง
+        from: engine
+        to: engine
       do: >-
         engine หา `AbortController` ของ turn ใน `turns` แล้ว abort
       ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
@@ -74,6 +78,8 @@ scenario:
         title: "Geno ยังเตรียมการเรียกถัดไป"
         text: >-
           ระหว่างทาง Geno ไม่ได้ดูสัญญาณหยุด มันยังบันทึก checkpoint ของ workspace ตามปกติ แล้วส่งคำขอต่อ
+        from: engine
+        to: engine
       do: >-
         `callModel` ไม่ได้ตรวจ signal ระหว่างทาง มันยังบันทึก `checkpoint` ของ workspace ตามปกติ
         แล้วส่งคำขอให้ gateway
@@ -87,6 +93,8 @@ scenario:
         title: "คำขอไม่ได้ออกไปถึงผู้ให้บริการ"
         text: >-
           ทางส่งคำขอเห็นว่า turn ถูกหยุดแล้ว จึงคืนผลว่าคุณเป็นคนหยุดทันที Geno บันทึกเหตุนั้นแล้วจบ turn
+        from: engine
+        to: engine
       do: >-
         `slots.run` โยนทันทีเพราะ signal ถูก abort ไปแล้ว gateway เห็นว่า signal ถูก abort จึงคืน `abort` "interrupted by the user"
         คำขอไม่ได้ออกไปถึงผู้ให้บริการ
@@ -109,6 +117,7 @@ scenario:
         title: "Engine ตอบว่า turn ถูกยกเลิก"
         text: >-
           engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped การหยุดไม่ขึ้นเป็นแถบ error
+        from: engine
         to: panel
       do: >-
         `runTurn` เห็นว่าสัญญาณถูก abort ACP ได้ `stopReason: cancelled` งานในแผง Tasks จบแบบ stopped
@@ -131,6 +140,8 @@ scenario:
         text: >-
           แถว Compacting the context หายไป และไม่มีเส้นคั่นการสรุปเพราะไม่มีอะไรถูกสรุป turn ไม่มีข้อความตอบ
           แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อ
+        from: panel
+        to: you
         end: "คุณหยุด context เหมือนเดิม"
         sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-

@@ -20,6 +20,7 @@ scenario:
         title: "คุณพิมพ์ข้อความถัดไประหว่าง turn ทำงาน"
         text: >-
           turn ยังไม่จบ ปุ่ม Stop ยังแสดงอยู่ คุณพิมพ์ "แล้วเพิ่ม README ด้วย" แล้วกด Enter
+        from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความถัดไปแล้วกด Enter ขณะที่ turn ยังไม่จบ
       phase: calling-model
@@ -32,6 +33,8 @@ scenario:
         text: >-
           แผงไม่ส่งข้อความ แต่เก็บไว้เองหนึ่งข้อความ ช่องพิมพ์ว่าง VS Code และ engine ยังไม่รู้เรื่องข้อความนี้
           คุณเอาออกจากคิวได้ หรือกด Send now เพื่อแทรกเข้า turn ที่ทำงานอยู่
+        from: panel
+        to: panel
         sees: "ป้าย \"Queued\" เหนือช่องพิมพ์ ชี้แล้วขึ้น \"Sends when the turn finishes\" พร้อมปุ่มกากบาทและปุ่ม Send now"
       do: >-
         `submit()` เห็นว่ามี turn ทำงานอยู่ จึงไม่ส่ง แต่เก็บข้อความและไฟล์แนบเป็นข้อความรอหนึ่งข้อความในแผงเอง
@@ -48,6 +51,8 @@ scenario:
         title: "Turn ทำงานต่อตามปกติ"
         text: >-
           คุณรอ turn เดิมทำงานต่อ ถ้ากด Send now ข้อความจะกลายเป็น steer ซึ่งเป็นอีกทัวร์หนึ่ง
+        from: you
+        to: you
       do: >-
         ผู้ใช้รอ turn ทำงานต่อตามปกติ (ถ้ากด Send now ข้อความจะกลายเป็น steer ซึ่งเป็นอีกสถานการณ์หนึ่ง)
 
@@ -58,6 +63,7 @@ scenario:
         title: "Turn จบ VS Code บอกแผง"
         text: >-
           engine ตอบว่า turn จบแล้วพร้อมสถานะ VS Code บอกแผงและล้าง turn ที่ทำงานอยู่ทันที turn ใหม่จึงเริ่มได้
+        from: engine
         to: panel
       do: >-
         turn จบ คำขอ `session/prompt` ได้คำตอบ `prompt()` ส่ง action `turn-end` พร้อมสถานะที่ engine บอก
@@ -73,6 +79,8 @@ scenario:
         title: "แผงตัดสินว่าจะส่งข้อความรอไหม"
         text: >-
           แผงดูว่า turn จบแบบไหน ถ้าทำงานจนจบ ข้อความรอก็ส่งต่อได้ ถ้าถูกหยุด คุณควรได้ตัดสินเองก่อน
+        from: panel
+        to: panel
         ask: "turn จบแบบไหน"
       do: >-
         แผงได้ `turn-end` แล้วเรียก `sendQueued` กับสถานะนั้น `followupAtTurnEnd` ตัดสินว่าจะส่งหรือคืนข้อความ
@@ -89,6 +97,8 @@ scenario:
                   title: "แผงส่งข้อความรอทันที"
                   text: >-
                     ข้อความรอออกจากคิว แผงส่งข้อความและไฟล์แนบเหมือนคุณเพิ่งกด Enter
+                  from: panel
+                  to: panel
                 do: >-
                   ข้อความรอออกจากคิว แผงโพสต์ `send` พร้อมข้อความและไฟล์แนบ เหมือนผู้ใช้เพิ่งกด Enter
                 ref: packages/extension/src/chat/webview.ts#sendQueued
@@ -99,6 +109,7 @@ scenario:
                   title: "Turn ใหม่เริ่ม"
                   text: >-
                     VS Code เริ่ม turn ใหม่ทันที ข้อความของคุณขึ้นเป็นบับเบิลใหม่ จากตรงนี้ turn เดินแบบเดียวกับคำถามธรรมดา
+                  from: panel
                   to: engine
                   end: "ไปต่อที่ turn ใหม่"
                   sees: { kind: message, from: you, text: แล้วเพิ่ม README ด้วย }
@@ -119,6 +130,8 @@ scenario:
                   text: >-
                     turn ถูกหยุดหรือล้มเหลว ข้อความรอออกจากคิวโดยไม่ถูกส่ง แล้วกลับไปอยู่ในช่องพิมพ์พร้อมไฟล์แนบ
                     คุณตัดสินเองว่าจะส่งหรือไม่
+                  from: panel
+                  to: you
                   end: "ข้อความรอกลับมาให้คุณ"
                   sees: { kind: composer, state: idle, text: แล้วเพิ่ม README ด้วย }
                 do: >-

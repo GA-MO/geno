@@ -21,7 +21,8 @@ scenario:
         text: >-
           คุณรัน `gcode agent` พร้อมคำสั่งหนึ่งประโยค loop ทั้งหมดรันใน process นี้ ไม่มีแผงแชต
           ข้อความของ model ออกทางเทอร์มินัล
-        to: engine
+        from: you
+        to: panel
       do: ผู้ใช้รัน `gcode agent` พร้อมคำสั่ง
       phase: idle
 
@@ -47,6 +48,7 @@ scenario:
         text: >-
           loop เห็นว่ามี prompt ที่ยังไม่มีคำตอบ จึงเรียก model request มีข้อความเดียว:
           บริบทของ session ตามด้วยคำสั่งของคุณ
+        from: engine
         to: model
         sees:
           kind: payload
@@ -62,6 +64,7 @@ scenario:
         text: >-
           model ยังไม่เขียนโค้ด มันบอกว่าจะดูก่อน แล้วขอ `read` สองไฟล์ในคำตอบเดียว จบด้วย `tool_use`
           ซึ่งแปลว่ารอผล
+        from: model
         to: engine
         sees:
           kind: payload
@@ -83,6 +86,7 @@ scenario:
         text: >-
           การอ่านใน workspace ไม่แก้อะไร จึงไม่ต้องขอสิทธิ์และรันพร้อมกัน เทอร์มินัลพิมพ์บรรทัดของแต่ละ call
         from: engine
+        to: machine
         sees: "> read src/duration.ts"
       do: >-
         `loopStep` ตัดสิน `run-tools` การอ่านสองตัวอยู่ในชุดเดียวกันจึงรันพร้อมกัน แล้วบันทึก `tool-result` ตามลำดับที่ model ขอ
@@ -96,6 +100,7 @@ scenario:
         text: >-
           request ที่สองมีทุกอย่างของ request แรก คำตอบของ model และผลของ `read` ทั้งสองบล็อกต่อท้าย
           model เห็นเทสต์ครบจึงรู้ว่าต้องรองรับรูปแบบไหน
+        from: engine
         to: model
         sees:
           kind: payload
@@ -111,6 +116,7 @@ scenario:
         title: "Model เขียน parseDuration ด้วย edit"
         text: >-
           model คิดอยู่พักหนึ่ง แล้วขอ `edit` ครั้งเดียวที่แทน stub ทั้งฟังก์ชันด้วยโค้ดใหม่
+        from: model
         to: engine
         sees:
           kind: payload
@@ -132,6 +138,7 @@ scenario:
           `edit` สำเร็จ แล้ว Geno รันคำสั่ง check ของโปรเจกต์ต่อทันทีโดยไม่มีใครขอ เทสต์ทั้งชุดพัง
           เพราะ `slug.test.ts` ที่พังอยู่ก่อน ผลของ check ต่อท้ายผลของ `edit` ให้ model อ่าน
         from: engine
+        to: machine
         sees:
           kind: payload
           direction: tool_result
@@ -155,6 +162,7 @@ scenario:
         text: >-
           loop ไม่ได้ตัดสินว่าเทสต์พังแปลว่าอะไร มันแค่ส่งผลกลับและเรียก model อีกครั้ง
           การตีความเป็นหน้าที่ของ model
+        from: engine
         to: model
 
     - id: wants-test
@@ -164,6 +172,7 @@ scenario:
         text: >-
           model สังเกตว่าเทสต์ที่พังอยู่ใน `slug.test.ts` ไม่ใช่ของงานนี้ มันจึงขอ `bash` รันเฉพาะ
           `test/duration.test.ts` และดู git status ไปด้วย
+        from: model
         to: engine
         sees:
           kind: payload
@@ -210,6 +219,7 @@ scenario:
         text: >-
           ผลเทสต์ที่ผ่านกลับไปใน request ที่สี่ ซึ่งยังมีทุกอย่างตั้งแต่ request แรก
           ส่วนต้นอ่านจาก cache ได้ 11,085 token
+        from: engine
         to: model
 
     - id: answer
@@ -219,6 +229,7 @@ scenario:
         text: >-
           model ไม่ขอ tool เพิ่ม มันเขียนรายงานว่าแก้อะไร เทสต์ไหนผ่าน และบอกว่า `slug.test.ts`
           พังอยู่ก่อนแล้วจึงไม่ได้แตะ จบด้วย `end_turn`
+        from: model
         to: engine
         sees:
           kind: payload
@@ -239,7 +250,8 @@ scenario:
         text: >-
           คำตอบล่าสุดจบด้วย `end_turn` และไม่มี tool ค้าง loop จึงจบ turn ทั้ง turn เรียก model สี่ครั้ง
           ใช้เงิน $0.0072 และแก้ไฟล์เดียว
-        to: you
+        from: engine
+        to: panel
         end: จบ turn
       do: >-
         `loopStep` ตัดสิน `done(end_turn)` `finish` พิมพ์ยอดใช้งานแล้วคืน exit code 0

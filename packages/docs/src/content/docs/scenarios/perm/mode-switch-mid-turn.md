@@ -20,6 +20,7 @@ scenario:
         text: >-
           turn กำลังรัน `pnpm test` ในโหมด Ask คุณคลิกปุ่มโหมดในช่องพิมพ์แล้วเลือก Auto แผงส่งคำขอไปที่ VS Code
           ปุ่มยังไม่เปลี่ยนจนกว่า engine จะยืนยัน
+        from: you
         to: panel
       do: ผู้ใช้เปิดเมนูโหมดแล้วเลือก Auto ระหว่างที่ turn ยังทำงาน
       phase: running-tools
@@ -39,6 +40,7 @@ scenario:
         title: "VS Code ขอเปลี่ยนโหมด"
         text: >-
           VS Code ขอ engine เปลี่ยนโหมดของ session นี้เป็น Auto
+        from: panel
         to: engine
       do: >-
         `Chat.setMode` ส่งคำขอ ACP `session/set_mode` พร้อม `modeId: auto` ไปที่ engine
@@ -51,6 +53,7 @@ scenario:
         title: "Geno เปลี่ยนโหมดทันที"
         text: >-
           engine เปลี่ยนโหมดทันทีโดยไม่รอให้ turn จบ ยืนยันกลับไป และบันทึกการเปลี่ยนโหมดลงบันทึกของ session
+        from: engine
         to: panel
       do: >-
         `switchMode` เปลี่ยนโหมดใน `modes` ทันที ส่ง `current_mode_update` กลับ
@@ -73,6 +76,8 @@ scenario:
         title: "ปุ่มโหมดเปลี่ยนเป็น Auto"
         text: >-
           ปุ่มโหมดในช่องพิมพ์เปลี่ยนจาก Ask ไอคอนโล่ เป็น Auto ไอคอนสายฟ้า
+        from: panel
+        to: you
         sees: { kind: composer, state: working, header: working }
       alongside: true
       do: ปุ่มโหมดเปลี่ยนชื่อและไอคอน
@@ -87,6 +92,8 @@ scenario:
         text: >-
           Geno อ่านโหมดทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม คำสั่งนอกรายการปลอดภัยตัวถัดไปจึงไปที่
           classifier แทนการ์ด ส่วน `pnpm test` ที่รันอยู่ไม่ได้รับผลใดๆ
+        from: engine
+        to: engine
       do: >-
         `Approval` ของ turn นี้อ่านโหมดผ่าน `mode()` ทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม
         คำสั่งนอก safe list ตัวถัดไปใน turn นี้จึงไปที่ classifier แทนการ์ด ส่วน `pnpm test` ที่รันอยู่แล้วไม่ได้รับผลใดๆ
@@ -97,7 +104,8 @@ scenario:
         title: "pnpm test จบ ผลกลับมาที่แชต"
         text: >-
           คำสั่งจบ Geno บันทึกผลแล้วส่งไปที่แชต ขั้นต่อไปคือเรียกโมเดล
-        from: machine
+        from: engine
+        to: panel
         sees: { kind: step, label: pnpm test, status: done }
 
     - id: decide
@@ -117,6 +125,7 @@ scenario:
         text: >-
           ที่จุดปลอดภัยก่อนเรียกโมเดล Geno เห็นว่าโหมดต่างจากที่โมเดลรู้ จึงเพิ่มประกาศต่อจากผลของ tool
           ประกาศนี้ไม่ขึ้นในแชต ใน run จริงด้านล่างโหมดถูกตั้งก่อนข้อความแรก แต่ประกาศมีข้อความเดียวกัน
+        from: engine
         to: model
         sees:
           kind: payload
@@ -136,6 +145,8 @@ scenario:
         text: >-
           คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด
           โมเดลทำงานต่อโดยรู้ว่าตอนนี้ถามคุณด้วยฟอร์มไม่ได้แล้ว
+        from: model
+        to: engine
         end: "turn ทำต่อในโหมดใหม่"
       do: >-
         คำขอยังส่งเครื่องมือชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด โมเดลอ่าน

@@ -21,6 +21,7 @@ scenario:
         text: >-
           โมเดลขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร" run
           จริงด้านล่างเรียก `web_fetch` แบบเดียวกันกับ example.com
+        from: model
         to: engine
         sees:
           kind: payload
@@ -48,6 +49,8 @@ scenario:
         title: "แชตขึ้นขั้นของ web_fetch"
         text: >-
           Geno จัดคิว call ให้รันทีละตัว เพราะอาจต้องถามคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: engine
+        to: panel
 
     - id: judge
       lane: policy
@@ -57,6 +60,7 @@ scenario:
         text: >-
           ยังไม่มีกฎของ workspace สำหรับ date-fns.org กฎของ URL ภายนอกในโหมด Ask คือถาม ไม่มี hook ตอบแทน Geno
           จึงส่งคำถามไปที่แชต พร้อมกฎของโดเมนให้เลือกบันทึก งานใน Tasks เปลี่ยนเป็นรอคุณ
+        from: engine
         to: panel
       do: >-
         `webDenialFor` ดูกฎโดเมนของ workspace ก่อน ไม่พบ จึงใช้กฎ `web-remote-url` ซึ่งในโหมด Ask คือถาม
@@ -96,6 +100,7 @@ scenario:
         title: "คุณเห็นการ์ด “Fetch from date-fns.org?”"
         text: >-
           การ์ดของการดึงเว็บมีไอคอนลูกโลกและชื่อโฮสต์ turn รออยู่ตรงนี้ ลองเลือกแต่ละทาง
+        from: panel
         to: you
         ask: "กดปุ่มไหน"
         sees: "การ์ด \"Fetch from date-fns.org?\" \"Geno asks about fetching a page from another host.\" ปุ่ม Allow, Deny, Always allow in this workspace และ No, and tell the agent…"
@@ -178,6 +183,7 @@ scenario:
                   text: >-
                     ไม่มีการดึงหน้า turn จบรอคุณ เหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อว่าเกิดอะไรขึ้น
                   from: you
+                  to: panel
                   end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
@@ -218,6 +224,8 @@ scenario:
         title: "Model ผู้ช่วยอ่านหน้าแล้วตอบคำถาม"
         text: >-
           หน้าถูกแปลงเป็น markdown แล้วให้โมเดลผู้ช่วยที่ถูกที่สุดอ่านและตอบคำถาม โมเดลหลักจึงไม่ต้องอ่านทั้งหน้า
+        from: model
+        to: engine
       do: >-
         โมเดลผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` เลือกโมเดลที่ถูกที่สุดก่อน:
         โมเดลของบทบาท explore ถ้าตั้งไว้ แล้ว classifier แล้วจึงเป็นโมเดลของ session
@@ -230,6 +238,8 @@ scenario:
         title: "Geno ล้อมรั้วคำตอบว่าเป็นข้อมูล"
         text: >-
           คำตอบอยู่ในรั้ว ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้ ผลมีบันทึกว่าคุณอนุญาต แล้วกลับมาที่แชต
+        from: engine
+        to: engine
         sees: { kind: step, label: fetch date-fns.org, status: done }
       do: >-
         `web_fetch` ห่อคำตอบในรั้ว `<web_fetch_answer>` ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้
@@ -245,6 +255,7 @@ scenario:
         title: "Model ได้คำตอบจากหน้าเว็บ"
         text: >-
           Geno เรียกโมเดลต่อ โมเดลได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

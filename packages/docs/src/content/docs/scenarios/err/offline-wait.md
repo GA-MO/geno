@@ -19,6 +19,7 @@ scenario:
         title: "Geno ส่งคำขอให้ model"
         text: >-
           turn กำลังทำงาน Geno ส่งคำขอให้โมเดลตามปกติ
+        from: engine
         to: model
 
     - id: kind
@@ -28,6 +29,8 @@ scenario:
         title: "การเรียกไม่ได้คำตอบ"
         text: >-
           Geno ส่ง error ให้ตัวแยกชนิด ซึ่งตัดสินว่าจะลองใหม่เร็วๆ รอนาน หรือเลิก ลองเลือกว่าเกิดอะไรขึ้น
+        from: engine
+        to: engine
         ask: "เกิดอะไรขึ้น"
       do: >-
         การเรียกไม่ได้คำตอบ `gatewayFor.turn` ส่ง error ให้ `classifyFailure` แยกชนิด
@@ -45,6 +48,8 @@ scenario:
                   text: >-
                     การเชื่อมต่อไปหาผู้ให้บริการล้ม ไม่มีสถานะ HTTP กลับมา Geno จึงถือว่าออฟไลน์ และวางแผนรอ 5
                     วินาทีแล้วตรวจเครือข่าย เวลารอเพิ่มเป็นสองเท่าจนถึง 60 วินาที และเลิกเมื่อครบ 30 นาที
+                  from: engine
+                  to: model
                 do: >-
                   การเชื่อมต่อไปหาผู้ให้บริการล้มก่อนได้ byte แรก เช่น `ECONNREFUSED` หรือหา DNS ไม่เจอ
                   ไม่มีสถานะ HTTP กลับมา
@@ -66,6 +71,8 @@ scenario:
                   text: >-
                     คุณชน rate limit ผู้ให้บริการบางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตมาด้วย Geno รอถึงเวลานั้น ถ้าไม่รู้เวลา รอ 15
                     วินาทีแล้วเพิ่มขึ้น การรอสั้นๆ พักการเรียกของทุก session ใน engine นี้ด้วย
+                  from: model
+                  to: engine
                 do: >-
                   ผู้ให้บริการตอบ 429 บางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตไว้ใน header เช่น `retry-after`
                   หรือ `anthropic-ratelimit-requests-reset`
@@ -88,6 +95,7 @@ scenario:
         text: >-
           Geno บันทึกการรอลงบันทึกของ session ถ้า engine ตายระหว่างนี้ ตัวใหม่จะเห็นแล้วรอต่อ งานในแผง Tasks เปลี่ยนเป็น
           waiting และแชตได้รับแจ้ง
+        from: engine
         to: panel
       do: >-
         `onWait` บันทึก event `wait` ลง log เมื่อการรอเริ่มหรือเปลี่ยนทาง engine ที่เปิดใหม่หลังจากนี้จะเห็น event นี้แล้วรอต่อ
@@ -130,6 +138,8 @@ scenario:
         text: >-
           หัวข้อของ turn เปลี่ยนจาก working เป็นการรอ แถวเหนือช่องพิมพ์บอกว่ารอถึงเมื่อไร และมีปุ่มให้ลองทันที turn
           ยังไม่ล้ม
+        from: panel
+        to: you
         sees:
           - kind: composer
             state: working
@@ -162,6 +172,8 @@ scenario:
         text: >-
           เมื่อออฟไลน์ Geno ตื่นแล้วตรวจ host ก่อน ถ้ายังไม่ตอบก็รอรอบใหม่นานขึ้น เมื่อถูกจำกัด Geno ตื่นแล้วเรียกเลย
           ถ้าเวลารีเซ็ตไกลกว่า 15 นาที Geno ไม่ปลุกเอง และรอคุณ
+        from: engine
+        to: engine
         ask: "อะไรมาก่อน"
       do: >-
         `holdOn` นอนรอถึงเวลาลองครั้งถัดไป เมื่อออฟไลน์ ตื่นแล้วตรวจ host ก่อน ถ้ายังไม่ตอบก็รอรอบใหม่นานขึ้น
@@ -180,6 +192,8 @@ scenario:
                   title: "เครือข่ายกลับมา"
                   text: >-
                     Geno ตื่นตามเวลา เมื่อออฟไลน์ host ตอบแล้ว เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก การเรียกจึงออกไปได้
+                  from: engine
+                  to: engine
                 do: >-
                   `nap` ตื่นตามเวลา เมื่อออฟไลน์ `wire.probe` ตรวจ host แล้วพบว่าตอบ เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก
                   การเรียกจึงออกไปได้
@@ -245,6 +259,8 @@ scenario:
                   title: "Geno ยกเลิก turn"
                   text: >-
                     engine ยกเลิก turn การรอจบทันที Geno บันทึกว่าคุณเป็นคนหยุด แล้วจบ turn แบบ stopped
+                  from: engine
+                  to: engine
                 do: >-
                   engine หา `AbortController` ของ turn ใน `turns` แล้ว abort
                 ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
@@ -275,6 +291,8 @@ scenario:
                   title: "แชตขึ้นว่าคุณเป็นคนหยุด"
                   text: >-
                     turn ไม่มีข้อความตอบและไม่มีแถบ error แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อ
+                  from: panel
+                  to: you
                   end: "คุณหยุด turn"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
                 do: >-
@@ -294,6 +312,8 @@ scenario:
                   text: >-
                     ออฟไลน์ครบ 30 นาที หรือถูกจำกัดโดยไม่รู้เวลารีเซ็ตครบ 15 นาที Geno ปิดการรอ แล้วถือว่าการเรียกนี้ล้ม
                     พร้อมเหตุผลของการเลิก
+                  from: engine
+                  to: engine
                 do: >-
                   `planWait` ได้ `give-up`: ออฟไลน์ครบ 30 นาที หรือถูกจำกัดโดยไม่รู้เวลารีเซ็ตครบ 15 นาที
                   gateway ปิดการรอและคืน error ชนิด `transport` ข้อความต่อท้ายด้วยเหตุผลของการเลิก เช่นเมื่อออฟไลน์
@@ -306,6 +326,7 @@ scenario:
                   text: >-
                     Geno บันทึก error แชตขึ้นแถบสีแดงพร้อมเหตุผล และ turn จบแบบ failed prompt
                     ที่ยังไม่ได้คำตอบไปกับข้อความถัดไปที่คุณส่ง
+                  from: engine
                   to: panel
                   end: "หมดเวลารอ turn ล้มเหลว"
                   sees: { kind: notice, text: the provider has not answered for 30 minutes; check the connection and send again, tone: error }
@@ -336,6 +357,8 @@ scenario:
         text: >-
           เมื่อการเรียกที่ออกไปใหม่ได้ผล Geno ปิดการรอ แถวการรอหายไป เวลาที่ทำงานกลับมา และหัวข้อกลับเป็น working
           คำตอบที่ stream มาแล้วอยู่ในแผง
+        from: panel
+        to: you
         end: "turn ทำต่อ"
         sees: { kind: composer, state: working, header: working }
       do: >-

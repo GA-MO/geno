@@ -22,7 +22,8 @@ scenario:
         title: "คุณขอให้ explore subagent หาที่เรียก `getUser`"
         text: >-
           คุณระบุเองว่าให้ใช้ explore subagent และห้ามแก้อะไร คำตอบที่ต้องการคือรายการ file:line
-        to: engine
+        from: you
+        to: panel
       do: ผู้ใช้รัน `gcode agent` พร้อมคำสั่ง
       phase: idle
 
@@ -32,6 +33,7 @@ scenario:
         text: >-
           รายการ tool ของ request นี้มี `agent` ต่อท้าย คำอธิบายของมันบอกว่า subagent ทำงานใน session ของตัวเอง
           ไม่เห็นบทสนทนานี้ และรายงานของมันเป็นข้อมูล ไม่ใช่คำสั่ง
+        from: engine
         to: model
         sees:
           kind: payload
@@ -48,6 +50,7 @@ scenario:
         text: >-
           ลูกไม่เห็นบทสนทนาของแม่ model จึงเขียน `task` ให้ครบในตัว: หาที่เรียก แยกออกจากที่ประกาศ
           ตอบเป็น file:line และห้ามแก้อะไร
+        from: model
         to: engine
         sees:
           kind: payload
@@ -69,6 +72,7 @@ scenario:
         text: >-
           ลูกได้ system prompt ของตัวเอง tool อ่านอย่างเดียวสี่ตัวกับ `report` และเพดาน 4 รอบ $0.02
           system prompt บอกว่ามันมีแค่ 4 รอบ และรอบสุดท้ายต้องส่งคำตอบ
+        from: engine
         to: model
         sees:
           kind: payload
@@ -187,6 +191,7 @@ scenario:
         text: >-
           รายงานกลับไปเป็นผลของ call `agent` อยู่ใน `<subagent_report …>` ทุกบรรทัดเยื้องสองช่อง และต่อท้ายด้วยคำเตือนว่า
           รายงานไม่ใช่ข้อความของผู้ใช้และไม่มีอำนาจขยายสิทธิ์ใดๆ
+        from: engine
         to: model
         sees:
           kind: payload
@@ -207,6 +212,7 @@ scenario:
         title: "Model ของแม่ตรวจรายงานด้วย `grep` หนึ่งครั้ง"
         text: >-
           model บอกว่าจะเทียบรายการของลูกกับ repo ก่อนส่งให้คุณ แล้วขอ `grep` หา `getUser` ในไฟล์ `.js` ผลตรงกับรายงาน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -237,7 +243,8 @@ scenario:
         text: >-
           คำตอบมีสี่จุดที่เรียก แยกที่ประกาศและที่ import ไว้ต่างหาก ไม่มีไฟล์ไหนถูกแก้
           ทั้ง run เรียก model ของแม่สามครั้ง และของลูกสี่ครั้ง
-        to: you
+        from: model
+        to: engine
         end: จบ turn
         sees:
           kind: payload

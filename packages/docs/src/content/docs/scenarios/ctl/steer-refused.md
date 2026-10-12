@@ -21,6 +21,8 @@ scenario:
         text: >-
           turn กำลังทำงานและมี subagent ชื่อ explore ทำงานอยู่ คุณอยากส่งข้อความโดยไม่รอให้ turn จบ
           ลองเลือกว่าข้อความไปที่ไหน
+        from: you
+        to: panel
         ask: "ข้อความไปที่ไหน"
       do: ผู้ใช้พิมพ์ข้อความที่จะส่งระหว่าง turn
       phase: running-tools
@@ -37,6 +39,8 @@ scenario:
                   text: >-
                     ร่างของคุณมี `@src/app.ts` ไฟล์แนบและ mention ไปกับ turn ถัดไปเท่านั้น ปุ่ม Send now ยังอยู่แต่ใช้ไม่ได้
                     และบอกเหตุผลเมื่อชี้
+                  from: panel
+                  to: you
                   sees: "ปุ่ม Send now จางลง ชี้แล้วขึ้น \"Attachments and @ mentions go with the next turn, so this one waits in the queue\""
                 do: >-
                   ร่างข้อความมี `@src/app.ts` `sendNowOf` นับไฟล์แนบและ mention เป็น extras จึงให้ผล `blocked`
@@ -51,6 +55,7 @@ scenario:
                     คุณกด Send now หรือ Cmd-Enter อยู่ดี แผงเก็บข้อความเข้าคิวเหมือนกด Enter ไม่มีอะไรไปถึง VS Code หรือ engine
                     ทัวร์ข้อความในคิวเล่าต่อว่ามันถูกส่งเมื่อไร
                   from: you
+                  to: panel
                   end: "ข้อความรอในคิว"
                   sees: "ป้าย \"Queued\" เหนือช่องพิมพ์ ชี้แล้วขึ้น \"Sends when the turn finishes\""
                 do: ผู้ใช้กด Send now หรือ Cmd-Enter อยู่ดี
@@ -94,6 +99,8 @@ scenario:
                   title: "Subagent จบก่อนข้อความถึง"
                   text: >-
                     explore เขียนรายงานแล้วจบรอบของมันก่อนข้อความจะถึงจุดที่แทรกได้ inbox ของมันปิดแล้ว
+                  from: model
+                  to: engine
                 alongside: true
                 do: >-
                   ลูกเรียก `report` แล้วจบรอบของมันก่อนข้อความจะถึงจุดปลอดภัย inbox ของลูกปิด
@@ -104,6 +111,7 @@ scenario:
                   title: "Geno ปฏิเสธว่า subagent จบไปแล้ว"
                   text: >-
                     ข้อความในแชตหลักที่มาไม่ทันจะกลายเป็น turn ถัดไป แต่ subagent ไม่มี turn ถัดไป engine จึงปฏิเสธ
+                  from: engine
                   to: panel
                 do: >-
                   `steerRunning` ได้ผล `next-turn` (inbox ปิดแล้ว หรือปิดขณะข้อความรออยู่) แต่ลูกไม่มี turn ถัดไป
@@ -123,6 +131,8 @@ scenario:
                   text: >-
                     ช่องพิมพ์ของ subagent ซ่อนเพราะมันไม่ทำงานแล้ว แต่บรรทัดสถานะยังอยู่ turn ของแชตหลักทำงานต่อ และรายงานของ
                     subagent ไปถึงตามปกติ
+                  from: panel
+                  to: you
                   end: "subagent จบแล้ว turn ทำต่อ"
                   sees: "บรรทัดสถานะสีแดง \"explore already finished\" ใต้บทสนทนาของ subagent"
                 do: >-

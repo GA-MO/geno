@@ -19,6 +19,7 @@ scenario:
         title: "Model ปฏิเสธที่จะตอบต่อ"
         text: >-
           โมเดลปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วยสัญญาณ refusal
+        from: model
         to: engine
       do: >-
         โมเดลปฏิเสธที่จะตอบต่อ บางครั้งมีข้อความอธิบายสั้นๆ หรือ `stop_details.explanation` มาด้วย
@@ -34,6 +35,8 @@ scenario:
         title: "Geno แปลงการปฏิเสธเป็น error"
         text: >-
           Geno ไม่ถือว่านี่เป็นคำตอบ แต่บันทึกเป็น error ชนิด refusal ข้อความที่โมเดลเขียนมาก่อนปฏิเสธจึงไม่อยู่ในบันทึก
+        from: engine
+        to: engine
       do: >-
         gateway ไม่คืนเป็นคำตอบ แต่คืน error ชนิด `refusal` ข้อความมาจาก `refusalMessage`:
         คำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ "the model refused"
@@ -54,6 +57,7 @@ scenario:
         title: "Geno ส่ง error ไปที่แชต"
         text: >-
           engine ส่ง error ไปพร้อมป้ายว่าเป็น error ของ turn VS Code อ่านป้ายนั้นแล้วบอกแผงให้วาดเป็นบล็อก error
+        from: engine
         to: panel
       do: >-
         `errorUpdate` ส่ง error เป็น `agent_message_chunk` ข้อความ `[refusal] ...` พร้อม `TURN_ERROR_META`
@@ -76,6 +80,8 @@ scenario:
         text: >-
           แผงวาดบล็อก error ด้วยคำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ใช้ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ขึ้นข้อความสั้นๆ
           ด้านล่าง
+        from: panel
+        to: you
         sees: { kind: notice, text: The model refused, tone: error }
       alongside: true
       do: >-
@@ -90,6 +96,8 @@ scenario:
         title: "Geno จบ turn"
         text: >-
           Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบด้วยคำตอบ
+        from: engine
+        to: engine
       do: >-
         `loopStep` เห็น event ล่าสุดเป็น error `refusal` ตาราง `ERROR_REASON` ให้ `done(refusal)`
         Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบ turn ด้วยคำตอบ
@@ -103,6 +111,7 @@ scenario:
         title: "งานใน Tasks จบเป็น failed"
         text: >-
           engine บอก VS Code ว่า turn จบเพราะโมเดลปฏิเสธ งานในแผง Tasks จบแบบ failed และ session พร้อมรับข้อความถัดไป
+        from: engine
         to: panel
       do: >-
         `runTurn` แปลงผลด้วย `TURN_ENDS`: ACP ได้ `stopReason: refusal` meta บอกว่างานจบแบบ `failed`
@@ -127,6 +136,8 @@ scenario:
         text: >-
           บล็อก error บอกเหตุผลไว้แล้ว แผงจึงไม่ขึ้นประกาศ "Geno stopped without a reply" และไม่มีปุ่ม Continue หรือ
           Retry prompt ที่ถูกปฏิเสธไม่ถูกส่งซ้ำในคำขอครั้งหน้า คุณต้องพิมพ์ข้อความใหม่เอง
+        from: panel
+        to: you
         end: "Model ปฏิเสธ turn ล้มเหลว"
         sees: { kind: composer, state: idle }
       do: >-

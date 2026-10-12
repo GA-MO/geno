@@ -23,6 +23,8 @@ scenario:
         text: >-
           โมเดลส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
           Geno จึงยังไม่จบ turn แต่เปิดรอรายงานฉบับนั้นเอง
+        from: engine
+        to: engine
       do: >-
         `loopStep` ให้ `done(end_turn)` แต่ `holdsTurnOpen` เห็นว่าลูกเบื้องหลังยังติดรายงานอยู่หนึ่งฉบับ
         และพื้นผิวนี้ไม่มี `wakeLater` loop จึงไม่จบ แต่รอที่ `arrival` ของ inbox
@@ -36,6 +38,8 @@ scenario:
         title: "เทอร์มินัลค้างโดยไม่บอกว่ารอ"
         text: >-
           คำตอบของโมเดลพิมพ์ออกมาแล้ว แต่ไม่มีบรรทัดไหนบอกว่ากำลังรอ และเทอร์มินัลยังไม่คืน prompt
+        from: panel
+        to: you
         sees: { kind: message, from: geno, text: ผมให้ explore สำรวจอยู่ เดี๋ยวสรุปให้เมื่อได้ผล }
       do: >-
         คำตอบของโมเดลพิมพ์ออก stdout ไปแล้ว ไม่มีบรรทัดอะไรบอกว่ากำลังรอ เทอร์มินัลยังไม่คืน prompt
@@ -49,6 +53,8 @@ scenario:
         title: "Subagent ยังอ่านไฟล์อยู่"
         text: >-
           explore ทำงานต่อใน session ของตัวเอง ยังไม่ได้เขียนรายงาน
+        from: model
+        to: model
       alongside: true
       do: >-
         ลูกยังอ่านไฟล์อยู่ใน session ของตัวเอง
@@ -60,7 +66,8 @@ scenario:
         title: "คุณกด Ctrl-C"
         text: >-
           คุณไม่อยากรอแล้ว Ctrl-C ครั้งแรกสั่งให้ Geno หยุด turn ครั้งที่สองจะฆ่า process ทันที
-        to: engine
+        from: you
+        to: panel
       do: ผู้ใช้กด Ctrl-C
 
     - id: sigint
@@ -70,6 +77,8 @@ scenario:
         title: "Geno เลิกรอทันที"
         text: >-
           การรอรายงานฟังสัญญาณหยุดเดียวกับ turn จึงจบทันที Geno บันทึกว่าคุณเป็นคนหยุด
+        from: engine
+        to: engine
       do: >-
         SIGINT ตัวแรกสั่ง abort `AbortController` ที่ `interrupts()` ให้ไว้ตอนเริ่มรอบ (ตัวที่สองจะฆ่า process ตามปกติของ Node)
       ref: "packages/engine/src/cli.ts#\"process.once('SIGINT', () => controller.abort());\""
@@ -90,6 +99,8 @@ scenario:
         title: "Geno จบ turn"
         text: >-
           Geno เห็นว่าคุณหยุด จึงจบ turn และไม่ถือ turn ไว้รออีก ทางรับข้อความของ turn ปิด
+        from: engine
+        to: engine
       do: >-
         `loopStep` เห็น error `abort` จึงให้ `done(error)` การรอไม่ถือ turn อีกเพราะการรอเกิดเฉพาะหลัง `done(end_turn)`
         `end()` ปิด inbox
@@ -103,6 +114,8 @@ scenario:
         text: >-
           turn ไม่ได้จบด้วยคำตอบ และ CLI ไม่มีตัวปลุก Geno จึงหยุด subagent เบื้องหลังทุกตัว สิ่งที่ explore
           พบไม่ไปถึงแชตหลัก Geno รอให้มันจบก่อนปิด sandbox
+        from: engine
+        to: model
       do: >-
         `finally` ของ `runAgent` เรียก `stopBackground` เมื่อ turn ไม่ได้จบด้วย `end_turn` หรือไม่มีตัวปลุก (ที่นี่เป็นทั้งสองอย่าง):
         abort ลูกเบื้องหลังทุกตัว และตั้งว่ารายงานของพวกมันไม่มีใครฟังแล้ว แล้วรอให้ลูกจบก่อนปิด sandbox
@@ -123,6 +136,8 @@ scenario:
         title: "เทอร์มินัลคืน prompt พร้อมรหัส 130"
         text: >-
           Geno พิมพ์บรรทัด usage แล้ว process ออกด้วยรหัส 130 ซึ่งแปลว่าถูกขัด script ที่เรียก CLI จึงแยกออกได้
+        from: panel
+        to: you
         end: "คุณหยุด process ออก 130"
         sees: "บรรทัด \"usage: ... turns=3\" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130"
       do: >-

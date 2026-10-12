@@ -21,6 +21,7 @@ scenario:
         text: >-
           VS Code เปิด extension ของ Geno ซึ่งลงทะเบียนแผงแชตและคำสั่งต่างๆ
           ตอนนี้ยังไม่มีอะไรต่อ engine และยังไม่มีอะไรไปถึง model
+        from: you
         to: panel
       do: ผู้ใช้เปิดโฟลเดอร์ใน VS Code
       phase: idle
@@ -40,6 +41,7 @@ scenario:
         text: >-
           แผงแชตเป็นหน้าเว็บใน VS Code มันส่งข้อความของคุณให้ extension host ด้วย postMessage
           บับเบิลข้อความขึ้นทันทีและปุ่ม Stop มาแทน Send ก่อนจะมีอะไรไปถึง engine
+        from: you
         to: panel
         sees: { kind: composer, state: working, header: working }
       do: ผู้ใช้พิมพ์คำถามแล้วกด Enter
@@ -66,6 +68,7 @@ scenario:
         text: >-
           extension คำนวณที่อยู่ socket จาก hash ของโฟลเดอร์และการตั้งค่า ถ้ายังไม่มี engine ฟังอยู่ก็เปิด `gcode serve`
           เป็น process แยก แล้วส่ง `initialize` บอกว่า editor นี้ทำอะไรได้บ้าง ซึ่งกำหนดว่า model จะได้ tool ชุดไหน
+        from: panel
         to: engine
 
     - id: fresh
@@ -76,6 +79,7 @@ scenario:
         text: >-
           หน้าต่างนี้ยังไม่มีแชต extension จึงขอ session ใหม่ engine โหลดไฟล์คำสั่ง memory รายการ skill
           และสภาพแวดล้อมของเครื่อง แล้วแช่แข็งไว้ใน log ของ session ทั้งหมดนี้จะเป็นข้อความแรกที่ model เห็น
+        from: panel
         to: engine
       do: >-
         `sessionFor` ไม่พบแชตที่จำไว้ จึงเรียก `fresh` ซึ่งส่งคำขอ ACP `session/new` พร้อมโฟลเดอร์และ MCP server
@@ -99,6 +103,7 @@ scenario:
         text: >-
           extension ส่ง `session/prompt` ผ่าน socket คำขอนี้ค้างอยู่จนจบ turn engine ประกอบชุด tool
           กับ system prompt แล้วจด prompt ของคุณเป็น event ใหม่ใน log ซึ่งเป็นความจริงเพียงแหล่งเดียวของบทสนทนา
+        from: panel
         to: engine
       do: >-
         `prompt()` ส่งคำขอ ACP `session/prompt` ที่ค้างอยู่จนกว่า turn จะจบ
@@ -133,6 +138,7 @@ scenario:
         text: >-
           loop อ่าน log แล้วตัดสินว่าต้องเรียก model gateway สร้าง request จาก log ทั้งก้อน
           ข้อความแรกมีบริบทที่โหลดไว้ และบล็อกสุดท้ายคือ prompt ของคุณ แล้วส่งเป็น HTTP stream ไปหาผู้ให้บริการ
+        from: engine
         to: model
         sees:
           kind: payload
@@ -149,6 +155,8 @@ scenario:
         text: >-
           model อ่าน request แล้วเริ่มส่งคำตอบเป็นชิ้น ทั้งข้อความถึงคุณและคำขอเรียก tool
           จากตรงนี้ turn เดินต่อแบบเดียวกับทัวร์ "Model เรียก tool แล้วตอบ"
+        from: model
+        to: engine
       do: >-
         model stream คำตอบกลับมา gateway ส่งข้อความแต่ละชิ้นต่อให้แผง และเก็บคำขอ tool ไว้จนบล็อกปิด
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

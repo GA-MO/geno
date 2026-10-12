@@ -21,6 +21,8 @@ scenario:
         title: "ผลของ tool กลับมา Geno จะเรียก model"
         text: >-
           turn ทำงานมานานและอ่านไฟล์ไปหลายไฟล์ ผลของ tool ชุดล่าสุดถูกบันทึกแล้ว ขั้นต่อไปคือเรียกโมเดล
+        from: engine
+        to: engine
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสินว่า `call-model` แล้ว `deliver()` ส่งของที่รออยู่เข้าสู่ log ก่อน
       ref: packages/core/src/loop.ts#loopStep
@@ -35,6 +37,8 @@ scenario:
         text: >-
           ก่อนเรียกโมเดล Geno ดูว่า context ถึง 80% ของหน้าต่างโมเดลหรือยัง และมีการเรียกโมเดลหลังการสรุปครั้งก่อนไหม
           ทั้งสองข้อจริง Geno จึงวางจุดตัดและประเมินว่าสรุปแล้วจะเหลือเท่าไร
+        from: engine
+        to: engine
         ask: "สรุปแล้วช่วยไหม"
       do: >-
         สิ่งแรกที่ `callModel` ทำคือถาม `autoCompaction`: มีการเรียกโมเดลหลังการสรุปครั้งก่อนไหม และ context ถึงเกณฑ์หรือยัง
@@ -54,6 +58,8 @@ scenario:
                   text: >-
                     สรุปแล้ว context จะต่ำกว่าเกณฑ์ หรืออย่างน้อยเหลือครึ่ง Geno จึงเริ่ม compaction แชตขึ้นแถว Compacting the
                     context
+                  from: engine
+                  to: panel
                   sees: { kind: notice, text: Compacting the context, tone: info }
                 do: >-
                   แผนนี้ทำให้ context ต่ำกว่าเกณฑ์ หรืออย่างน้อยเหลือครึ่งหนึ่ง `callModel` จึงเรียก `compact('auto', plan)`
@@ -64,7 +70,8 @@ scenario:
                   text: >-
                     ส่วนก่อนจุดตัดถูกส่งให้โมเดลสรุปเป็นบันทึกการทำงาน ช่วงท้ายล่าสุดเก็บไว้ตามเดิม บันทึกของ session
                     ยังเก็บทุกอย่างเดิม แต่คำขอต่อจากนี้ใช้สรุปแทนส่วนเก่า แชตขึ้นเส้นคั่นที่เปิดดูสรุปได้
-                  to: panel
+                  from: model
+                  to: engine
                   sees: "เส้นคั่น \"Context compacted · 184,213 → about 31,400 tokens\" และวงแหวน context ในช่องพิมพ์ลดลง"
 
           - id: stuck
@@ -78,6 +85,8 @@ scenario:
                   text: >-
                     system prompt รายชื่อ tool และช่วงท้ายล่าสุดกินพื้นที่ส่วนใหญ่ สรุปไปก็ไม่ลดลงพอ Geno เขียนบอกใน log ของ
                     engine ครั้งเดียว แล้วข้ามการสรุป คุณไม่เห็นอะไรในแชต
+                  from: engine
+                  to: engine
                 do: >-
                   system prompt เครื่องมือ และช่วงท้ายล่าสุดกินพื้นที่ส่วนใหญ่ สรุปไปก็ไม่ลดลงพอ
                   `compactionStuck` เป็นจริง loop เขียนข้อความลง log ของ engine ครั้งเดียวต่อรอบ แล้วข้ามการสรุป
@@ -92,6 +101,7 @@ scenario:
         text: >-
           Geno บันทึก checkpoint แล้วประกอบคำขอ ถ้าเพิ่งสรุป ข้อความแรกคือข้อมูล session ตามด้วยสรุป
           แล้วจึงเป็นช่วงท้ายที่เก็บไว้ turn ทำงานต่อตามปกติ
+        from: engine
         to: model
         end: "turn ทำต่อ"
       do: >-

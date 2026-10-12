@@ -20,6 +20,7 @@ scenario:
         title: "คุณกด Send now ระหว่างคำตอบสุดท้าย"
         text: >-
           tool รันเสร็จหมดแล้ว และโมเดลกำลังเขียนคำตอบสุดท้าย คุณพิมพ์ "แล้วอัปเดต README ด้วย" แล้วกด Send now
+        from: you
         to: panel
         sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว 3 กรณี, streaming: true }
       do: ผู้ใช้กด Send now ขณะที่โมเดลยังเขียนคำตอบอยู่
@@ -32,6 +33,7 @@ scenario:
         title: "แผงขึ้นป้าย Sending now"
         text: >-
           ข้อความย้ายออกจากช่องพิมพ์ไปเป็นข้อความที่กำลังส่ง VS Code จำข้อความนี้ไว้แล้วส่งเป็น steer
+        from: panel
         to: engine
         sees: "ช่องพิมพ์ว่าง ป้าย \"Sending now\" เหนือช่องพิมพ์"
       do: >-
@@ -56,6 +58,8 @@ scenario:
         text: >-
           engine ใส่ข้อความไว้ใน inbox ของ turn จุดที่มันจะเข้า turn ได้คือก่อนเรียกโมเดลครั้งหน้า
           แต่คำตอบที่กำลังเขียนนี้จะไม่มีครั้งหน้า
+        from: engine
+        to: engine
       do: >-
         `steerRunning` ใส่ข้อความไว้ใน inbox ของ turn คำขอค้างอยู่ จุดปลอดภัยถัดไปคือก่อนการเรียกโมเดลครั้งหน้า
         แต่คำตอบที่กำลัง stream จะไม่มีการเรียกครั้งหน้า
@@ -67,6 +71,8 @@ scenario:
         title: "Model เขียนต่อโดยไม่ถูกขัด"
         text: >-
           steer ไม่ขัดคำตอบที่กำลัง stream ลองเลือกว่า turn นี้จบอย่างไร
+        from: model
+        to: engine
         ask: "turn จบอย่างไร"
       do: >-
         โมเดลเขียนคำตอบต่อ steer ไม่ขัด stream
@@ -82,6 +88,8 @@ scenario:
                   title: "Model เขียนจนจบเอง"
                   text: >-
                     โมเดลจบคำตอบด้วย end_turn Geno จบ turn และย้ายข้อความที่ค้างไปเป็น turn ถัดไป
+                  from: model
+                  to: engine
                 do: "โมเดลจบคำตอบด้วย `stop_reason: end_turn`"
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
@@ -99,6 +107,8 @@ scenario:
                   title: "Geno เริ่ม turn ใหม่ด้วยข้อความของคุณ"
                   text: >-
                     turn แรกไม่ได้ถูกหยุด engine จึงเริ่ม turn ใหม่ทันที โดยใช้ข้อความของคุณเป็น prompt ธรรมดา
+                  from: engine
+                  to: engine
                 do: >-
                   `finally` ของ `runTurn` บอก `turnEnds` ว่า turn ไม่ได้ถูกหยุด แล้ว `steer` เรียก `prompt()` ด้วยข้อความเดิมที่ตัด
                   `STEER_META` ออก เป็น turn ใหม่ต่อจาก turn ที่จบ คำขอ steer เดิมจะได้คำตอบเมื่อ turn ใหม่นี้จบ
@@ -110,7 +120,8 @@ scenario:
                   title: "แชตขึ้น turn ใหม่ต่อจาก turn ที่จบ"
                   text: >-
                     ป้าย Sending now หายไป turn แรกจบตามปกติ แล้ว turn ใหม่เริ่มด้วยบับเบิลของข้อความที่คุณส่ง
-                  to: panel
+                  from: panel
+                  to: you
                   sees: { kind: message, from: you, text: แล้วอัปเดต README ด้วย }
                 do: >-
                   turn แรกได้คำตอบ `end_turn` แผงได้ `turn-end` สถานะ `done` แล้ว `SteerHost.turnEnded` เห็นว่าข้อความที่ค้างยังไม่ส่งถึง
@@ -129,6 +140,7 @@ scenario:
                   title: "Model อ่านข้อความเป็น prompt ใหม่"
                   text: >-
                     โมเดลเห็นข้อความของคุณเป็นคำขอของ turn ใหม่ ไม่ใช่ข้อความที่แทรกเข้ามาระหว่างทำงาน
+                  from: engine
                   to: model
                   end: "กลายเป็น turn ถัดไป"
 
@@ -161,6 +173,8 @@ scenario:
                   text: >-
                     Geno บันทึกว่าถูกหยุดแล้วจบ turn คุณเป็นคนหยุด Geno จึงไม่ส่งข้อความที่ค้างต่อเป็น turn ใหม่ เหมือนข้อความ
                     Queued ที่ Stop คืนให้คุณ
+                  from: engine
+                  to: engine
                 do: >-
                   gateway คืน `abort` `drive` บันทึก event `error` ชนิด `abort` แล้ว `loopStep` ให้ `done(error)`
                   `end()` ปิด inbox และตอบข้อความที่ค้างว่า `next-turn`
@@ -180,6 +194,7 @@ scenario:
                   title: "VS Code ปิดข้อความที่ค้างว่าไม่ได้ส่ง"
                   text: >-
                     turn จบแบบ stopped VS Code ปิดข้อความที่ค้างว่าไม่ได้ส่ง ก่อนที่คำปฏิเสธของ engine จะมาถึง
+                  from: panel
                   to: panel
                 do: >-
                   turn ได้คำตอบ `cancelled` แผงได้ `turn-end` สถานะ `stopped` แล้ว `SteerHost.turnEnded` ปิดข้อความที่ค้างเป็น `failed`
@@ -192,6 +207,8 @@ scenario:
                   title: "ข้อความกลับไปที่ช่องพิมพ์"
                   text: >-
                     ไม่มี turn ทำงานแล้ว แผงจึงคืนข้อความไปที่ช่องพิมพ์ถ้าช่องยังว่าง ป้าย Sending now แค่หายไป ไม่มีข้อความอธิบาย
+                  from: panel
+                  to: you
                   end: "คุณหยุด ข้อความกลับมา"
                   sees: { kind: composer, state: idle, text: แล้วอัปเดต README ด้วย }
                 do: >-

@@ -22,6 +22,8 @@ scenario:
         text: >-
           คุณเปิดโฟลเดอร์เดียวกันไว้สองหน้าต่าง หน้าต่าง A มี turn ทำงานอยู่ คุณพิมพ์ข้อความในแชตเดียวกันจากหน้าต่าง B
           แล้วกด Enter
+        from: you
+        to: panel
       do: ผู้ใช้พิมพ์ข้อความในหน้าต่าง B แล้วกด Enter
       phase: idle
 
@@ -33,6 +35,8 @@ scenario:
         text: >-
           แผงของ B ไม่รู้ว่าหน้าต่าง A มี turn ค้างอยู่ ปุ่มของมันยังเป็น Send
           มันจึงส่งข้อความต่อทันทีแทนที่จะเก็บไว้ในคิว
+        from: panel
+        to: panel
       do: >-
         `submit()` ของแผง B ไม่เห็น turn ที่ทำงาน จึงโพสต์ `send` ไปให้ extension host ทันที แทนที่จะเข้าคิว
       ref: packages/extension/src/chat/webview.ts#submit
@@ -46,6 +50,7 @@ scenario:
         text: >-
           หน้าต่าง B ไม่ได้ถือ turn ไหนอยู่ จึงผ่านการตรวจของตัวเอง แชตของ B ขึ้นข้อความของคุณกับปุ่ม Stop ทันที
           แล้วส่งคำขอเริ่ม turn ไปที่ engine ตัวเดียวกับที่หน้าต่าง A ใช้
+        from: panel
         to: engine
         sees: { kind: composer, state: working, header: working }
       do: >-
@@ -64,6 +69,8 @@ scenario:
         text: >-
           engine ยอมให้แต่ละ session มี turn ได้ทีละหนึ่ง มันเห็นว่า session นี้มี turn ของหน้าต่าง A อยู่
           จึงปฏิเสธทันที ไม่มีอะไรถูกบันทึก และ turn ของหน้าต่าง A ทำงานต่อโดยไม่รู้เรื่อง
+        from: engine
+        to: panel
       do: >-
         `runTurn` เห็นว่าทะเบียน `turns` มี `AbortController` ของ session นี้อยู่แล้ว จึงโยน `invalidRequest`
         "a turn is already running" ก่อนอ่าน log ไม่มีอะไรถูกบันทึก ไม่เปิดงานใน Tasks และ turn ของหน้าต่าง A ทำงานต่อโดยไม่รู้เรื่อง
@@ -78,6 +85,7 @@ scenario:
         title: "หน้าต่าง B ได้ error กลับมา"
         text: >-
           คำขอของ B ถูกปฏิเสธ VS Code รับ error นั้นแล้วบอกแผงว่า turn ใหม่นี้ล้มเหลว
+        from: panel
         to: panel
       do: >-
         คำขอ `session/prompt` ถูกปฏิเสธ `prompt()` จับ error แล้วส่ง action `error` ด้วยข้อความของมัน
@@ -93,6 +101,8 @@ scenario:
         text: >-
           turn ใหม่ใน B จบเป็น failed ภายในเสี้ยววินาที ข้อความของคุณไม่ได้ไปถึงโมเดล และไม่กลับไปที่ช่องพิมพ์
           คุณต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
+        from: panel
+        to: you
         end: "B ถูกปฏิเสธ turn ของ A ทำต่อ"
         sees: { kind: notice, text: "Invalid request: a turn is already running", tone: error }
       do: >-

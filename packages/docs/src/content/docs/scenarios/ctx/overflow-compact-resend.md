@@ -19,6 +19,7 @@ scenario:
         title: "Geno ส่งคำขอให้ model"
         text: >-
           ผลของ tool ชุดล่าสุดใหญ่มาก จน context เกินหน้าต่างของโมเดลก่อน compaction อัตโนมัติจะทันทำ
+        from: engine
         to: model
 
     - id: refused
@@ -27,6 +28,7 @@ scenario:
         title: "ผู้ให้บริการบอกว่าคำขอยาวเกิน"
         text: >-
           ผู้ให้บริการตอบ error 400 ว่า prompt is too long บางรุ่นจบคำตอบด้วยสัญญาณว่า context เกินหน้าต่างแทน
+        from: model
         to: engine
       do: >-
         ผู้ให้บริการตอบ 400 ข้อความ "prompt is too long" (บางรุ่นจบ stream ด้วย `stop_reason: model_context_window_exceeded` แทน)
@@ -41,6 +43,8 @@ scenario:
         text: >-
           Geno ดูข้อความก่อนดูสถานะ error เรื่อง context ยาวเกินจึงไม่ถูกนับเป็น error ที่แก้ไม่ได้
           การส่งซ้ำแบบเดิมไม่ช่วย Geno จึงไม่ retry และให้ loop จัดการเอง
+        from: engine
+        to: engine
       do: >-
         `classifyFailure` เทียบข้อความก่อนสถานะ ข้อความเรื่อง context ยาวเกินจึงได้ `overflow` ไม่ใช่ `fatal`
         (stop reason `model_context_window_exceeded` ก็ได้ผลเดียวกันใน `gateway.call`) gateway ไม่ลองซ้ำ แต่คืนผลเป็น error ชนิด `overflow` ทันที เพื่อให้ loop จัดการเอง
@@ -54,6 +58,8 @@ scenario:
         title: "Geno ทำ compaction ทันที"
         text: >-
           Geno ยังไม่บันทึก error แต่เริ่ม compaction ทันที โดยไม่ตรวจว่าจะลดได้ครึ่งไหม เพราะส่งแบบเดิมไม่ได้อยู่แล้ว
+        from: engine
+        to: engine
       do: >-
         `callModel` เห็น error ชนิด `overflow` จึงเรียก `compact('overflow')` ทันที ยังไม่บันทึก error ลง log
         การสรุปแบบนี้ไม่ตรวจว่าจะลดได้ครึ่งหนึ่งไหม เพราะส่งแบบเดิมไม่ได้อยู่แล้ว
@@ -65,7 +71,8 @@ scenario:
         text: >-
           แชตขึ้นแถว Compacting the context ส่วนเก่าถูกส่งให้โมเดลสรุป ช่วงท้ายล่าสุดเก็บไว้ตามเดิม
           แล้วแชตขึ้นเส้นคั่นที่เปิดดูสรุปได้
-        to: panel
+        from: model
+        to: engine
         sees: { kind: notice, text: Compacting the context, tone: info }
 
     - id: resend
@@ -75,6 +82,7 @@ scenario:
         title: "Geno ส่งคำขอเดิมที่เล็กลงอีกครั้ง"
         text: >-
           Geno ส่งคำขอเดิมด้วย context ที่เล็กลง ใช้ checkpoint เดิม นี่คือการส่งซ้ำครั้งเดียวที่ Geno ให้
+        from: engine
         to: model
         ask: "รับคำขอไหม"
       do: >-
@@ -93,6 +101,8 @@ scenario:
                   title: "ผู้ให้บริการรับ คำตอบขึ้นในแชต"
                   text: >-
                     ผู้ให้บริการตอบตามปกติ คำตอบ stream ออกมา
+                  from: model
+                  to: engine
                   sees: { kind: message, from: geno, text: เทสต์ที่ล้มมาจาก parseDate ที่ไม่รองรับเขตเวลา, streaming: true }
                 do: >-
                   ผู้ให้บริการตอบตามปกติ stream คำตอบออกมา
@@ -104,6 +114,8 @@ scenario:
                   text: >-
                     คำตอบขึ้นต่อจากเส้นคั่น เปิดเส้นคั่นแล้วเห็นเหตุผลว่าโมเดลปฏิเสธเพราะยาวเกิน Geno จึงสรุปแล้วส่งใหม่ Geno
                     บันทึกคำตอบแล้ว turn ทำต่อตามปกติ
+                  from: panel
+                  to: you
                   end: "ส่งใหม่สำเร็จ turn ทำต่อ"
                   sees: "เส้นคั่น \"Context compacted\" ที่เปิดแล้วมีเหตุผล \"The model refused the request as too long, so Geno compacted and sent it again.\""
                 alongside: true
@@ -129,6 +141,7 @@ scenario:
                   title: "ยังยาวเกิน"
                   text: >-
                     ผู้ให้บริการปฏิเสธอีกครั้ง เช่นช่วงท้ายที่เก็บไว้มีผลของ tool ก้อนใหญ่ที่สรุปไม่ได้
+                  from: model
                   to: engine
                 do: >-
                   ผู้ให้บริการปฏิเสธอีกครั้ง เช่นช่วงท้ายที่เก็บไว้มีผลเครื่องมือก้อนใหญ่ที่สรุปไม่ได้
@@ -139,6 +152,8 @@ scenario:
                   title: "Geno ไม่สรุปซ้ำและไม่ส่งซ้ำ"
                   text: >-
                     Geno ให้โอกาสส่งซ้ำครั้งเดียว คราวนี้จึงถือว่าการเรียกล้ม
+                  from: engine
+                  to: engine
                 do: >-
                   gateway คืน error ชนิด `overflow` อีกครั้ง loop ไม่สรุปซ้ำและไม่ส่งซ้ำอีก
                 ref: packages/core/src/model-error.ts#TURN_ERROR_OF
@@ -148,6 +163,7 @@ scenario:
                   title: "แชตขึ้นแถบ error แล้ว turn ล้มเหลว"
                   text: >-
                     Geno บันทึก error แชตขึ้นแถบสีแดงพร้อมข้อความของผู้ให้บริการ และ turn จบแบบ failed
+                  from: engine
                   to: panel
                   end: "ยังยาวเกิน turn ล้มเหลว"
                   sees: { kind: notice, text: Prompt is too long, tone: error }

@@ -22,6 +22,7 @@ scenario:
         text: >-
           ในคำตอบเดียว โมเดลขออ่าน `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วค้นหา `parseDate`
           และหาไฟล์เทสต์ทั้งหมด run จริงด้านล่างขออ่านสามไฟล์ในคำตอบเดียวแบบเดียวกัน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -50,6 +51,8 @@ scenario:
         title: "แชตขึ้นขั้นของทุก call"
         text: >-
           Geno บันทึกคำขอแล้วแชตขึ้นขั้นใหม่ของแต่ละ call พร้อมจุดหมุน
+        from: engine
+        to: panel
         sees: { kind: step, label: read src/date.ts, status: running }
 
     - id: together
@@ -60,6 +63,8 @@ scenario:
         text: >-
           การอ่านไฟล์ที่ไม่ใช่ไฟล์ลับใน workspace และการค้นหา ไม่แก้อะไรและไม่ต้องถามใคร
           ทั้งห้าจึงรันพร้อมกันได้ในชุดเดียว ชุดหนึ่งรับได้ถึง 8 call
+        from: engine
+        to: engine
       do: >-
         `concurrentAt` ถามแต่ละ call ว่ารันพร้อมตัวอื่นได้หรือไม่ `read` ได้เมื่อ path ไม่ใช่ไฟล์ลับและไม่ออกนอก workspace
         `grep` และ `glob` ได้เสมอ ทั้งห้าจึงอยู่ชุดเดียวกัน (สูงสุด 8 ต่อชุด) และเริ่มพร้อมกัน
@@ -73,6 +78,7 @@ scenario:
         text: >-
           เมื่อ VS Code แสดง session นี้อยู่ Geno ขอให้ VS Code อ่านไฟล์แทนการอ่านดิสก์เอง `src/date.ts`
           ที่คุณเปิดค้างไว้จึงมาพร้อมการแก้ที่ยังไม่บันทึก
+        from: engine
         to: panel
       runs: 3
       do: >-
@@ -97,6 +103,7 @@ scenario:
           การค้นหารันบนดิสก์ใน engine แต่ก่อนค้นมันขอ buffer ที่ยังไม่บันทึกจาก VS Code แล้วค้นบนสำเนาเหล่านั้นแทน
           ผลจึงตรงกับที่คุณเห็นใน editor
         from: engine
+        to: machine
       runs: 2
       alongside: true
       do: >-
@@ -112,6 +119,7 @@ scenario:
         text: >-
           call ที่เสร็จก่อนแจ้งแชตทันที คุณจึงเห็นบางขั้นเสร็จก่อนขั้นอื่น
           การอ่านแต่ละไฟล์จดเนื้อหาที่เห็นไว้เป็นฐานสำหรับการแก้ไฟล์ครั้งต่อไป
+        from: engine
         to: panel
       do: >-
         แต่ละ call ที่เสร็จส่ง `watcher.toolEnd` ทันที แผงจึงเห็นขั้นที่เสร็จก่อนได้ `read` รอให้ call ก่อนหน้าในชุดจบก่อน
@@ -131,6 +139,8 @@ scenario:
         title: "Geno บันทึกผลตามลำดับที่ขอ"
         text: >-
           เมื่อครบทุก call Geno บันทึกผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ผลพับอยู่ใต้แต่ละขั้น
+        from: engine
+        to: panel
         sees:
           kind: payload
           direction: tool_result
@@ -152,6 +162,7 @@ scenario:
         title: "Model ได้ผลทั้งห้าในข้อความเดียว"
         text: >-
           Geno เรียกโมเดลต่อ ผลทั้งห้าอยู่ในข้อความ user เดียว เรียงตามที่โมเดลขอ
+        from: engine
         to: model
         end: "model ทำต่อ"
       do: >-

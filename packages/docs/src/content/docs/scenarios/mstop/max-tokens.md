@@ -20,6 +20,7 @@ scenario:
         text: >-
           context ใหญ่มากแล้ว เพดานความยาวของคำตอบหนึ่งครั้งจึงเหลือน้อย เพราะ Geno
           ตั้งไม่ให้เกินที่ว่างที่เหลือในหน้าต่าง context
+        from: engine
         to: model
 
     - id: cut
@@ -29,6 +30,8 @@ scenario:
         text: >-
           โมเดลเขียนคำตอบยาว หรือเรียก tool เพื่อสร้างไฟล์ยาว จนผู้ให้บริการตัดคำตอบที่เพดาน และจบด้วยสัญญาณ max_tokens
           ส่วนที่เขียนมาแล้วขึ้นในแชต
+        from: model
+        to: engine
         sees: { kind: message, from: geno, text: ไฟล์ config มีสามส่วน ส่วนแรกคือ, streaming: true }
       do: >-
         โมเดลเขียนจนถึงเพดาน `max_tokens` ของคำขอ ผู้ให้บริการหยุด stream แล้วจบด้วย `stop_reason: max_tokens`
@@ -45,6 +48,8 @@ scenario:
         title: "Geno ดูว่าอะไรถูกตัด"
         text: >-
           tool call ที่ถูกตัดมี input ไม่ครบ รันไม่ได้ Geno จึงดูว่าบล็อกสุดท้ายของคำตอบเป็นข้อความหรือ tool call
+        from: engine
+        to: engine
         ask: "อะไรถูกตัด"
       do: >-
         `loopStep` อ่านคำตอบล่าสุด `cutOff` ดูว่าบล็อกสุดท้ายของคำตอบที่จบด้วย `max_tokens` เป็นการเรียกเครื่องมือหรือไม่
@@ -62,6 +67,8 @@ scenario:
                   title: "ข้อความถูกตัด Geno จบ turn ทันที"
                   text: >-
                     ข้อความครึ่งเดียวไม่มีอะไรให้รัน Geno ไม่เรียกโมเดลให้เขียนต่อ และจบ turn แบบ error
+                  from: engine
+                  to: engine
                 do: >-
                   ไม่มี `tool_use` ค้าง ตาราง `AFTER_STOP` แปลง `max_tokens` เป็น `done(error)` ทันที
                   ไม่มีการเรียกโมเดลซ้ำให้เขียนต่อ และ Stop hook ไม่ทำงานในทางนี้
@@ -74,6 +81,7 @@ scenario:
                   text: >-
                     Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น แผงรู้แค่ว่า
                     turn ล้มเหลว
+                  from: engine
                   to: panel
 
               - lane: panel
@@ -83,6 +91,8 @@ scenario:
                   text: >-
                     คำตอบหยุดกลางประโยค ท้าย turn ขึ้น Failed ไม่มีแถบ error และไม่มีปุ่ม Continue เพราะมีข้อความแล้ว คุณต้องเปิด
                     output channel จึงจะรู้ว่าทำไม
+                  from: panel
+                  to: you
                   end: "ข้อความถูกตัด turn ล้มเหลว"
                   sees: { kind: message, from: geno, text: ไฟล์ config มีสามส่วน ส่วนแรกคือ, footer: [ failed after 2m 4s, Failed ] }
                 do: >-
@@ -102,6 +112,8 @@ scenario:
                   title: "Geno ไม่รัน tool call ที่ถูกตัด"
                   text: >-
                     tool call ที่ถูกตัดไม่ได้รัน ส่วน call อื่นที่ครบในคำตอบเดียวกันยังรันได้ในรอบถัดไป
+                  from: engine
+                  to: engine
                 do: >-
                   `loopStep` เห็น `tool_use` ที่ยังไม่มีผล `unrunnable` คืนเฉพาะ call ที่ถูกตัดพร้อมข้อความ `UNRUN_TEXTS['cut-off']`
                   จึงตัดสิน `answer-tools` call อื่นที่ครบในคำตอบเดียวกัน (ถ้ามี) ยังรันได้ในรอบถัดไป
@@ -114,7 +126,8 @@ scenario:
                   title: "Geno บอก model ให้เรียกให้เล็กลง"
                   text: >-
                     Geno บันทึกผลของ call นั้นเป็น error ที่บอกโมเดลว่าคำตอบชนเพดานจน call ถูกตัด ให้ทำต่อด้วย call ที่เล็กลง
-                  to: panel
+                  from: engine
+                  to: model
                 do: >-
                   `drive` บอก watcher ว่าข้าม call นี้ แล้วบันทึก `tool-result` สถานะ error ที่บอกโมเดลว่า
                   "Your response hit the output limit and cut this tool call short, so it did not run. Continue, and keep each tool call smaller."
@@ -134,6 +147,7 @@ scenario:
                   text: >-
                     ขั้นของ call ขึ้นแล้วล้มเหลวทันที ชื่อขั้นเป็นชื่อ tool เพราะ input อ่านไม่ครบ เพิ่งถูกตัดครั้งเดียว Geno
                     จึงเรียกโมเดลอีกรอบ
+                  from: engine
                   to: model
                   sees: { kind: step, label: edit, status: failed, output: "Your response hit the output limit and cut this tool call short, so it did not run. Continue, and keep each tool call smaller." }
                 alongside: true
@@ -155,6 +169,8 @@ scenario:
                   title: "Model ตอบใหม่"
                   text: >-
                     โมเดลอ่านผลที่บอกว่า call ถูกตัด แล้วตอบอีกครั้ง ลองเลือกว่ารอบนี้ถูกตัดอีกไหม
+                  from: model
+                  to: engine
                   ask: "ถูกตัดอีกไหม"
                 do: >-
                   โมเดลอ่านผลที่บอกว่า call ถูกตัด แล้วตอบใหม่
@@ -170,6 +186,8 @@ scenario:
                             title: "Model แบ่ง tool call ให้เล็กลง"
                             text: >-
                               โมเดลแบ่งงาน เช่นสร้างไฟล์ส่วนแรกก่อน แล้วจบด้วย tool_use ตามปกติ Geno รัน tool และ turn ทำต่อ
+                            from: model
+                            to: engine
                             end: "เรียกเล็กลง turn ทำต่อ"
                           do: >-
                             โมเดลแบ่งงานเป็น call ที่เล็กลง เช่นสร้างไฟล์ส่วนแรกก่อน แล้วจบด้วย `stop_reason: tool_use` ตามปกติ
@@ -193,6 +211,8 @@ scenario:
                             text: >-
                               call ที่ถูกตัดครั้งที่สองได้คำตอบแบบเดียวกัน และอีกขั้นในแชตล้มเหลว คำตอบสองครั้งล่าสุดถูกตัดที่ tool call
                               ทั้งคู่ Geno จึงจบ turn แบบ error แทนที่จะเสียรอบไปกับการถูกตัดซ้ำ เหตุผลไปอยู่ใน output channel เท่านั้น
+                            from: engine
+                            to: engine
                           do: >-
                             call ที่ถูกตัดครั้งที่สองได้คำตอบ `cut-off` แบบเดียวกัน ขั้นของมันในแผงล้มเหลวอีกขั้น
                           ref: "packages/engine/src/drive.ts#\"watcher.toolSkipped?.(answer.use, describeCall(answer.use, mode.executors));\""
@@ -213,6 +233,8 @@ scenario:
                             title: "แชตขึ้นว่า Geno หยุดโดยไม่มีคำตอบ"
                             text: >-
                               ขั้นสุดท้ายล้มเหลวและไม่มีข้อความตามหลัง แผงจึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ พร้อมปุ่มทำต่อหรือลองใหม่
+                            from: panel
+                            to: you
                             end: "ถูกตัดสองครั้ง turn ล้มเหลว"
                             sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                           do: >-
