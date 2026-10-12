@@ -1,5 +1,5 @@
 ---
-title: จบแผนแล้วกด Start building
+title: "จบแผนแล้วคุณกด Start building"
 description: หลัง turn ในโหมด Plan จบ ผู้ใช้กด Start building ส่วนขยายสลับโหมดเป็น Ask หรือ Auto แล้วส่ง "Go ahead with the plan." เป็น turn ใหม่ ที่โมเดลได้ประกาศโหมดและรายการ todo ของแผน
 tableOfContents: false
 sidebar:
@@ -18,6 +18,12 @@ scenario:
     - id: offered
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นปุ่ม Start building ใต้แผน"
+        text: >-
+          turn ล่าสุดจบในโหมด Plan โมเดลเขียนแผนและตั้งรายการ todo ห้าข้อที่ยังไม่เริ่ม แผงวาดปุ่ม Start building ใต้
+          turn นั้น เพราะ session ยังอยู่ในโหมด Plan
+        sees: "ปุ่ม \"Start building\" ไอคอน play ใต้แผน และป้าย \"Plan\" ข้างหัวข้อของ turn"
       do: >-
         แผงวาดปุ่ม Start building ใต้ turn ล่าสุดเมื่อ turn นั้นจบแบบ done ในโหมด Plan และ session ยังอยู่ในโหมด Plan
       sees: ปุ่ม "Start building" ไอคอน play ใต้แผน และป้าย "Plan" ข้างหัวข้อของ turn
@@ -26,6 +32,11 @@ scenario:
 
     - id: click
       lane: user
+      beat:
+        title: "คุณคลิก Start building"
+        text: >-
+          คุณอ่านแผนแล้วคลิกปุ่ม แผงส่งคำขอไปที่ VS Code
+        to: panel
       do: ผู้ใช้คลิก Start building
 
     - id: post
@@ -39,6 +50,12 @@ scenario:
     - id: switch
       lane: editor
       at: chat
+      beat:
+        title: "VS Code เปลี่ยนโหมดเป็น Ask"
+        text: >-
+          ไม่มี turn ทำงานอยู่ VS Code เปลี่ยนโหมดเป็นโหมดของแชตใหม่ตามการตั้งค่า ซึ่งคือ Ask เว้นแต่คุณตั้งเป็น Auto
+          engine เปลี่ยนโหมดและบันทึกลงบันทึกของ session
+        to: engine
       do: >-
         `startBuilding` ตรวจว่าไม่มี turn ทำงาน แล้วเรียก `setMode` ด้วยโหมดของแชตใหม่ตามการตั้งค่า (Ask เว้นแต่ตั้งเป็น Auto)
         ซึ่งส่งคำขอ ACP `session/set_mode`
@@ -55,6 +72,11 @@ scenario:
     - id: picker
       lane: panel
       at: composer
+      beat:
+        title: "ปุ่มโหมดเป็น Ask และปุ่ม Start building หาย"
+        text: >-
+          session ไม่อยู่ในโหมด Plan แล้ว ปุ่ม Start building จึงหายไป
+        sees: { kind: composer, state: idle }
       alongside: true
       do: >-
         ปุ่มโหมดเปลี่ยนเป็น Ask และปุ่ม Start building หายไป เพราะ session ไม่อยู่ในโหมด Plan แล้ว
@@ -64,6 +86,12 @@ scenario:
     - id: send
       lane: editor
       at: chat
+      beat:
+        title: "VS Code ส่ง “Go ahead with the plan.”"
+        text: >-
+          VS Code ส่งข้อความคงที่ผ่านทางเดียวกับข้อความที่คุณพิมพ์ แชตขึ้นบับเบิลใหม่และหัวข้อ working
+        to: engine
+        sees: { kind: message, from: you, text: Go ahead with the plan. }
       do: >-
         `startBuilding` ส่งข้อความคงที่ `START_BUILDING_PROMPT` ผ่านทางเดียวกับข้อความที่ผู้ใช้พิมพ์ `prompt()` ส่ง action `turn-start`
         แล้วส่งคำขอ ACP `session/prompt`
@@ -74,6 +102,11 @@ scenario:
     - id: accept
       lane: server
       at: turns
+      beat:
+        title: "Geno เริ่ม turn ใหม่ในโหมด Ask"
+        text: >-
+          engine รับเป็น turn ใหม่ที่คุณส่ง ทุก call ใน turn นี้ตัดสินด้วยโหมด Ask และขีดจำกัดเริ่มนับใหม่ Geno
+          บันทึกข้อความแล้วตัดสินว่าขั้นต่อไปคือเรียกโมเดล
       do: >-
         `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง และเรียก `runAgent` ซึ่งตัดสินแต่ละ call ด้วยโหมด Ask ขีดจำกัดของรอบนับใหม่จาก prompt นี้
       ref: packages/engine/src/serve.ts#runTurn
@@ -99,6 +132,11 @@ scenario:
     - id: notice
       lane: loop
       at: drive
+      beat:
+        title: "Geno บอก model เรื่องโหมดและรายการ todo"
+        text: >-
+          ที่จุดปลอดภัย Geno เพิ่มประกาศหนึ่งก้อนที่รวมสองเรื่อง โหมดเปลี่ยนจาก Plan เป็น Ask และรายการ todo
+          ของแผนยังไม่เสร็จ จึงแนบรายการเดิมมาด้วย
       do: >-
         `deliver()` บันทึก `notice` หนึ่งตัวที่รวมสองเรื่อง: `noticeFor` เห็นว่าโหมดเปลี่ยนจาก Plan เป็น Ask
         และ `todoReminder` เห็นว่ารายการยังไม่เสร็จหลัง prompt ที่ผู้ใช้พิมพ์ จึงแนบรายการเดิมมาด้วย
@@ -108,6 +146,11 @@ scenario:
     - id: carried
       lane: panel
       at: rail
+      beat:
+        title: "แชตปักรายการ todo ของแผน"
+        text: >-
+          turn ใหม่ยังไม่ได้ตั้งรายการของตัวเอง แชตจึงปักรายการที่ยังไม่เสร็จจาก turn ก่อนไว้ โดยไม่มีข้อไหนหมุน
+        sees: "กล่อง \"0 of 5 done · from an earlier turn\" ที่พับไว้"
       alongside: true
       do: >-
         turn ใหม่ยังไม่ได้ตั้งรายการของตัวเอง แผงจึงปักรายการที่ยังไม่เสร็จจาก turn ก่อนไว้ โดยไม่มีข้อไหนหมุน
@@ -115,6 +158,13 @@ scenario:
       ref: packages/extension/src/chat/todo-view.ts#todoStep
 
     - use: model-call
+      beat:
+        title: "Model เริ่มทำตามแผน"
+        text: >-
+          Geno เรียกโมเดล โมเดลอ่านว่าคุณเปลี่ยนเป็นโหมด Ask แล้วแก้โค้ดได้ ตามด้วยรายการ todo ของแผน
+          แล้วเริ่มแก้โค้ดตามขั้นแรก
+        to: model
+        end: "เริ่มสร้างตามแผน"
 
     - id: builds
       lane: model
@@ -135,3 +185,5 @@ Start building คือทางลัดของสองอย่างท�
 - **รายการ todo เป็นสะพาน** ประกาศโหมด Plan ขอให้โมเดลเขียนขั้นตอนลงรายการ todo เมื่อเริ่มสร้าง รายการเดิมกลับมาพร้อมประกาศ
   และแผงแสดงรายการเดิมจนกว่าโมเดลจะตั้งรายการใหม่
 - **ปุ่มอยู่เฉพาะ turn ล่าสุด** ถ้าผู้ใช้สลับโหมดออกจาก Plan เองหรือส่งข้อความอื่นก่อน ปุ่มหายไป
+
+การเปลี่ยนโหมดระหว่าง turn ดู [สลับโหมดระหว่าง turn](/scenarios/perm/mode-switch-mid-turn/)

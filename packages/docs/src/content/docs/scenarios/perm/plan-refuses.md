@@ -1,5 +1,5 @@
 ---
-title: โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์
+title: "โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์"
 description: ในโหมด Plan คำสั่งนอก safe list ถูกปฏิเสธด้วยกฎ การแก้ไฟล์และงานเบื้องหลังถูกปฏิเสธเป็น error และโมเดลทำงานต่อโดยไม่จบ turn
 tableOfContents: false
 sidebar:
@@ -16,6 +16,17 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอ tool ที่เปลี่ยนอะไรบางอย่าง"
+        text: >-
+          ทุกโหมดได้ tool ชุดเดียวกัน `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และโมเดลเรียกได้ ทั้งที่ประกาศของโหมด Plan
+          บอกแล้วว่าทำไม่ได้ ประกาศจาก run จริงด้านล่างเป็นแบบนี้
+        to: engine
+        sees:
+          kind: payload
+          direction: request
+          source: docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6
+          select: messages[-1].content[3]
       do: >-
         โมเดลขอเรียกเครื่องมือหนึ่งตัวและจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -32,10 +43,19 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของ call"
+        text: >-
+          Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: which
       lane: tool
       at: executor
+      beat:
+        title: "Geno อ่านโหมดตอน call รัน"
+        text: >-
+          Geno อ่านโหมดของ session ตอนที่ call รัน ได้ Plan ลองเลือกว่าโมเดลเรียกอะไร
+        ask: "โมเดลเรียกอะไร"
       runs: 0
       do: >-
         executor อ่านโหมดของ session ตอน call รัน ได้ `plan`
@@ -49,6 +69,11 @@ scenario:
             steps:
               - lane: policy
                 at: rules
+                beat:
+                  title: "กฎในตัวของโหมด Plan ปฏิเสธคำสั่ง"
+                  text: >-
+                    โหมด Plan ใช้แค่กฎในตัว ไม่อ่านกฎของ workspace `pnpm add zod` ไม่อยู่ในรายการคำสั่งปลอดภัยจึงถูกปฏิเสธ
+                    ไม่ถามคุณและไม่มี classifier ผลบอกให้เปลี่ยนเป็น Ask หรือ Auto ถ้าจะแก้อะไร
                 do: >-
                   `ruledDenial` ในโหมด Plan ใช้แค่คำตัดสินในตัว ไม่อ่านกฎของ workspace กฎ `unlisted` ในโหมด Plan คือ `deny`
                 ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -69,6 +94,11 @@ scenario:
                 emits: [APPROVAL_META]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นป้าย Denied by a rule"
+                  text: >-
+                    แชตเห็นว่าการปฏิเสธมาจากกฎ ไม่ใช่จากคุณ จึงขึ้นป้ายปฏิเสธพร้อมเหตุผล
+                  sees: { kind: step, label: pnpm add zod, status: denied, note: Denied by a rule · A command not on the safe list is not allowed here. }
                 alongside: true
                 do: >-
                   `denialOf` เห็นการปฏิเสธโดยกฎที่ไม่ใช่ของผู้ใช้ แผงขึ้นป้ายปฏิเสธพร้อมเหตุผล
@@ -80,6 +110,10 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "โหมด Plan ไม่มี edit ให้ใช้"
+                  text: >-
+                    `edit` ไม่อยู่ในรายการ tool ของโหมด Plan call ล้มเหลวทันทีก่อนอ่านไฟล์หรือดูกฎใดๆ และไม่มีบันทึกการปฏิเสธ
                 do: >-
                   `inMode` เห็นว่า `AGENT_MODE_TOOLS.plan` ไม่มี `edit` จึงโยน `ToolError`
                   "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it."
@@ -94,17 +128,26 @@ scenario:
                 emits: [tool_call_update]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นขั้นล้มเหลวธรรมดา"
+                  text: >-
+                    ผลเป็น error ไม่ใช่การปฏิเสธ แชตจึงแสดงขั้นเป็นล้มเหลวธรรมดาโดยไม่มีป้าย
+                  sees: { kind: step, label: edit src/date.ts, status: failed, output: "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it." }
                 alongside: true
                 do: >-
                   ผลมีสถานะ `error` ไม่ใช่ `denied` แผงจึงแสดงขั้นเป็นล้มเหลวธรรมดา ไม่มีป้ายปฏิเสธ
                 sees: ขั้นของ `edit src/date.ts` ขึ้นไอคอน error และผลที่พับไว้คือข้อความของ `ToolError`
                 ref: packages/extension/src/chat/session-updates.ts#updateActions
           - id: background
-            label: bash run_in_background
+            label: bash แบบเบื้องหลัง
             then: denied
             steps:
               - lane: policy
                 at: rules
+                beat:
+                  title: "โหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด"
+                  text: >-
+                    งานเบื้องหลังถูกปฏิเสธก่อนดูกฎใดๆ แม้คำสั่งนั้นจะอยู่ในรายการคำสั่งปลอดภัย
                 do: >-
                   `approveCommand` ปฏิเสธงานเบื้องหลังในโหมด Plan ก่อนดูกฎใดๆ ด้วย `ToolError`
                   "background commands are not available: Plan mode is read-only; ... Do not retry it."
@@ -115,6 +158,13 @@ scenario:
     - id: denied
       lane: loop
       at: step
+      beat:
+        title: "Model ทำแผนต่อด้วย tool อ่านอย่างเดียว"
+        text: >-
+          ไม่มีอะไรรันและไม่มีการ์ด การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียกโมเดลต่อ
+          โมเดลอ่านเหตุผลแล้วทำแผนต่อ
+        to: model
+        end: "model ทำแผนต่อ"
       do: >-
         ไม่มีอะไรรันและไม่มีการ์ด `loopStep` ตัดสิน `call-model` เพราะการปฏิเสธนี้ไม่ได้มาจากผู้ใช้
         โมเดลอ่านเหตุผลแล้วทำแผนต่อด้วยเครื่องมืออ่านอย่างเดียว
@@ -140,3 +190,5 @@ Plan ปฏิเสธตอน call รันแทน และประก�
   ไม่ได้ขึ้นป้าย "Denied" แบบคำสั่งที่ถูกปฏิเสธ ผู้ใช้ต้องเปิดผลดูจึงรู้ว่าเป็นเพราะโหมด
 - **Plan ไม่ถามผู้ใช้เรื่องคำสั่ง** ไม่มีการ์ดในโหมด Plan สำหรับคำสั่ง ทุกคำสั่งที่ไม่ปลอดภัยถูกปฏิเสธทันที
 - **turn ไม่จบ** การปฏิเสธทั้งสามแบบเป็นผลที่โมเดลอ่านแล้วทำต่อได้ ต่างจากผู้ใช้กด Deny
+
+เมื่อแผนเสร็จแล้ว ดู [จบแผนแล้วคุณกด Start building](/scenarios/perm/plan-start-building/)
