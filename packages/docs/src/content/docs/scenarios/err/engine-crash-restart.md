@@ -20,7 +20,7 @@ scenario:
       do: >-
         ทุกอย่างของ turn ที่อยู่ในหน่วยความจำหายไปพร้อม process: `AbortController` ข้อความที่กำลัง stream และคำสั่งที่กำลังรัน
         ที่เหลืออยู่คือ log ของ session ซึ่ง `record` เขียนทีละ event ถ้า process ตายกลางบรรทัด บรรทัดสุดท้ายจะขาด
-        และการเขียนครั้งต่อไปตัดมันทิ้งด้วย `dropTornTail`
+        และการเปิด log ครั้งต่อไปเพื่อเขียน (เช่น `resumeSession` ของ turn ถัดไป) ตัดมันทิ้งด้วย `dropTornTail`
       ref: "packages/engine/src/drive.ts#\"await appendEvent(file, numbered);\""
       phase: ending
 

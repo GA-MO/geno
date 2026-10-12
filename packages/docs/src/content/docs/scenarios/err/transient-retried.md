@@ -41,7 +41,7 @@ scenario:
                 do: >-
                   `classifyFailure` เทียบกับตาราง `RULES` ตามลำดับ ข้อความไม่ได้พูดถึงโควตา rate limit หรือ context
                   สถานะ 529 จึงตรงกฎ 408 และ 5xx ได้ชนิด `transient` ซึ่งลองใหม่ได้
-                  `retryDelayMs` ให้รอ 1 วินาทีก่อนครั้งที่สอง (ถ้าเซิร์ฟเวอร์ส่ง `retry-after` มาไม่เกิน 20 วินาที ใช้ค่านั้นแทน)
+                  `retryDelayMs` ให้รอ 1 วินาทีก่อนครั้งที่สอง (ถ้าเซิร์ฟเวอร์ส่ง `retry-after` มาไม่เกิน 20 วินาที ใช้ค่านั้นแทน ถ้าเกิน 20 วินาที gateway เลิกลองทันที)
                 ref: packages/core/src/model-error.ts#RULES
                 emits: [transient]
 
@@ -129,7 +129,8 @@ scenario:
                 at: rail
                 alongside: true
                 do: >-
-                  byte แรกของการเรียกใหม่มาเป็น action `progress` ซึ่งลบแถวประกาศ Retrying ออก แล้วแถว "Thinking" กลับมา
+                  ทันทีที่การเรียกใหม่ได้ slot และเริ่ม (ก่อน byte แรก) `watchStream` รายงาน progress ครั้งแรก
+                  action `progress` จึงลบแถวประกาศ Retrying ออก แล้วแถว "Thinking" กลับมา
                 sees: แถว Retrying หายไป แถว "Thinking" ขึ้นแทน
                 ref: "packages/extension/src/chat/transcript.ts#\"progress: (transcript, { progress }) =>\""
               - use: answer-streams
