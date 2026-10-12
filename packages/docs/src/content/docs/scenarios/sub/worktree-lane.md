@@ -10,16 +10,27 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน workspace เป็น git repository
     - เปิด Geno ในโหมด Auto ผู้ใช้กำลังแก้ไฟล์ใน checkout หลักอยู่
   trigger: >-
-    ผู้ใช้ขอให้ลองย้าย `src/log.ts` ไปใช้ pino โดยไม่ยุ่งกับงานที่ทำค้างอยู่ model ขอ `agent` แบบ `isolation: "worktree"`
+    ผู้ใช้ขอให้ `parseVersion` โยน error เมื่อได้สตริงว่าง ใน lane แยก โดยไม่ยุ่งกับงานที่ทำค้างอยู่ model ขอ `agent` แบบ `isolation: "worktree"`
   covers: [sub.worktree-lane]
   related: [wf.lane-apply, sub.blocking-report, sub.fork, wf.arena-best-of-n]
   steps:
     - id: wants
       beat:
         title: Model ขอ worker ใน worktree ของตัวเอง
-        text: 'คุณขอให้ลองย้าย `src/log.ts` ไปใช้ pino โดยไม่ยุ่งกับงานที่ค้างอยู่ model จึงขอ worker แบบ `isolation: "worktree"`'
+        text: >-
+          schema ของ tool `agent` มี `isolation` ที่มีค่าเดียวคือ `worktree` (แท็บแรก) model ส่ง `tool_use` ที่มี
+          `agent: "worker"`, `isolation: "worktree"` และ `task` ที่เขียนให้ครบในตัว (แท็บสอง) ไม่มี `background` จึงรอรายงาน
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=2
+            select: tools[9]
+            highlight: [input_schema.properties.isolation]
+          - kind: payload
+            source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=10
+            select: messages[1].content
+            highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "worker"`, `isolation: "worktree"` และ task ที่เขียนให้ครบในตัว
@@ -54,9 +65,17 @@ scenario:
     - id: lane
       beat:
         title: Geno สร้าง git worktree บน branch `geno/`
-        text: worktree อยู่ใต้ `.geno/worktrees/` Geno คัดลอกไฟล์ที่ต้องใช้และ `node_modules` ไปให้ sandbox ของ worker ครอบแค่ lane และไฟล์ที่มันแก้ลงดิสก์ตรงๆ ไม่ผ่าน buffer ของ VS Code
+        text: >-
+          worktree อยู่ใต้ `.geno/worktrees/` Geno คัดลอกไฟล์ที่ต้องใช้และ `node_modules` ไปให้ sandbox ของ worker ครอบแค่ lane
+          และไฟล์ที่มันแก้ลงดิสก์ตรงๆ ไม่ผ่าน buffer ของ VS Code ข้อความแรกของ worker บอกว่า workspace ของมันคือ lane
+          บน branch ไหน checkout หลักอยู่ที่ไหน และห้าม `git stash` เปล่าๆ เพราะ stash ใช้ร่วมกันทุก lane
         from: engine
         to: machine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=4
+          select: messages[0]
+          highlight: ['content[0].text', 'content[1].text']
       lane: loop
       at: agent
       do: >-
@@ -111,14 +130,19 @@ scenario:
 
     - id: works
       beat:
-        title: worker แก้ `src/log.ts` ใน lane
-        text: worker แก้ `src/log.ts` กับ `package.json` รันเทสต์ใน sandbox ของ lane แล้วรายงานสิ่งที่เปลี่ยน
+        title: worker แก้ `src/version.ts` ใน lane
+        text: worker อ่านแล้วแก้ `src/version.ts` ใน lane path ใน `edit` เป็น path เดียวกับ checkout หลัก แต่ไฟล์ที่ถูกแก้คือของ lane แล้ว worker เรียก `report`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=8
+          select: messages[3].content
+          highlight: ['[1].input']
       lane: child@worker
       at: model
       do: >-
-        ลูกเรียก model อ่านและแก้ `src/log.ts` กับ `package.json` ใน lane แล้วรันเทสต์ใน sandbox ของ lane
+        ลูกเรียก model อ่านและแก้ `src/version.ts` ใน lane
         จบด้วยการเรียก `report` ที่สรุปสิ่งที่เปลี่ยน
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
@@ -190,9 +214,16 @@ scenario:
     - id: fenced
       beat:
         title: Geno ส่งรายงานพร้อมโน้ตของ lane ให้ model
-        text: รายงานกลับมาเป็นผลของ call ในรั้ว โน้ตของ lane ต่อท้ายรายงาน แล้ว Geno ส่งให้ model อ่าน
+        text: >-
+          รายงานกลับมาเป็นผลของ call ในรั้ว โน้ต `[Geno]` ของ lane อยู่ในรั้วต่อจากรายงานที่เยื้องไว้: งานอยู่ใน lane ไหน
+          บน branch อะไร ไฟล์ไหนเปลี่ยน และผู้ใช้นำกลับด้วยแผง Lanes หรือ `gcode lane apply` ท้ายรั้วคือคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=10
+          select: messages[2].content[0]
+          highlight: [content]
       lane: loop
       at: tools
       do: >-
