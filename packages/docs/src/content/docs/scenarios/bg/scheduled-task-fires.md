@@ -15,6 +15,10 @@ scenario:
   related: [bg.schedule-wakeup, bg.task-attention, wf.spinoff]
   steps:
     - id: look
+      beat:
+        title: Geno ดูงานที่ตั้งเวลาไว้
+        text: engine ของหน้าต่างที่เปิดอยู่ดูไฟล์งานของ workspace อย่างน้อยทุก 60 วินาที และตั้งนาฬิกาไว้ตรงเวลาของงานถัดไป ตอนนี้ถึง 09:00 ของวันจันทร์
+        ask: พร้อมรันไหม
       lane: server
       at: schedules
       do: >-
@@ -33,6 +37,9 @@ scenario:
             label: ไม่มีหน้าต่างเปิดอยู่เลย
             steps:
               - lane: server
+                beat:
+                  title: ไม่มีหน้าต่างเปิดอยู่เลย
+                  text: Geno ไม่มี daemon ของระบบ engine จบเองหลังหน้าต่างสุดท้ายปิด จึงไม่มีอะไรเริ่มรอบนี้ เมื่อคุณเปิดหน้าต่าง engine ตัวใหม่ดูงานแล้วจดว่ารอบนี้พลาด
                 at: schedules
                 do: >-
                   ไม่มี engine ที่มีหน้าต่างต่อ (engine จบเองหลังหน้าต่างสุดท้ายปิด 10 วินาที) จึงไม่มีอะไรเริ่ม Geno ไม่มี daemon ของระบบ
@@ -40,6 +47,11 @@ scenario:
                   ถ้าเกิน งานถูกจดว่าพลาด
                 ref: packages/core/src/schedule.ts#SCHEDULE_POLICY
               - lane: panel
+                beat:
+                  title: Tasks บอกว่ารอบนี้พลาด
+                  text: ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด พร้อมวันและเวลา
+                  sees: "Missed Mon 12 Oct 09:00: Geno was not running"
+                  end: รอบนี้พลาด
                 at: tasks
                 do: >-
                   ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด พร้อมวัน วันที่ เดือน และเวลาของรอบนั้น
@@ -52,12 +64,20 @@ scenario:
             label: รอบก่อนยังรันอยู่
             steps:
               - lane: server
+                beat:
+                  title: รอบก่อนยังรันอยู่
+                  text: รอบวันศุกร์ยังไม่จบ Geno ไม่ซ้อนรอบ มันจดว่ารอบนี้พลาดเพราะรอบก่อนยังรัน
                 at: schedules
                 do: >-
                   รอบก่อนหน้า (รอบวันศุกร์) ยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` ตัดสินว่าพลาดเพราะรอบก่อนยังรัน
                   แล้ว `Scheduler.settle` จดรอบที่พลาดลงไฟล์งาน
                 ref: packages/engine/src/schedules.ts#Scheduler.settle
               - lane: panel
+                beat:
+                  title: Tasks บอกว่ารอบนี้พลาด
+                  text: ส่วน Scheduled แสดงรอบที่พลาด พร้อมวันและเวลา
+                  sees: "Missed Mon 12 Oct 09:00: the last run still ran"
+                  end: รอบนี้พลาด
                 at: tasks
                 do: >-
                   ส่วน Scheduled แสดงรอบที่พลาด พร้อมวัน วันที่ เดือน และเวลาของรอบนั้น
@@ -67,6 +87,9 @@ scenario:
                 end: { turn: none }
 
     - id: start
+      beat:
+        title: Geno เริ่มรอบ 09:00
+        text: engine ของหน้าต่างที่ต่ออยู่เริ่มรอบ แล้วจดลงไฟล์งานว่ารอบนี้เริ่มแล้วแต่ยังไม่จบ
       lane: server
       at: schedules
       do: >-
@@ -75,6 +98,9 @@ scenario:
       emits: [ran]
 
     - id: session
+      beat:
+        title: Geno เปิด session ใหม่ในโหมด Plan
+        text: งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan งานที่แก้ไฟล์ได้จะได้ lane ใหม่และโหมด Auto ขีดจำกัดของ turn คืองบของงาน
       lane: server
       at: sessions
       do: >-
@@ -85,6 +111,10 @@ scenario:
       phase: starting
 
     - id: tools
+      beat:
+        title: รอบนี้ไม่มีใครตอบคำถาม
+        text: รอบตามตารางไม่มี tool ถามคุณ ไม่ขยับ editor และตั้งงานใหม่ไม่ได้ ข้อความแรกบอก model ว่าไม่มีใครอ่านจนกว่ารอบจะจบ แผง Tasks ขึ้นงานใหม่ใน Working
+        sees: งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since Mon 12 Oct 09:00"
       lane: loop
       at: agent
       do: >-
@@ -105,6 +135,10 @@ scenario:
     - use: model-call
 
     - id: works
+      beat:
+        title: Model ตรวจ dependency แล้วเขียนรายงาน
+        text: model ใช้ tool อ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย turn จบแบบ done
+        to: engine
       lane: model
       do: >-
         โมเดลทำตาม prompt ด้วยเครื่องมืออ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของเครื่องมือไว้) แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
@@ -122,6 +156,12 @@ scenario:
       phase: ending
 
     - id: recorded
+      beat:
+        title: Geno จดผลของรอบ
+        text: Geno อ่านผลจาก log ของ session แล้วจดผลและค่าใช้จ่ายลงไฟล์งาน ทุกหน้าต่างเห็น คลิกแถวเพื่อเปิด session ของรอบนั้นและอ่านรายงาน
+        to: panel
+        sees: "Last run Mon 12 Oct 09:00: Done · $0.03"
+        end: รอบจบ ผลอยู่ใน Tasks
       lane: server
       at: schedules
       do: >-

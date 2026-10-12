@@ -15,6 +15,10 @@ scenario:
   related: [bg.child-wakes-parent, bg.arrives-mid-turn, cli.agent-run]
   steps:
     - id: wants
+      beat:
+        title: Model เริ่ม explore แบบเบื้องหลัง
+        text: "ใน `gcode agent` model ส่งงานค้นให้ explore พร้อม `background: true` แล้วไม่รอ"
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
@@ -32,6 +36,10 @@ scenario:
       phase: running-tools
 
     - id: launch
+      beat:
+        title: Geno เริ่ม explore โดยไม่รอ
+        text: session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
+        sees: "> explore started (<โมเดล>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
       lane: loop
       at: tools
       runs: 1
@@ -59,6 +67,10 @@ scenario:
       emits: [tool-result]
 
     - use: model-call
+      beat:
+        title: Model บอกว่า explore กำลังค้น
+        text: Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ แล้วจบ turn ข้อความขึ้นใน stdout
+        to: model
 
     - id: says
       lane: model
@@ -68,6 +80,11 @@ scenario:
       emits: [end_turn]
 
     - id: held
+      beat:
+        title: Geno ถือ turn ไว้
+        text: ใน CLI ไม่มีอะไรปลุก session ทีหลัง และ session ยังค้างรายงาน Geno จึงไม่ให้ turn จบ process รออยู่
+        from: engine
+        ask: อะไรเกิดก่อน
       lane: loop
       at: drive
       do: >-
@@ -86,6 +103,10 @@ scenario:
             label: ผู้ใช้กด Ctrl-C
             steps:
               - lane: user
+                beat:
+                  title: คุณกด Ctrl-C
+                  text: คุณไม่อยากรอ การรอจบทันที Geno บันทึกว่าคุณหยุด run
+                  from: you
                 do: ผู้ใช้ไม่อยากรอ จึงกด Ctrl-C
               - lane: loop
                 at: drive
@@ -95,6 +116,12 @@ scenario:
                 emits: [error, abort]
                 phase: ending
               - lane: loop
+                beat:
+                  title: Geno หยุด explore แล้วจบ process
+                  text: turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัว รายงานของ explore ไม่มีใครได้ยิน เทอร์มินัลพิมพ์ usage แล้วจบด้วย exit 130
+                  to: panel
+                  sees: "usage: ... turns=2"
+                  end: คุณหยุด run
                 at: agent
                 do: >-
                   turn ไม่ได้จบด้วย `end_turn` `runAgent` จึงหยุดลูกเบื้องหลังทุกตัวด้วย `stopBackground` รายงานของ explore ไม่มีใครได้ยิน
@@ -109,6 +136,11 @@ scenario:
                 end: { turn: stopped, reason: abort }
 
     - id: report
+      beat:
+        title: explore รายงานแล้วจบ
+        text: explore ค้นเสร็จ เทอร์มินัลพิมพ์บรรทัดว่ามันจบ พร้อมจำนวนรอบและค่าใช้จ่าย
+        to: engine
+        sees: "> explore done, turns=3 $0.0071"
       lane: child@explore
       at: model
       do: >-
@@ -126,6 +158,10 @@ scenario:
       ref: packages/engine/src/subagents.ts#terminalChildHost
 
     - id: put
+      beat:
+        title: Geno ส่งรายงานเข้า turn ที่ถือไว้
+        text: Geno ใส่รายงานในรั้วลงกล่อง การรอจบ turn ที่ถือไว้บันทึกรายงานแล้วเรียก model อีกครั้ง
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -144,6 +180,10 @@ scenario:
       phase: calling-model
 
     - id: relays
+      beat:
+        title: Model สรุปลง stdout
+        text: model อ่านรายงาน แล้วเขียนสรุปไฟล์ที่ใช้ API เก่า
+        to: panel
       lane: model
       do: >-
         โมเดลอ่านรายงานในรั้ว แล้ว stream สรุปไฟล์ที่ใช้ API เก่าลง stdout จบด้วย `stop_reason: end_turn`
@@ -151,6 +191,11 @@ scenario:
       emits: [end_turn]
 
     - id: ends
+      beat:
+        title: run จบ
+        text: ไม่มีรายงานค้างแล้ว turn จึงจบจริง เทอร์มินัลพิมพ์ usage ว่าเรียก model สามครั้ง แล้ว process จบด้วย exit 0
+        sees: "usage: ... turns=3"
+        end: process จบ exit 0
       lane: loop
       at: step
       do: >-

@@ -1,5 +1,5 @@
 ---
-title: รายงานมาถึงขณะ turn ยังทำงาน
+title: "รายงานของ subagent มาถึงขณะ turn ยังทำงาน"
 description: ลูกเบื้องหลังรายงานระหว่างที่ turn ของแม่ยังรันเครื่องมืออยู่ รายงานรอที่จุดปลอดภัยถัดไป แล้วเข้า log ก่อนเรียกโมเดลครั้งต่อไป ไม่ต้องปลุก
 tableOfContents: false
 sidebar:
@@ -15,6 +15,15 @@ scenario:
   related: [bg.child-wakes-parent, bg.cli-holds-turn, ctl.steer-delivered, sub.message-running-child]
   steps:
     - id: report
+      beat:
+        title: explore ส่งรายงานแล้วจบ
+        text: explore ที่ model เริ่มไว้เบื้องหลังค้นเสร็จ มันส่งรายการไฟล์ที่ใช้ API เก่า แถวของมันในแชตหยุดหมุนทันที
+        to: engine
+        sees:
+          kind: task
+          title: explore
+          status: done
+          detail: 41s
       lane: child@explore
       at: model
       do: >-
@@ -40,6 +49,9 @@ scenario:
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: put
+      beat:
+        title: Geno เก็บรายงานไว้ในกล่องของแม่
+        text: turn ของแม่ยังทำงานอยู่ Geno จึงไม่ต้องปลุกใคร มันจดว่า explore จบ แล้วใส่รายงานในรั้วลงกล่องข้อความของแม่
       lane: loop
       at: tools
       do: >-
@@ -49,6 +61,9 @@ scenario:
       emits: [child-end, child-report]
 
     - id: holds
+      beat:
+        title: รายงานรอจน `pnpm build` จบ
+        text: รายงานไม่แทรกกลางชุด tool ที่กำลังรัน มันรอในกล่องจนกว่า `pnpm build` จะจบ
       lane: loop
       at: tools
       do: >-
@@ -57,6 +72,14 @@ scenario:
       ref: packages/core/src/steer.ts#STEER_AT
 
     - id: build-done
+      beat:
+        title: "`pnpm build` จบ"
+        text: build ผ่าน ผลของมันขึ้นใต้ขั้นในแชต
+        from: machine
+        sees:
+          kind: step
+          label: pnpm build
+          status: done
       lane: tool
       at: shell
       do: >-
@@ -66,6 +89,9 @@ scenario:
     - use: tool-result-returns
 
     - id: decide
+      beat:
+        title: Geno ใส่รายงานต่อท้ายผลของ build
+        text: ที่จุดปลอดภัยก่อนเรียก model Geno หยิบรายงานจากกล่อง แล้วบันทึกต่อท้ายผลของ build ส่วนต้นของบทสนทนาที่ cache ไว้จึงไม่เปลี่ยน
       lane: loop
       at: step
       do: >-
@@ -84,6 +110,10 @@ scenario:
       emits: [user]
 
     - id: shown
+      beat:
+        title: แชตขึ้นบรรทัดว่า explore รายงานแล้ว
+        text: แชตวาดบรรทัดสั้นตรงที่รายงานลง ไม่แสดงเนื้อรายงาน คุณอ่านมันได้จากแถวของ explore
+        sees: บรรทัด "explore reported back"
       lane: server
       at: updates
       do: >-
@@ -101,6 +131,10 @@ scenario:
       ref: packages/extension/src/chat/steer-view.ts#steerStep
 
     - id: request
+      beat:
+        title: Geno ส่งทั้งสองอย่างให้ model
+        text: รายงานขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของคุณ ตามด้วยรั้ว `<subagent_report>`
+        to: model
       lane: loop
       at: model-call
       do: >-
@@ -108,6 +142,10 @@ scenario:
       ref: packages/core/src/fence.ts#arrivalText
 
     - id: reads
+      beat:
+        title: Model อ่านผล build และรายงานพร้อมกัน
+        text: model อ่านทั้งสองอย่างในคำขอเดียว แล้วทำงานต่อใน turn เดิม ไม่มีการปลุก
+        end: Turn ทำต่อ
       lane: model
       do: >-
         โมเดลอ่านทั้งผลของ `pnpm build` และรายงานของ explore ในคำขอเดียว แล้วทำงานต่อใน turn เดิม

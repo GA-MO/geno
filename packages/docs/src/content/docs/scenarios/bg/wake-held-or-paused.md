@@ -15,6 +15,10 @@ scenario:
   related: [bg.child-wakes-parent, bg.user-cancels-wakes, bg.task-attention, bg.monitor-wakes]
   steps:
     - id: report
+      beat:
+        title: explore รายงานเสร็จ
+        text: session นี้ไม่มี turn ทำงาน แต่รอ explore ที่เริ่มไว้ใน turn ก่อน explore ส่งรายงานแล้วจบ
+        to: engine
       lane: child@explore
       at: model
       do: >-
@@ -24,6 +28,9 @@ scenario:
       phase: idle
 
     - id: logged
+      beat:
+        title: Geno บันทึกรายงานลง log ทันที
+        text: ไม่มี turn รับรายงาน Geno จึงบันทึกมันลง log ก่อน แล้วค่อยดูว่าปลุกได้ไหม
       lane: server
       at: wakes
       do: >-
@@ -33,6 +40,10 @@ scenario:
       emits: [child-end, user]
 
     - id: gate
+      beat:
+        title: Geno ดูว่าปลุกได้ไหม
+        text: Geno ไล่กฎตามลำดับ การปลุกปิดอยู่ไหม มี turn รัน การปลุกถูกพัก มีการ์ดค้าง คุณกำลังพิมพ์ หรือไม่มีหน้าต่าง
+        ask: ปลุกได้ไหม
       lane: server
       at: wakes
       do: >-
@@ -47,12 +58,19 @@ scenario:
             then: wake
             steps:
               - lane: server
+                beat:
+                  title: รอ เพราะมีการ์ดค้าง
+                  text: subagent อีกตัวของ session นี้รอการ์ด permission Geno ไม่ให้ turn ใหม่แทรกขณะคุณตัดสินใจ
                 at: tasks
                 do: >-
                   ลูกอีกตัวของ session นี้รอการ์ดขออนุญาตอยู่ งานจึงเป็น `needs-input` `Tasks.asks` ตอบว่าใช่
                   ประตูตอบ `hold` (`card`) เพื่อไม่ให้ turn ใหม่แทรกขณะผู้ใช้กำลังตัดสินใจ
                 ref: packages/engine/src/tasks.ts#Tasks.asks
               - lane: user
+                beat:
+                  title: คุณตอบการ์ด
+                  text: งานใน Tasks เปลี่ยน Geno ดูอีกครั้ง ไม่มีอะไรกันแล้ว
+                  from: you
                 do: ผู้ใช้ตอบการ์ดนั้น
               - lane: server
                 at: wakes
@@ -65,12 +83,19 @@ scenario:
             then: wake
             steps:
               - lane: server
+                beat:
+                  title: รอ เพราะไม่มีหน้าต่าง
+                  text: คุณปิดหน้าต่าง VS Code ทุกบาน engine ยังรัน explore จนเสร็จ แต่ไม่มีหน้าต่างให้รัน turn
                 at: wakes
                 do: >-
                   ผู้ใช้ปิดหน้าต่าง VS Code ทุกบาน engine ยังรันลูกจนเสร็จ แต่ไม่มีหน้าต่างให้รัน turn ที่ถูกปลุก
                   ประตูตอบ `hold` (`window`)
                 ref: packages/core/src/wake.ts#wakeGate
               - lane: user
+                beat:
+                  title: คุณเปิดโฟลเดอร์อีกครั้ง
+                  text: หน้าต่างต่อ engine ก่อนมันจบ Geno ดูทุก session ที่รออยู่ คราวนี้มีหน้าต่างแล้ว
+                  from: you
                 do: ผู้ใช้เปิดโฟลเดอร์เดิมใน VS Code อีกครั้งก่อนที่ engine จะจบ
               - lane: server
                 at: wakes
@@ -82,6 +107,10 @@ scenario:
             label: paused เพราะ turn ก่อนจบด้วย error
             steps:
               - lane: server
+                beat:
+                  title: พัก เพราะ turn ก่อนจบด้วย error
+                  text: turn ล่าสุดจบด้วย Stop ขีดจำกัด หรือ error อื่น การปลุกพักไว้จนคุณส่ง prompt ทางนี้ไม่มีอะไรรอต่อ แผง Tasks จึงไม่บอกว่าพัก
+                  sees: แถวของ session ขึ้นเหมือนงานที่จบแล้วตามปกติ
                 at: wakes
                 do: >-
                   turn ล่าสุดของ session จบด้วย error (ผู้ใช้กด Stop ขีดจำกัด หรือ error อื่น) `wakePauseOf` ตอบว่าพักไว้จนผู้ใช้ส่ง prompt
@@ -97,6 +126,11 @@ scenario:
                 sees: แถวของ session ขึ้นเหมือนงานที่จบแล้วตามปกติ ไม่มีบรรทัด "Wake-ups paused after Stop"
                 ref: packages/extension/src/chat/lanes-model.ts#taskRowOf
               - lane: user
+                beat:
+                  title: คุณส่ง prompt ใหม่
+                  text: รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก prompt ของคุณยังปลดการพักด้วย
+                  from: you
+                  end: prompt ของคุณพารายงานไป
                 do: ภายหลังผู้ใช้ส่ง prompt ใหม่ใน session นี้
               - lane: loop
                 at: drive
@@ -110,6 +144,11 @@ scenario:
             label: paused เพราะปลุกครบ 12 ครั้งในชั่วโมงนี้
             steps:
               - lane: server
+                beat:
+                  title: พัก เพราะปลุกครบ 12 ครั้ง
+                  text: นับจาก prompt ล่าสุดของคุณ session ถูกปลุกไปแล้ว 12 ครั้งในหนึ่งชั่วโมง งานย้ายไปกลุ่ม Needs you
+                  sees: ป้าย "Wake-ups paused" และบรรทัด "Paused after 12 wake-ups in an hour"
+                  end: รอคุณใน Needs you
                 at: wakes
                 do: >-
                   นับจาก prompt ล่าสุดของผู้ใช้ session ถูกปลุกไปแล้ว 12 ครั้งในหนึ่งชั่วโมง `wakePauseOf` ตอบ `cap` ประตูตอบ `paused`
@@ -125,6 +164,11 @@ scenario:
                 end: { turn: waits, reason: cap }
 
     - id: wake
+      beat:
+        title: Geno เปิด turn ใหม่เอง
+        text: แชตเปิด turn ที่หัวมีกระดิ่งแทนข้อความของคุณ
+        to: panel
+        sees: 'กระดิ่งกับ "woke: 1 task finished"'
       lane: server
       at: wakes
       do: >-
@@ -154,6 +198,10 @@ scenario:
     - use: model-call
 
     - id: relays
+      beat:
+        title: Model เล่าผลของ explore
+        text: model อ่านรายงานแล้วเล่าผลให้คุณ
+        end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
         โมเดลอ่านรายงานของ explore แล้วเล่าผลให้ผู้ใช้ จบด้วย `stop_reason: end_turn`

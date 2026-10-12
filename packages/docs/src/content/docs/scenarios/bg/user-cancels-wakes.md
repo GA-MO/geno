@@ -1,5 +1,5 @@
 ---
-title: ผู้ใช้ยกเลิกการปลุก
+title: "ยกเลิกการปลุก"
 description: ผู้ใช้กด Cancel บนงานที่รอถูกปลุกในแผง Tasks engine เลิกรอทุกอย่างของ session ลูกเบื้องหลังจบโดยไม่รายงาน monitor และการเฝ้า PR หยุด และสิ่งที่มาถึงแล้วก็ไม่ปลุก
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [bg.task-stop-or-list, bg.wake-held-or-paused, bg.child-wakes-parent, sess.rewind]
   steps:
     - id: sees
+      beat:
+        title: Tasks บอกว่า session รอถูกปลุก
+        text: turn ก่อนจบไปแล้ว แต่ session รอสามอย่าง subagent explore monitor บน `bg-1` และ wake-up แถวของงานบอกว่ารออะไร พร้อมปุ่ม Cancel
+        sees: ป้าย "Waiting to wake" บรรทัด "Wakes on explore, a monitor on bg-1 and a wake-up at 14:30" และปุ่ม [Cancel]
       lane: panel
       at: tasks
       do: >-
@@ -26,6 +30,10 @@ scenario:
       phase: idle
 
     - id: click
+      beat:
+        title: คุณกด Cancel
+        text: คุณไม่อยากให้ Geno กลับมาทำต่อเอง แชตขอให้ engine เลิกรอทุกอย่างของ session นี้
+        to: engine
       lane: user
       do: ผู้ใช้กด Cancel
 
@@ -38,6 +46,9 @@ scenario:
       emits: [_gcode/wakeCancel]
 
     - id: cancel
+      beat:
+        title: Geno เลิกรอทุกอย่างของ session
+        text: explore ถูกปิดเสียงแล้วหยุด monitor เลิกเฝ้าและหยุด `bg-1` ที่มันเริ่มเอง นาฬิกาของ wake-up ถูกล้าง
       lane: server
       at: wakes
       do: >-
@@ -47,6 +58,9 @@ scenario:
       ref: packages/engine/src/wakes.ts#Wakes.cancel
 
     - id: logged
+      beat:
+        title: Geno ขีดเส้นแบ่งใน log
+        text: Geno จดว่าคุณยกเลิกการปลุก สิ่งที่มาถึงก่อนหน้านี้แต่ยังไม่ได้ปลุกก็จะไม่ปลุกแล้ว และ engine ตัวถัดไปจะไม่รับช่วงการรอ
       lane: server
       at: wakes
       do: >-
@@ -63,6 +77,10 @@ scenario:
       ref: packages/core/src/wake.ts#unwokenOf
 
     - id: child-ends
+      beat:
+        title: explore ปิดตัวโดยไม่มีรายงาน
+        text: explore จบแบบ cancelled การจบของมันถูกบันทึกหลังเส้นแบ่ง จึงไม่ปลุกใคร
+        from: model
       lane: child@explore
       at: loop
       do: >-
@@ -72,6 +90,11 @@ scenario:
       emits: [cancelled, child-end]
 
     - id: row
+      beat:
+        title: แถวของงานกลับเป็นงานที่จบแล้ว
+        text: บรรทัดว่ารออะไรและปุ่ม Cancel หายไป ไม่มีอะไรปลุก session นี้จนกว่าคุณจะส่ง prompt
+        sees: แถวของ session ไม่มี "Wakes on ..." และไม่มีปุ่ม Cancel
+        end: ไม่มีอะไรปลุก session
       lane: panel
       at: tasks
       do: >-

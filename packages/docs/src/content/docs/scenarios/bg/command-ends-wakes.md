@@ -15,8 +15,22 @@ scenario:
   related: [bg.child-wakes-parent, bg.monitor-wakes, bg.task-stop-or-list, tool.bash-background]
   steps:
     - use: tool-call-opens
+      beat:
+        title: Model ขอรัน `pnpm build` เบื้องหลัง
+        text: "model ส่ง `run_in_background: true` เพื่อไม่ต้องรอ build การ์ดเป็นคำขอจริงจากการรันที่เริ่ม `npm run dev` เบื้องหลังแบบเดียวกัน"
+        from: model
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/session.jsonl#seq=3
+          select: content[2]
+          highlight:
+            - input.run_in_background
 
     - id: approve
+      beat:
+        title: Geno ตรวจคำสั่งกับกฎของคุณ
+        text: คำสั่งเบื้องหลังผ่านกฎชุดเดียวกับคำสั่งปกติ กฎ allow ของ workspace ครอบ `pnpm build` จึงไม่ขึ้นการ์ด ในโหมด Plan คำสั่งเบื้องหลังถูกปฏิเสธทันที
       lane: policy
       at: rules
       do: >-
@@ -25,6 +39,15 @@ scenario:
       ref: packages/core/src/permission-rules.ts#ruledDenial
 
     - id: start
+      beat:
+        title: build เริ่มรันเบื้องหลัง
+        text: คำสั่งได้ id `bg-1` และรันใน sandbox ผลทั้งหมดไปลงไฟล์ ผลของ call บอก model ทันทีว่าเริ่มแล้ว
+        from: machine
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/session.jsonl#seq=4
+          select: output
       lane: tool
       at: shell
       do: >-
@@ -34,6 +57,13 @@ scenario:
       emits: [Started background command]
 
     - id: shown
+      beat:
+        title: แชตและ Tasks แสดงคำสั่งที่รันอยู่
+        text: ขั้นของคำสั่งและงานในแผง Tasks อัปเดตทุกครั้งที่งานเปลี่ยน
+        sees:
+          kind: task
+          title: pnpm build
+          status: running
       lane: server
       at: updates
       do: >-
@@ -45,6 +75,11 @@ scenario:
     - use: tool-result-returns
 
     - id: when
+      beat:
+        title: build รันต่อไป
+        text: loop ทำงานอื่นได้ระหว่างนั้น ทางที่ model ได้รู้ผลขึ้นกับว่า turn ยังรันอยู่ไหม
+        from: machine
+        ask: build จบตอนไหน
       lane: tool
       at: shell
       do: >-
@@ -57,6 +92,10 @@ scenario:
             label: ระหว่างที่ turn ยังรัน
             steps:
               - lane: loop
+                beat:
+                  title: Model ทำงานอื่นต่อ
+                  text: model อ่านว่า bg-1 เริ่มแล้ว และทำงานอื่น เช่นแก้เอกสาร ระหว่างนั้น build จบด้วย exit 0
+                  to: model
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `call-model` โมเดลอ่านว่า bg-1 เริ่มแล้ว และทำงานอื่นต่อ เช่นแก้เอกสาร
@@ -71,6 +110,9 @@ scenario:
                 ref: packages/core/src/background.ts#TELLS_MODEL
                 emits: [background-end]
               - lane: loop
+                beat:
+                  title: Geno ใส่โน้ตไว้ก่อนเรียก model
+                  text: ที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไป Geno บันทึกว่า build จบ พร้อมท้ายของผล
                 at: drive
                 do: >-
                   ที่จุดปลอดภัยก่อนเรียกโมเดลครั้งถัดไป `deliver()` บันทึก event `background-end` ลง log
@@ -78,6 +120,10 @@ scenario:
                 ref: packages/engine/src/drive.ts#deliver
                 emits: [background-end]
               - lane: model
+                beat:
+                  title: Model รู้ว่า build ผ่าน
+                  text: คำขอถัดไปมีโน้ต "Background command bg-1 (`pnpm build`) exited with code 0." model ทำงานต่อใน turn เดิม
+                  end: Turn ทำต่อ
                 do: >-
                   คำขอถัดไปมีโน้ตว่า "Background command bg-1 (`pnpm build`) exited with code 0." พร้อมที่อยู่ไฟล์ผลและท้ายของผล
                   ที่ล้อมไว้เป็นข้อมูล โมเดลทำงานต่อโดยรู้ว่า build ผ่าน
@@ -88,6 +134,10 @@ scenario:
             label: หลัง turn จบแล้ว
             steps:
               - lane: model
+                beat:
+                  title: Model บอกว่าจะแจ้งเมื่อเสร็จ แล้วจบ turn
+                  text: model ไม่วนถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง คำสั่งเบื้องหลังไม่ถือ turn ไว้ และไม่ถูกฆ่าตอน turn จบ
+                  to: engine
                 do: >-
                   โมเดลบอกผู้ใช้ว่า build กำลังรันและจะแจ้งเมื่อเสร็จ แล้วจบด้วย `stop_reason: end_turn`
                   (system prompt บอกให้จบ turn แทนการคอยถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง)
@@ -102,6 +152,10 @@ scenario:
                 emits: [end_turn]
                 phase: idle
               - lane: tool
+                beat:
+                  title: build จบหลายนาทีต่อมา
+                  text: build จบด้วย exit 0 และส่งโน้ตเข้ากล่องข้อความของ session
+                  from: machine
                 at: shell
                 runs: 0
                 do: >-
@@ -109,6 +163,11 @@ scenario:
                 ref: packages/core/src/background.ts#TELLS_MODEL
                 emits: [background-end]
               - lane: server
+                beat:
+                  title: Geno ปลุก session
+                  text: ไม่มี turn รันอยู่ Geno บันทึกโน้ตลง log รอ 2 วินาที ไม่มีการ์ดค้างและคุณไม่ได้พิมพ์ จึงเปิด turn ใหม่ที่หัวมีกระดิ่ง
+                  to: panel
+                  sees: 'กระดิ่งกับ "woke: 1 task finished" หัวข้อ "working"'
                 at: wakes
                 do: >-
                   ไม่มี turn รันอยู่ `logArrivals` จึงบันทึก event `background-end` ลง log ทันที แล้ว `wakeGate` รอ 2 วินาที
@@ -124,6 +183,10 @@ scenario:
                   กระดิ่งกับ "woke: 1 task finished" หัวข้อ "working"
                 ref: packages/extension/src/chat/render.ts#turnHead
               - lane: model
+                beat:
+                  title: Model เล่าผล build
+                  text: model อ่านโน้ตของ bg-1 และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ
+                  end: Model เล่าผล build
                 do: >-
                   โมเดลอ่านโน้ตของ bg-1 ตามด้วยข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผล build ให้ผู้ใช้
                 ref: packages/core/src/background.ts#backgroundEndNotice
