@@ -1,6 +1,6 @@
 import type { ContentBlock, Message, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages/messages';
 
-/** Arguments that are not a JSON object reach the tool as they came, so its validation error shows the model what it sent. */
+/** Arguments that are not a JSON object reach the tool as `{ invalid_json }`, so its error shows the model what it sent (`invalidInputError`). */
 export function parseToolInput(json: string): unknown {
   if (json.trim() === '') return {};
   try {
@@ -9,6 +9,24 @@ export function parseToolInput(json: string): unknown {
   } catch {
     return { invalid_json: json };
   }
+}
+
+const isJson = (text: string): boolean => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** What `tool` answers to arguments `parseToolInput` could not take as a JSON object, echoing them; undefined for any other input. */
+export function invalidInputError(tool: string, input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null || Object.keys(input).length !== 1) return undefined;
+  const text = (input as { readonly invalid_json?: unknown }).invalid_json;
+  if (typeof text !== 'string') return undefined;
+  const problem = isJson(text) ? 'was JSON but not an object' : 'was not valid JSON';
+  return `Your input to ${tool} ${problem}: ${text}. Send it again as a JSON object that matches the tool's input_schema.`;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };

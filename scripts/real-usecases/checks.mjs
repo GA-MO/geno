@@ -38,6 +38,19 @@ export function analyze(events) {
 
 export const outputOf = (call) => (call.result === undefined ? '' : (call.result.output ?? JSON.stringify(call.result.spill ?? '')));
 export const bashCalls = (run) => run.calls.filter((c) => c.name === 'bash');
+
+/**
+ * Geno's refusals of a bash line before it runs any of it: a step a file tool does (`fileStepRefusal` in
+ * shell-intent.ts), a server start (`serverRefusal`, there) and a leading sleep (`sleepRefusal` in tools.ts).
+ */
+const PRE_RUN_REFUSAL = /^(Geno ran nothing: |Blocked: )/;
+/**
+ * Whether a call ran: Geno did not refuse it before running, and the user, a rule or the classifier did not deny it
+ * (no-repeat-denied judges those). A refused call is the engine holding a rule, not the model getting past it.
+ */
+export const ran = (call) => call.result?.status !== 'denied' && call.result?.status !== 'rejected' && !PRE_RUN_REFUSAL.test(outputOf(call));
+/** The bash calls that ran. */
+export const bashRan = (run) => bashCalls(run).filter(ran);
 export const named = (run, name) => run.calls.filter((c) => c.name === name);
 export const pathOf = (call) => String(call.input.path ?? call.input.file_path ?? '');
 const norm = (p) => p.replace(/^\.\//, '');
@@ -64,12 +77,39 @@ export const isUntilWait = (command) => {
 };
 
 const SHELL_FOR_FILES = /^\s*(cat|head|tail|less|ls|find|grep|rg|sed\s+-n|awk)\b/;
-/** Geno's refusal of a bash line with a step a file tool does, which runs none of it (`fileStepRefusal` in shell-intent.ts). */
-const FILE_STEP_REFUSAL = /^Geno ran nothing: /;
+/**
+ * cat, head or tail writing a file, with an output redirect or a heredoc, as in `cat > "$TMPDIR/gen.mjs" <<'EOF'`.
+ * A stderr redirect such as `2>/dev/null` leaves it a read.
+ */
+const SHELL_WRITE_STEP = /^\s*(cat|head|tail)\b([^|]*(?<![\d&])>(?!&)|.*<<)/;
+
+/** `command` with each heredoc's body left out, so the lines of a script it writes are not read as commands. */
+const withoutHeredocs = (command) => command.replace(/<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g, '<<$2$3');
+
+const unquoted = (match) => match.slice(1).find((group) => group !== undefined);
+/**
+ * The files a shell line writes: each output redirect's, tee's and sed -i's, without /dev/null and fd duplications. A
+ * variable the line sets, as in `D="$scratch/head"; cat > "$D/x.js"`, is filled in; $TMPDIR and the rest stay as written.
+ */
+function writeTargets(command) {
+  const vars = new Map([...command.matchAll(/(?:^|[\s;&|])([A-Za-z_]\w*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|]*))/g)].map((m) => [m[1], m[2] ?? m[3] ?? m[4]]));
+  const expand = (target) => target.replace(/\$\{?([A-Za-z_]\w*)\}?/g, (all, name) => vars.get(name) ?? all);
+  const redirects = [...command.matchAll(/>>?\s*(?!&)(?:"([^"]+)"|'([^']+)'|([^\s;&|)]+))/g)].map(unquoted);
+  const tees = [...command.matchAll(/\btee\s+(?:-a\s+)?(?:"([^"]+)"|'([^']+)'|([^\s;&|)]+))/g)].map(unquoted);
+  // sed -i's file is its last word once the line's own redirects are left out.
+  const seds = command.split(/;|&&|\|\||\|/).flatMap((part) => (/\bsed\s+-i\b/.test(part) ? [part.replace(/\d*>>?\s*\S+/g, '').trim().split(/\s+/).at(-1).replace(/^["']|["']$/g, '')] : []));
+  return [...redirects, ...tees, ...seds].map(expand).filter((target) => target !== '/dev/null');
+}
+
+/** A temp place Geno's environment text tells the model to put scratch scripts: $TMPDIR, /tmp or the session scratchpad. */
+const TEMP = /^(\$\{?TMPDIR\}?(\/|$)|\/tmp\/|\/private\/tmp\/|\/var\/folders\/|\/private\/var\/folders\/)/;
+const isTemp = (target, scratchpad) => TEMP.test(target) || (scratchpad !== undefined && target.startsWith(scratchpad));
 
 /** Whether a grep call's result showed lines of `file`, which the edit gate counts as seeing it. */
 const grepShowed = (call, file) => call.name === 'grep' && call.result?.status === 'ok' && outputOf(call).split('\n').some((line) => line.startsWith(`${file}:`) && /^\d+:/.test(line.slice(file.length + 1)));
 const SHELL_WRITES = /(^|[;&|]\s*)(echo|printf|cat)\b[^|]*>[^&]|\bsed\s+-i\b|\btee\b/;
+/** The workspace files a shell write of SHELL_WRITES changes: its targets outside the temp places. */
+const workspaceWrites = (command, scratchpad) => (SHELL_WRITES.test(command) ? writeTargets(command).filter((target) => !isTemp(target, scratchpad)) : []);
 
 /** The checks every case runs. A case can drop one by id with `skipShared`. */
 export const SHARED = [
@@ -91,9 +131,10 @@ export const SHARED = [
   },
   {
     id: 'deferred-loaded-first',
-    what: 'loads a deferred tool with tool_search before its first call',
+    what: 'loads a deferred tool with tool_search before its first call, or calls it with input Geno loads it for',
     test: (run) => {
-      const early = run.calls.filter((c) => DEFERRED_HINT.has(c.name) && !run.loaded.some((l) => l.name === c.name && l.seq < c.seq));
+      const autoLoaded = (c) => c.result?.status === 'ok' && (c.result.loaded ?? []).includes(c.name);
+      const early = run.calls.filter((c) => DEFERRED_HINT.has(c.name) && !autoLoaded(c) && !run.loaded.some((l) => l.name === c.name && l.seq < c.seq));
       if (!run.calls.some((c) => DEFERRED_HINT.has(c.name))) return na('no deferred tool called');
       return verdict(early.length === 0, early.map((c) => `${c.name} at seq ${c.seq} before any load`).join('; '));
     },
@@ -102,17 +143,17 @@ export const SHARED = [
     id: 'dedicated-file-tools',
     what: 'reads, lists and searches with read/list/grep/glob, not cat/ls/find/grep in bash that ran',
     test: (run) => {
-      const ran = bashCalls(run).filter((c) => !FILE_STEP_REFUSAL.test(outputOf(c)));
-      const bad = ran.filter((c) => String(c.input.command ?? '').split(/;|&&|\|\|/).some((part) => SHELL_FOR_FILES.test(part)));
-      return verdict(bad.length === 0, bad.map((c) => c.input.command.slice(0, 80)).join(' | '));
+      const reads = (part) => SHELL_FOR_FILES.test(part) && !SHELL_WRITE_STEP.test(part);
+      const bad = bashRan(run).flatMap((c) => withoutHeredocs(String(c.input.command ?? '')).split(/;|&&|\|\||\n/).filter(reads).map((part) => `seq ${c.seq}: ${part.trim().slice(0, 80)}`));
+      return verdict(bad.length === 0, bad.join(' | '));
     },
   },
   {
     id: 'edits-with-edit',
-    what: 'writes files with edit, not echo/cat redirection, sed -i or tee',
-    test: (run) => {
-      const bad = bashCalls(run).filter((c) => SHELL_WRITES.test(String(c.input.command ?? '')) && !/\/dev\/null|2>&1\s*$|>\s*&2/.test(String(c.input.command)));
-      return verdict(bad.length === 0, bad.map((c) => c.input.command.slice(0, 80)).join(' | '));
+    what: 'writes workspace files with edit, not echo/cat redirection, sed -i or tee; a scratch script in $TMPDIR or the scratchpad is fine',
+    test: (run, ctx) => {
+      const bad = bashRan(run).flatMap((c) => workspaceWrites(withoutHeredocs(String(c.input.command ?? '')), ctx.scratchpad).map((target) => `seq ${c.seq}: ${target}`));
+      return verdict(bad.length === 0, bad.join(' | '));
     },
   },
   {
@@ -140,7 +181,7 @@ export const SHARED = [
     id: 'no-sleep-poll',
     what: 'waits with background jobs and monitor, or one until-loop where monitor cannot wake the run, not sleep polling',
     test: (run) => {
-      const bad = bashCalls(run).filter((c) => /\bsleep\s+\d/.test(String(c.input.command ?? '')) && c.input.run_in_background !== true && !isUntilWait(String(c.input.command)));
+      const bad = bashRan(run).filter((c) => /\bsleep\s+\d/.test(String(c.input.command ?? '')) && c.input.run_in_background !== true && !isUntilWait(String(c.input.command)));
       return verdict(bad.length === 0, bad.map((c) => c.input.command.slice(0, 80)).join(' | '));
     },
   },
@@ -151,7 +192,7 @@ export const SHARED = [
       const allowed = (p) => [ctx.ws, ctx.home, ctx.scratchpad, PLUGIN_SKILLS, '/dev/', '/private/var/folders/', '/var/folders/'].some((root) => root !== undefined && p.startsWith(root));
       const outside = (p) => p !== '' && ((path.isAbsolute(p) && !allowed(p)) || norm(p).startsWith('../'));
       const bad = run.calls.filter((c) => ['read', 'edit', 'list', 'glob', 'grep'].includes(c.name) && outside(pathOf(c) || String(c.input.directory ?? '')));
-      const shell = bashCalls(run).filter((c) => {
+      const shell = bashRan(run).filter((c) => {
         const command = String(c.input.command ?? '');
         const absolute = command.match(/(?<![\w.])\/(Users|private|tmp|var|etc|opt|home)\/[^\s'"`;|&)]*/g) ?? [];
         return /(^|[\s;&|])(cd\s+)?\.\.\/|(^|\s)~\//.test(command) || absolute.some((p) => !allowed(p));

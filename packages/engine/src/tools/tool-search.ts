@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { coerceToSchema, loadedTools, offersToolSearch, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster, type TurnEvent } from '@g-code/core';
-import { ALWAYS, executor, ToolError, type Executor } from './context.js';
+import { autoLoadedText, coerceToSchema, loadedTools, offersToolSearch, searchTools, TOOL_SEARCH_TOOL, unloadedInputError, type ToolRoster, type TurnEvent } from '@g-code/core';
+import { ALWAYS, executor, ToolDenied, ToolError, ToolRejected, type Executor, type ToolReply } from './context.js';
 import type { Executors } from './index.js';
 
 const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional(), query: z.string().min(1).optional() });
@@ -9,24 +9,39 @@ const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional
 const issuedByUser = (events: readonly TurnEvent[], toolUseId: string | undefined): boolean =>
   toolUseId !== undefined && events.some((e) => e.kind === 'assistant' && e.issuedBy === 'user' && e.content.some((block) => block.type === 'tool_use' && block.id === toolUseId));
 
-/** A deferred tool's executor: refused until loaded, and its input typed by its schema (`coerceToSchema`). */
+/**
+ * A deferred tool's executor, its input typed by its schema (`coerceToSchema`). A call before any tool_search loaded it
+ * runs when its input parses, and its result records the load as tool_search's does and shows the definition; one
+ * whose input does not parse runs nothing and shows the definition with what was wrong.
+ */
 function gate(roster: ToolRoster, name: string, inner: Executor): Executor {
-  const typed = (raw: unknown) => coerceToSchema(roster.deferred.get(name)!.definition.input_schema, raw);
+  const definition = roster.deferred.get(name)!.definition;
+  const typed = (raw: unknown) => coerceToSchema(definition.input_schema, raw);
   return {
     input: inner.input,
     ...(inner.concurrent === undefined ? {} : { concurrent: (raw: unknown) => inner.concurrent!(typed(raw)) }),
     describe: (raw) => inner.describe(typed(raw)),
     async run(raw, ctx) {
-      const refused = issuedByUser(ctx.events(), ctx.toolUseId) ? undefined : unloadedCallError(roster.deferred, loadedTools(ctx.events()), name);
-      if (refused !== undefined) throw new ToolError(refused);
-      return inner.run(typed(raw), ctx);
+      const input = typed(raw);
+      if (issuedByUser(ctx.events(), ctx.toolUseId) || loadedTools(ctx.events()).has(name)) return inner.run(input, ctx);
+      const parsed = inner.input.safeParse(input);
+      if (!parsed.success) throw new ToolError(unloadedInputError(definition, z.prettifyError(parsed.error)));
+      let reply: ToolReply;
+      try {
+        reply = await inner.run(input, ctx);
+      } catch (error) {
+        // A refusal or a denial keeps its own class and approval record; a plain failure shows the definition too.
+        if (error instanceof ToolError && !(error instanceof ToolRejected || error instanceof ToolDenied)) throw new ToolError(autoLoadedText(definition, error.message));
+        throw error;
+      }
+      return typeof reply === 'string' ? { text: autoLoadedText(definition, reply), loaded: [name] } : { ...reply, text: autoLoadedText(definition, reply.text), loaded: [name] };
     },
   };
 }
 
 /**
- * The roster's executors: `tool_search`, and each deferred tool refusing to run until a tool_search in the log loaded
- * it. The log is what decides, so a resumed session can call what it loaded before.
+ * The roster's executors: `tool_search`, and each deferred tool, gated by whether a result in the log loaded it. The
+ * log is what decides, so a resumed session can call what it loaded before.
  */
 export function rosterExecutors(roster: ToolRoster, executors: Executors): Executors {
   if (!offersToolSearch(roster)) return executors;

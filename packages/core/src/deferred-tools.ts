@@ -65,7 +65,7 @@ const MCP_LISTING = ' Tools of MCP servers are not listed here: Geno names them 
 /** `mcp` is true in a run that can gain MCP tools, which load through tool_search though this description never lists them. */
 export const toolSearchDefinition = (deferred: ReadonlyMap<string, DeferredTool>, mcp = false): Tool => ({
   name: TOOL_SEARCH_TOOL,
-  description: `Load the full definitions of the tools listed below by name only. A listed tool cannot be called until it is loaded; once loaded it stays callable for the rest of the session, so load each tool once. Pass select with exact names when you know them, or query with a few words to search the names and descriptions.${mcp ? MCP_LISTING : ''} The tools:\n${blockText(deferred)}`,
+  description: `Load the full definitions of the tools listed below by name only. Load a listed tool before its first call, so you see its input_schema; once loaded it stays callable for the rest of the session, so load each tool once. Pass select with exact names when you know them, or query with a few words to search the names and descriptions.${mcp ? MCP_LISTING : ''} The tools:\n${blockText(deferred)}`,
   input_schema: {
     type: 'object',
     properties: {
@@ -165,11 +165,18 @@ export function searchTools(deferred: ReadonlyMap<string, DeferredTool>, input: 
   return { loaded: picked, text };
 }
 
-/** Why a call to a deferred tool cannot run yet, or undefined when it can. */
-export const unloadedCallError = (deferred: ReadonlyMap<string, DeferredTool>, loaded: ReadonlySet<string>, name: string): string | undefined =>
-  deferred.has(name) && !loaded.has(name)
-    ? `${name} is a deferred tool and is not loaded yet. Call ${TOOL_SEARCH_TOOL} with select: ["${name}"] first, then call ${name} with the input its schema asks for.`
-    : undefined;
+const unloadedOpening = (definition: Tool): string => `You called ${definition.name} before loading it with ${TOOL_SEARCH_TOOL}.`;
+
+/**
+ * The result of a deferred tool's call that ran before tool_search loaded it: Geno loaded it for the call. The
+ * definition comes first, one JSON line as tool_search shows it, so the model sees the schema and a compaction keeps it.
+ */
+export const autoLoadedText = (definition: Tool, text: string): string =>
+  `${unloadedOpening(definition)} Geno loaded it for this call, and it stays callable once a call of it succeeds. Its definition:\n${shown(definition)}\nThe call's result:\n${text}`;
+
+/** Why a deferred tool's call that came before any load did not run: its input does not match the schema shown. */
+export const unloadedInputError = (definition: Tool, problem: string): string =>
+  `${unloadedOpening(definition)} Its input does not match the input_schema, so it did not run: ${problem}\nIts definition:\n${shown(definition)}\nCall ${definition.name} again with input that matches the input_schema.`;
 
 type Schema = { readonly type?: unknown; readonly properties?: Readonly<Record<string, Schema>>; readonly items?: Schema };
 
