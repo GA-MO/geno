@@ -11,7 +11,6 @@ import {
   ARENA_PREVIEW_METHOD,
   ARENA_UPDATE_METHOD,
   ARENAS_METHOD,
-  DEFAULT_TASK_COST_USD,
   hunkIdOf,
   LANE_APPLY_META,
   LANE_GRAFT_META,
@@ -110,7 +109,7 @@ describe('the Arena over ACP', () => {
     const { sessionId: chat } = await agent.request(acp.methods.agent.session.new, { cwd: repo, mcpServers: [] });
 
     const preview = await agent.request<ArenaPreviewResponse>(ARENA_PREVIEW_METHOD, { cwd: repo, n: 3 });
-    expect(preview.preview).toEqual({ n: 3, perLaneUsd: DEFAULT_TASK_COST_USD, reviewMaxUsd: 0.05, totalUsd: 3 * DEFAULT_TASK_COST_USD + 0.05, basis: { kind: 'default' } });
+    expect(preview.preview).toEqual({ n: 3, perLaneUsd: 0.032, reviewMaxUsd: 0.05, totalUsd: 3 * 0.032 + 0.05, basis: { kind: 'default' } });
     expect(preview.variants.map((v) => v.seed)).toEqual(['plain', 'minimal', 'idiomatic']);
     await expect(agent.request(ARENA_PREVIEW_METHOD, { cwd: repo, n: 5 })).rejects.toThrow(/2 to 4/);
 

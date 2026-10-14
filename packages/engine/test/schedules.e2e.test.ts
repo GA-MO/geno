@@ -195,10 +195,10 @@ describe('gcode serve: scheduled tasks', () => {
     });
 
     expect(result.reply.stopReason).toBe('end_turn');
-    expect(result.said).toMatch(/^Scheduled sch_[0-9a-f]{6} "\[sched-a\] summarize the repository": Once, .* read-only, up to \$0\.05 and 20 model calls a run\. It is in Tasks under Scheduled/);
+    expect(result.said).toMatch(/^Scheduled sch_[0-9a-f]{6} "\[sched-a\] summarize the repository": Once, .* read-only, up to \$0\.05 \(qwen3\.8-flash prices, scaled to the run's model\) and 20 model calls a run\. It is in Tasks under Scheduled/);
     expect(result.before.tasks).toHaveLength(1);
     const made = result.before.tasks[0]!;
-    expect(made).toMatchObject({ edits: false, paused: false, createdBy: { kind: 'user' }, budget: { maxCostUsd: 0.05, maxTurns: 20 }, nextAt: T0 + HOUR, runs: [] });
+    expect(made).toMatchObject({ edits: false, paused: false, createdBy: { kind: 'user' }, budget: { maxCostUsd: { referenceUsd: 0.05 }, maxTurns: 20 }, nextAt: T0 + HOUR, runs: [] });
     expect(result.early, 'nothing runs before it is due').toBe(0);
     expect(model.requests('[sched-a]'), 'one model call for the one run').toHaveLength(1);
 
@@ -449,7 +449,7 @@ describe('gcode serve: scheduled tasks', () => {
       return found?.kind === 'tool-result' && 'output' in found ? found.output : '';
     };
     expect(heard.permissions, 'one card per change until the user allowed them for the chat').toHaveLength(2);
-    expect(heard.permissions[0]!.toolCall.title).toMatch(/^Schedule "Review main": Weekdays at 09:00 \(next .*\), read-only, up to \$0\.05 and 20 model calls a run\?$/);
+    expect(heard.permissions[0]!.toolCall.title).toMatch(/^Schedule "Review main": Weekdays at 09:00 \(next .*\), read-only, up to \$0\.05 \(qwen3\.8-flash prices, scaled to the run's model\) and 20 model calls a run\?$/);
     expect(heard.permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'allow-session', 'reject']);
     expect(textOf('tu_c1')).toMatch(/^The user declined/);
     expect(textOf('tu_c2')).toMatch(/^Scheduled sch_/);

@@ -33,7 +33,7 @@ import {
   childReport,
   childrenUsage,
   previewQuestion,
-  ratesOf,
+  capUsd,
   workflowEnd,
   workflowProgress,
   workflowReport,
@@ -291,7 +291,7 @@ import { MemoryError, memoryStore } from './memory.js';
 import { importedRules, layeredPermissions, permissionStore, rulesWorkspace } from './permissions.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Io } from './command.js';
-import type { Director, Limits, Surface } from './drive.js';
+import { limitsOn, type Director, type Limits, type LimitsSpec, type Surface } from './drive.js';
 import { workspaceDir } from './workspace.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
@@ -881,7 +881,7 @@ type ScheduleAnswer = 'allow' | 'allow-session' | 'reject';
  * A background turn the engine starts: a scheduled task's run, with its budget in place of the engine's limits and a
  * prompt that says nobody watches, or a workflow's, whose director issues its rounds in place of the model.
  */
-type ScheduledTurn = { readonly limits?: Limits | undefined; readonly scheduled?: boolean | undefined; readonly director?: Director | undefined };
+type ScheduledTurn = { readonly limits?: LimitsSpec | undefined; readonly scheduled?: boolean | undefined; readonly director?: Director | undefined };
 
 const schedulesRequest = z.object({ cwd: z.string() });
 const scheduleActRequest = z.object({ cwd: z.string(), id: z.string().min(1), action: z.enum(SCHEDULE_PANEL_ACTIONS) });
@@ -1173,7 +1173,7 @@ export function engineShared(io: Io, options: EngineOptions = {}) {
     // The directories each session's user allowed it to read from a card, by session.
     sessionDirectories: new Map<string, Set<string>>(),
     // A scheduled run's budget, which the turns it wakes share.
-    runLimits: new Map<string, Limits>(),
+    runLimits: new Map<string, LimitsSpec>(),
     // The hooks of each session a turn ran in this process; SessionEnd fires for them when the process ends.
     hooks: new HookSessions(),
   };
@@ -1248,7 +1248,7 @@ type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
  * or a one-shot inline edit, or a lane apply. `shared` is the process's, so a turn started over one connection goes on
  * after it closes and shows in the next editor that loads its session.
  */
-export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
+export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
   const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, sessionDirectories, runLimits, hooks } = shared;
   const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
   const directoriesOf = (sessionId: string) => sessionDirectories.get(sessionId) ?? sessionDirectories.set(sessionId, new Set()).get(sessionId)!;
@@ -1416,8 +1416,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return workflowTools({
       workspace: session.workspace,
       homes,
-      model: session.model,
-      rates: (model) => ratesOf(session.provider, model),
+      on: session,
       mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
       agents: async () => (await loadAgents(session.workspace, homes, (await pluginsOf(session.workspace)).plugins, subagentModelsOf(io.env))).agents,
       approve: (preview, signal) => turn.approveWorkflow(preview, signal),
@@ -1437,12 +1436,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
    * off, joins its running turn or its next one.
    */
   const runWorkflow = async (parentId: string, parent: Session, spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], toolUseId: string, replay: Replay | undefined) => {
-    const driver = workflowDriver(spec, input, agents, parent.model, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)), {
+    const driver = workflowDriver(spec, input, agents, parent, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)), {
       replay,
       write: (sessionId, entries) => appendJournal(journalFile(store, sessionId), entries),
     });
     const prompt = `Run the workflow ${spec.name}${input === '' ? '.' : ` on: ${input}`}${replay === undefined ? '' : `\nIt resumes run ${replay.run}.`}`;
-    const limits: Limits = { maxTurns: WORKFLOW_TURNS, maxCostUsd: spec.maxCostUsd };
+    const limits: Limits = { maxTurns: WORKFLOW_TURNS, maxCostUsd: capUsd(spec.maxCostUsd, parent.provider, parent.model) };
     const workflow: WorkflowOrigin = { parentId: asSessionId(parentId), toolUseId, name: spec.name, input, ...(replay === undefined ? {} : { resumes: asSessionId(replay.run) }) };
     const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director }, workflow });
     let silent = false;
@@ -1746,7 +1745,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                   },
                 }),
               })
-            : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: shown.surface, diagnostics });
+            : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limitsOn(limits, opened.log.session).maxCostUsd, surface: shown.surface, diagnostics });
         await shown.updates.flush();
         return { reason: result.reason, spent: shown.usage() };
       });
@@ -1840,7 +1839,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const repo = task.edits ? await laneRepo(workspace) : undefined;
     const lane = repo === undefined ? undefined : await laneFor(repo, task.prompt, store, io, laneNameFor(task.title, await takenLaneNames(repo)));
     const where = lane?.path ?? workspace;
-    const limits: Limits = { maxTurns: task.budget.maxTurns, maxCostUsd: task.budget.maxCostUsd };
+    const limits: LimitsSpec = { maxTurns: task.budget.maxTurns, maxCostUsd: task.budget.maxCostUsd };
     const { id, turn } = await startBackground(where, lane, task.prompt, task.edits ? 'auto' : 'plan', { title: task.title, run: { limits, scheduled: true } });
     const ended: Promise<RunEnd> = turn.then(
       async ({ end }) => runEndOf((await existing(id)).events, TURN_ENDS[end].run, schedules.now()),

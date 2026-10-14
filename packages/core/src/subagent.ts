@@ -1,3 +1,5 @@
+import { capUsd, defaultUsd, type UsdCap } from './cost.js';
+import type { ProviderName } from './providers.js';
 import { EXTERNAL_BACKEND_IDS, EXTERNAL_BACKENDS, isExternalBackendId, type ExternalBackendId } from './backends.js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { CHILD_TOOL_NAMES, type AgentToolName } from './agent.js';
@@ -38,8 +40,8 @@ export type AgentDefinition = {
   /** Undefined takes the parent's effort. */
   readonly effort: Effort | undefined;
   readonly maxTurns: number | undefined;
-  /** Geno's own field: the most the child may spend, in US dollars. */
-  readonly maxCostUsd: number | undefined;
+  /** Geno's own field: the most the child may spend, in US dollars as a file sets it, or a built-in's scaled default. */
+  readonly maxCostUsd: UsdCap | undefined;
   readonly isolation: Isolation;
   /** A fresh child starts without the instruction files, memory and git status, as Claude Code's Explore and Plan do. */
   readonly omitClaudeMd: boolean;
@@ -262,7 +264,7 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
     tools: READ_ONLY_TOOLS,
     effort: 'low',
     maxTurns: EXPLORE_TURNS,
-    maxCostUsd: 0.02,
+    maxCostUsd: defaultUsd(0.02),
     omitClaudeMd: true,
     prompt: `You are explore, a search subagent. ${READ_ONLY_NOTE}
 You have at most ${EXPLORE_TURNS} model turns, the last of which must deliver your answer. In your first turn, ask for every search you need at once (grep and glob run at the same time), then read only the lines that settle the question.
@@ -277,7 +279,7 @@ Cite only lines you saw in a tool result, with the line numbers it showed. Never
     tools: READ_ONLY_TOOLS,
     effort: undefined,
     maxTurns: 12,
-    maxCostUsd: 0.05,
+    maxCostUsd: defaultUsd(0.05),
     omitClaudeMd: true,
     prompt: `You are plan, a planning subagent. ${READ_ONLY_NOTE}
 Investigate what the change touches, then report a numbered, step-by-step plan. Each step names the files it changes (as path:line where it helps) and what changes in each. End with the risks and how to check the result.`,
@@ -288,7 +290,7 @@ Investigate what the change touches, then report a numbered, step-by-step plan. 
     tools: READ_ONLY_TOOLS,
     effort: undefined,
     maxTurns: 8,
-    maxCostUsd: 0.05,
+    maxCostUsd: defaultUsd(0.05),
     prompt: `You are review, a code review subagent. ${READ_ONLY_NOTE}
 The task gives you a diff. The project's rules and instructions are in your context. Read the code around each change where you need to.
 Report findings, most severe first. Each finding is one line: the severity (high, medium or low), path:line, and what is wrong and why, then a short fix if it is not obvious. Report bugs, broken rules and risky changes, not style the rules do not ask for. If you find nothing, say so in one line.`,
@@ -300,7 +302,7 @@ Report findings, most severe first. Each finding is one line: the severity (high
     mcp: ALL_MCP,
     effort: undefined,
     maxTurns: 30,
-    maxCostUsd: 0.2,
+    maxCostUsd: defaultUsd(0.2),
     prompt: `You are worker, a subagent that changes code to finish the task it is given. Read a file before you edit it. Run the relevant check or tests before you finish. You report to another agent, not to the user: your report says what you changed, as path:line, and how you checked it.`,
   }),
   ...EXTERNAL_BACKEND_IDS.map(backendAgent),
@@ -362,20 +364,24 @@ export const withoutInstructions = (context: LoadedContext, agent: AgentDefiniti
 /** The depth of a child of the session `parent` heads: one below its parent, which a log without a depth puts at 1. */
 export const childDepth = (parent: ChildOf | undefined): number => (parent === undefined ? 1 : (parent.depth ?? 1) + 1);
 
-/** What one child may use, settled when it starts. */
+/** What one child may use, settled when it starts, in dollars on the child's model. */
 export type ChildCaps = { readonly maxTurns: number; readonly maxCostUsd: number };
 
-/** A definition that names no cap gets these. */
-export const DEFAULT_CHILD_CAPS: ChildCaps = { maxTurns: 20, maxCostUsd: 0.05 };
+/** What a child may use before its model is known: a definition that names no cap gets these. */
+export type ChildCapsSpec = { readonly maxTurns: number; readonly maxCostUsd: UsdCap };
+export const DEFAULT_CHILD_CAPS: ChildCapsSpec = { maxTurns: 20, maxCostUsd: defaultUsd(0.05) };
+
+/** The model a child runs on, which scales its default cost cap. */
+export type CapModel = { readonly provider: ProviderName; readonly model: string };
 
 /**
- * A child's caps: its definition's, else the defaults, with the cost held to what its parent's run has left for
- * children. Undefined when nothing is left.
+ * A child's caps: `asked`, a workflow step's or a resumed spawn's own, else its definition's, else the defaults, with
+ * a default cost scaled to `on` and held to what its parent's run has left for children. Undefined when nothing is left.
  */
-/** `asked` is a workflow step's own caps, which replace the definition's. */
-export function childCaps(agent: AgentDefinition, leftUsd: number, asked: { readonly [K in keyof ChildCaps]?: ChildCaps[K] | undefined } = {}): ChildCaps | undefined {
+export function childCaps(agent: AgentDefinition, leftUsd: number, on: CapModel, asked: { readonly maxTurns?: number | undefined; readonly maxCostUsd?: UsdCap | undefined } = {}): ChildCaps | undefined {
   if (!(leftUsd > 0)) return undefined;
-  return { maxTurns: asked.maxTurns ?? agent.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: Math.min(asked.maxCostUsd ?? agent.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd, leftUsd) };
+  const cost = capUsd(asked.maxCostUsd ?? agent.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd, on.provider, on.model);
+  return { maxTurns: asked.maxTurns ?? agent.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: Math.min(cost, leftUsd) };
 }
 
 /** Where a child's conversation starts: empty, or a copy of the parent's, which shares the parent's cached prefix. */
