@@ -31,7 +31,11 @@ async function scopeOf(ctx: ToolContext, given: string | undefined): Promise<{ r
   return { target: (await stat(real)).isDirectory() ? { dir: real } : { dir: path.dirname(real), file: path.basename(real) } };
 }
 
-export const grep = executor({
+/** Told the real paths of the files whose lines a grep call showed the model. */
+export type SeenFiles = (files: readonly string[], ctx: ToolContext) => Promise<void>;
+
+/** The grep tool; `saw` hears of each call's files with lines shown, as the edit gate counts them seen. */
+export const grepExecutor = (saw?: SeenFiles) => executor({
   concurrent: ALWAYS,
   input: z.strictObject({
     pattern: z.string().min(1),
@@ -45,7 +49,7 @@ export const grep = executor({
     if (glob !== undefined && isSecretPath(glob)) throw new ToolError(secretRefusal('grep', glob));
     const { target, pathGlob } = await scopeOf(ctx, given);
     const globs = [pathGlob, glob].filter((g) => g !== undefined);
-    const { lines, searched } = await searchWorkspace(
+    const { lines, searched, seen } = await searchWorkspace(
       ctx,
       [
         '--line-number',
@@ -69,6 +73,9 @@ export const grep = executor({
       const why = globs.length === 0 ? 'it holds no file, or .gitignore excludes them all' : `no file there that .gitignore lets through matches ${globs.join(' or ')}`;
       throw new ToolError(`grep searched no files in ${where}: ${why}. That is not the same as no matches. Name a directory or a file in path, and use glob only to narrow it.`);
     }
+    await saw?.(seen, ctx);
     return lines.length === 0 ? 'no matches' : lines.join('\n');
   },
 });
+
+export const grep = grepExecutor();

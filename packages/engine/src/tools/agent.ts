@@ -102,7 +102,7 @@ import {
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
-import { GLOB_CHARS } from './grep.js';
+import { GLOB_CHARS, grepExecutor } from './grep.js';
 import { editNotebook, NotebookError, type CellEdit, type CellEdited } from './notebook.js';
 import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
@@ -556,6 +556,24 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   };
 
+  /**
+   * Files the model saw lines of through grep: an edit may start from their text on disk now, as after a read. A path
+   * read could not read, or a credentials file, stays unseen.
+   */
+  const sawFiles = async (given: readonly string[], ctx: ToolContext): Promise<void> => {
+    await ctx.earlierCalls();
+    const reach: ToolContext = { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()] };
+    for (const one of given) {
+      const real = await resolveInside(reach, one).catch((error: unknown) => {
+        if (error instanceof ToolError) return undefined;
+        throw error;
+      });
+      if (real === undefined || isSecret(reach, real) || !(await stat(real)).isFile()) continue;
+      const text = await ctx.files.read(real);
+      if (text !== null) reads.set(real, baseOf(text, null));
+    }
+  };
+
   const edit = editExecutor(reads, async (ctx) => {
     if (!tools.checkAfterEdit) return undefined;
     const denied = await tools.permissions?.deniedTool?.('check');
@@ -815,7 +833,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   const all: Readonly<Record<AgentToolName, Executor>> = {
     ...EXECUTORS,
     glob: withReach('glob', withPathRules(undefined, EXECUTORS.glob)),
-    grep: withReach('grep', withPathRules(undefined, EXECUTORS.grep)),
+    grep: withReach('grep', withPathRules(undefined, grepExecutor(sawFiles))),
     list: withReach('list', withPathRules(undefined, EXECUTORS.list)),
     read: withReach('read', withRuleAttachments(withPathRules('read', read), tools.rules)),
     edit: withWriteRoots(withPathRules('edit', edit)),

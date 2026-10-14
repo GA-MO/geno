@@ -75,8 +75,11 @@ export async function searchRoot(ctx: ToolContext, directory: string | undefined
 /** `files` lines are paths; `matches` lines are path:line:text. */
 export type SearchOutput = 'files' | 'matches';
 
-/** The lines found, and how many files ripgrep looked at, so that searching nothing is not mistaken for no matches. */
-export type Search = { readonly lines: readonly string[]; readonly searched: number };
+/**
+ * The lines found, and how many files ripgrep looked at, so that searching nothing is not mistaken for no matches.
+ * `seen` is the real path of each file a `matches` line shows text of; a `files` search shows none.
+ */
+export type Search = { readonly lines: readonly string[]; readonly searched: number; readonly seen: readonly string[] };
 
 // --stats ends the output with a blank line, then "N matches", ..., "N files searched", ...; no match line is blank.
 const STATS = /(?:^|\n)\n\d+ matches\n/;
@@ -91,8 +94,8 @@ const SEARCHED = /^(\d+) files searched$/m;
 export async function searchWorkspace(ctx: ToolContext, args: readonly string[], output: SearchOutput, target: SearchTarget): Promise<Search> {
   const shownDir = displayPath(ctx, target.dir);
   const prefix = shownDir === '.' ? '' : `${shownDir}/`;
-  const { lines, searched } = await searchDir(ctx, target, args, output);
-  return { lines: lines.map((line) => prefix + line), searched };
+  const found = await searchDir(ctx, target, args, output);
+  return { ...found, lines: found.lines.map((line) => prefix + line) };
 }
 
 async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: readonly string[], output: SearchOutput): Promise<Search> {
@@ -111,8 +114,12 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
     const target = path.resolve(dir, pathOf(line));
     return !isSecretPath(pathOf(line)) && !inCredentialPlace(ctx.credentialPlaces, target) && searchRule(ctx, target) === undefined;
   };
-  const shown = (lines: readonly string[]): string[] => lines.filter(kept).map((line) => line.replace('\0', ':'));
-  const run = async (cwd: string, extra: readonly string[]): Promise<Search> => {
+  const shown = (lines: readonly string[], searched: number): Search => {
+    const found = lines.filter(kept);
+    const seen = output === 'matches' ? [...new Set(found.map((line) => path.resolve(dir, pathOf(line))))] : [];
+    return { lines: found.map((line) => line.replace('\0', ':')), searched, seen };
+  };
+  const run = async (cwd: string, extra: readonly string[]): Promise<Omit<Search, 'seen'>> => {
     const stdout = await ripgrepOutput(ctx, cwd, [...flags, ...args, ...extra], file ?? '.');
     if (output === 'files') {
       const lines = linesOf(stdout);
@@ -124,7 +131,7 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
   };
   if (buffers.length === 0) {
     const { lines, searched } = await run(dir, []);
-    return { lines: shown(lines), searched };
+    return shown(lines, searched);
   }
 
   const overlay = await mkdtemp(path.join(tmpdir(), 'gcode-unsaved-'));
@@ -137,8 +144,7 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
     const onDisk = buffers.flatMap(({ relative }) => ['--glob', `!/${escapeGlob(relative)}`]);
     const [disk, open] = await Promise.all([file === undefined ? run(dir, onDisk) : { lines: [], searched: 0 }, run(overlay, [])]);
     // A stable sort keeps each file's lines in their order.
-    const lines = shown([...disk.lines, ...open.lines].toSorted((a, b) => comparePaths(pathOf(a), pathOf(b))));
-    return { lines, searched: disk.searched + open.searched };
+    return shown([...disk.lines, ...open.lines].toSorted((a, b) => comparePaths(pathOf(a), pathOf(b))), disk.searched + open.searched);
   } finally {
     await rm(overlay, { recursive: true, force: true });
   }
