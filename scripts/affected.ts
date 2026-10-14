@@ -30,24 +30,55 @@ const REQUEST_SHAPERS = [
   /^packages\/engine\/src\/(agent|background|chat|drive|environment|memory|serve|sessions|subagents|wakes)\.ts$/,
   /^packages\/engine\/src\/tools\//,
 ];
+/** Files that decide whether and how a bash command runs: refusals, approval rules, the classifier and the sandbox. */
+const SHELL_DECIDERS = [
+  /^packages\/core\/src\/(shell-intent|approval|permission-rules|claude-permissions|classifier)\.ts$/,
+  /^packages\/engine\/src\/(sandbox|permissions|classifier)\.ts$/,
+  /^packages\/engine\/src\/tools\/agent\.ts$/,
+];
+/** A suite whose scripted model runs bash commands, which a change to how bash is judged can refuse or reroute. */
+const SCRIPTS_BASH = /name: 'bash'|\bbash\(|command: '/;
 /** A suite that reads a request's messages, system prompt, tools or tool choice, or a session's log. */
 const READS_REQUESTS = /\.(messages|system|tools|tool_choice)\b|\bofferedTools\(|['"]sessions['"]/;
 /** A panel change that names nothing a suite checks still runs the suites that cover the panel at large. */
 const PANEL_SMOKE = ['panel', 'chat', 'composer'];
 
-/**
- * Whether a change to the root package.json touches only its `scripts`, which no VS Code suite runs: adding a
- * script once ran all 53 files. Anything else, a dependency or a test setting, may change what the suites run on.
- */
-export function onlyScriptsChanged(before: string, after: string): boolean {
+/** Whether two JSON manifests differ only under `keys` (dotted paths such as `contributes.configuration`). */
+function differsOnlyIn(before: string, after: string, keys: readonly string[]): boolean {
   try {
-    const { scripts: _before, ...restBefore } = JSON.parse(before) as Record<string, unknown>;
-    const { scripts: _after, ...restAfter } = JSON.parse(after) as Record<string, unknown>;
-    return JSON.stringify(restBefore) === JSON.stringify(restAfter);
+    const strip = (text: string) => {
+      const json = JSON.parse(text) as Record<string, unknown>;
+      for (const key of keys) {
+        const parts = key.split('.');
+        let at: Record<string, unknown> | undefined = json;
+        for (const part of parts.slice(0, -1)) at = (at?.[part] as Record<string, unknown> | undefined) ?? undefined;
+        if (at !== undefined) delete at[parts.at(-1)!];
+      }
+      return JSON.stringify(json);
+    };
+    return strip(before) === strip(after);
   } catch {
     return false;
   }
 }
+
+/**
+ * Whether a change to the root package.json touches only its `scripts`, which no VS Code suite runs: adding a
+ * script once ran all 53 files. Anything else, a dependency or a test setting, may change what the suites run on.
+ */
+export const onlyScriptsChanged = (before: string, after: string): boolean => differsOnlyIn(before, after, ['scripts']);
+
+/**
+ * Whether a change to the extension's package.json touches only its settings or its version. Each new setting once
+ * ran all 55 files; the suites that name the setting run instead, through its `gcode.*` token in the diff.
+ */
+export const onlySettingsChanged = (before: string, after: string): boolean => differsOnlyIn(before, after, ['contributes.configuration', 'version']);
+
+/** The manifests whose harmless changes leave the harness alone, each with the test that tells. */
+export const MANIFESTS: Readonly<Record<string, (before: string, after: string) => boolean>> = {
+  'package.json': onlyScriptsChanged,
+  'packages/extension/package.json': onlySettingsChanged,
+};
 
 export const integrationFile =(name: string) => `packages/extension/test/${name}.integration.test.ts`;
 
@@ -68,24 +99,33 @@ export function tokensOf(diff: string): Set<string> {
  * The integration files to run for a change, each with why. `changed` are repo-relative paths and `panelDiff` is the
  * diff of `packages/extension/src`. A token that most suites mention says nothing about which one it breaks.
  */
-export function selectVscode(changed: readonly string[], panelDiff: string, suites: readonly Suite[]): Pick[] {
+export function selectVscode(
+  changed: readonly string[],
+  panelDiff: string,
+  suites: readonly Suite[],
+  { harmless = [] }: { readonly harmless?: readonly string[] } = {},
+): Pick[] {
   const reasons = new Map<string, Set<string>>();
   const add = (name: string, why: string) => {
     if (!suites.some((s) => s.name === name)) return;
     (reasons.get(name) ?? reasons.set(name, new Set()).get(name)!).add(why);
   };
 
-  if (changed.some((path) => HARNESS.some((rule) => rule.test(path)))) for (const s of suites) add(s.name, ALL_REASON);
+  if (changed.some((path) => !harmless.includes(path) && HARNESS.some((rule) => rule.test(path)))) for (const s of suites) add(s.name, ALL_REASON);
   for (const path of changed) for (const s of suites) if (s.files.includes(path)) add(s.name, `its test changed (${path})`);
 
   const engine = changed.filter((p) => /^packages\/(engine|core)\/src\//.test(p));
   if (engine.length > 0) for (const name of ENGINE_SMOKE) add(name, `engine or core changed (${engine.length} files)`);
+  const deciders = changed.filter((p) => SHELL_DECIDERS.some((rule) => rule.test(p)));
+  if (deciders.length > 0) {
+    for (const s of suites) if (SCRIPTS_BASH.test(s.text)) add(s.name, `it scripts bash commands, and ${deciders.length} files that judge them changed`);
+  }
   const shapers = changed.filter((p) => REQUEST_SHAPERS.some((rule) => rule.test(p)));
   if (shapers.length > 0) {
     for (const s of suites) if (READS_REQUESTS.test(s.text)) add(s.name, `it reads requests or the log, and ${shapers.length} files that shape them changed`);
   }
 
-  if (changed.some((p) => /^packages\/extension\/src\//.test(p))) {
+  if (changed.some((p) => /^packages\/extension\/(src\/|package\.json$)/.test(p))) {
     const common = Math.ceil(suites.length * 0.6);
     let matched = false;
     const named = changed.filter((p) => /^packages\/extension\/src\//.test(p)).map((p) => p.replace(/^.*\/|\.[a-z]+$/g, ''));

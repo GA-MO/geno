@@ -151,8 +151,8 @@ scenario:
           select: messages[-1].content[-1]
           highlight: [text]
       do: >-
-        `lastCallDue` เป็นจริง `deliver` บันทึก notice `last` และ `drive` เลือก `forced = report` เพราะลูกเป็น run แบบ handback
-      ref: "packages/engine/src/drive.ts#\"const forced = mode.forced ?? (last && run.handback === true\""
+        `lastCallDue` เป็นจริง `deliver` บันทึก notice `last` และ `drive` เลือก `forced = report` เพราะลูกเป็น run แบบ handback และ qwen ในรันนี้รับ tool_choice แบบบังคับ (บน Claude 5.5 ซึ่งไม่รับ call สุดท้ายจะส่ง `tool_choice: none` แทน)
+      ref: "packages/engine/src/drive.ts#\"const forced = mode.forced ?? (reportForced ? REPORT_TOOL : undefined)\""
 
     - id: child-report
       lane: child@explore

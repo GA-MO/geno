@@ -74,7 +74,7 @@ scenario:
       do: >-
         `runTurn` ตรวจ `INLINE_EDIT_META` ไม่ขยายคำสั่ง slash ตั้งชื่องานใน Tasks ว่า "Inline edit" แล้วเรียก `runInlineEdit`
         แทน `runAgent`
-      ref: "packages/engine/src/serve.ts#\"await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: shown.surface, diagnostics })\""
+      ref: "packages/engine/src/serve.ts#\"await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limitsOn(limits, opened.log.session).maxCostUsd, surface: shown.surface, diagnostics })\""
       phase: starting
 
     - id: build

@@ -8,10 +8,11 @@ Geno has three vitest projects:
 
 ## Test what a change can break
 
-While you work, and before you merge a unit, run only what the change can break:
+While you work, run the quick tier. Before you push, run what the change can break in VS Code too:
 
 ```sh
-pnpm test:affected            # VS Code files on the host
+pnpm test:quick               # typecheck, lint, related unit tests and the webview tests; no VS Code
+pnpm test:affected            # the same, then the VS Code files the change can break, on the host
 pnpm test:affected --docker   # VS Code files in the container
 pnpm test:affected --dry      # print the files and why, run nothing
 ```
@@ -19,7 +20,8 @@ pnpm test:affected --dry      # print the files and why, run nothing
 It diffs the branch against its merge base with `main` (`--base <ref>` picks another), then runs `pnpm typecheck`, `pnpm lint:deps`, the unit tests vitest relates to the changed files (`--changed`), every webview test, and only these VS Code integration files (the rules are in `scripts/affected.ts`):
 
 - A file whose own test or suite part changed.
-- Every file, when the harness changes: `vitest.config.ts`, the lockfile, `package.json`, `launch.ts`, `vscode-setup.ts`, the window pool in `test/pool/`, `suite/index.ts`, `suite/shooting.ts`, `scripts/vscode-workers.ts`, `scripts/test-vscode.ts` and the Docker entry. A root `package.json` change that only adds or edits `scripts` is not a harness change, since no suite runs a script; a dependency change is.
+- Every file, when the harness changes: `vitest.config.ts`, the lockfile, `package.json`, `launch.ts`, `vscode-setup.ts`, the window pool in `test/pool/`, `suite/index.ts`, `suite/shooting.ts`, `scripts/vscode-workers.ts`, `scripts/test-vscode.ts` and the Docker entry. A root `package.json` change that only adds or edits `scripts` is not a harness change, since no suite runs a script; a dependency change is. An extension `package.json` change to its settings or version is not one either: the suites that name the changed setting run instead.
+- The 14 or so files whose scripted model runs bash commands, when a file that judges bash changes: `shell-intent.ts`, `approval.ts`, the permission rules, the classifier, the sandbox, or the agent tools.
 - `chat`, `panel` and `working` when engine or core source changed, since those suites drive whole turns.
 - Every file that reads a request's `messages`, `system`, `tools` or `tool_choice`, or a session log, when a file that shapes the request or the turn's events changed: the opening, Geno's notices and arrivals, the mode's prompt and tools, tool result text, and the turn loop (`REQUEST_SHAPERS` in `scripts/affected.ts`). That is about 39 of 52 files. Without this rule, P5, P6, P11 and P17 changed the request on purpose and ten suites that check it failed only on the next full run.
 - For panel source, the suites that name a class, data value, message type, command id or module that the changed lines name. A token that 60% of the suites use says nothing and is skipped. If no suite names anything the change touched, `panel`, `chat` and `composer` run.
@@ -115,7 +117,7 @@ Once it holds the lock, a run also waits until the machine has room: at least 3 
 
 The unit and webview projects use at most `GCODE_TEST_WORKERS` workers (default 4), and a run lowers its own CPU priority, so the editor stays usable while tests run. Four delegates once ran full suites at once with every core each, and the Mac froze.
 
-While working on a change, run only the test files it touches (`pnpm vitest run --project unit <file>`). Run `pnpm test:affected` once at the end, not a full `--project unit` run as well.
+While working on a change, run only the test files it touches (`pnpm vitest run --project unit <file>`) and `pnpm test:quick`. Run `pnpm test:affected` once before a push, and never a full suite as well: the VS Code tier takes most of the time, and each new setting once made it run all 55 files.
 
 ## The VS Code windows
 
