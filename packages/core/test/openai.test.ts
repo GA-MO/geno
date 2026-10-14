@@ -191,6 +191,11 @@ describe('chatStream', () => {
     expect(use?.type === 'tool_use' && use.id).toMatch(/^call_[A-Za-z0-9_-]+$/);
   });
 
+  it('takes tool_search names sent unquoted', () => {
+    const { message } = run([chunk({ tool_calls: [{ index: 0, id: 'call_a', function: { name: 'tool_search', arguments: '{"select": show_files}' } }] }, 'tool_calls')]);
+    expect(message.content[0]).toMatchObject({ type: 'tool_use', name: 'tool_search', input: { select: ['show_files'] } });
+  });
+
   it('round-trips: the message it builds goes back out as the same tool calls', () => {
     const { message } = run([
       chunk({ content: 'Reading.' }),
