@@ -118,7 +118,11 @@ const realOr = (dir: string): string => {
  * Where the engine keeps each session's spilled output and its scratchpad (`scratchpadOf`), by their real paths, as
  * show_files names the files in them. The panel loads images from these and the workspace, never the rest of the disk.
  */
-export const sessionFolders = (): string[] => [path.join(realOr(gcodeHome(process.env)), 'spill'), path.join(realOr(tmpdir()), 'gcode-sessions')];
+export const sessionFolders = (): string[] => [
+  path.join(realOr(gcodeHome(process.env)), 'spill'),
+  path.join(realOr(tmpdir()), 'gcode-sessions'),
+  ...(process.getuid === undefined ? [] : [path.join(realOr('/tmp'), `gcode-${process.getuid()}`)]),
+];
 
 /** The workspace folders, the stored attachments and the sessions' own folders as the webview reaches them, for images. */
 export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] => [

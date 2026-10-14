@@ -15,7 +15,7 @@ const mac: Environment = {
   platform: 'darwin',
   osVersion: 'Darwin 27.0.0',
   loginShell: 'zsh',
-  scratchpad: '/private/var/folders/x/T/gcode-sessions/s-1',
+  scratchpad: '/private/tmp/gcode-501/1fadfc9f',
   git: { branch: 'main', status: [' M src/a.ts', '?? notes.md'], moreStatus: 0, commits: ['683017b Keep the tag list private', '795f945 Test T-AGENT-02'] },
   project: {
     packageManager: 'pnpm 11.3.0',
@@ -47,7 +47,7 @@ describe('renderEnvironment', () => {
     expect(lines).toContain(' - Model: qwen3.8-flash on Model Studio');
     expect(lines.find((line) => line.startsWith(' - Platform:'))).toMatch(/darwin.*BSD.*GNU-only/);
     expect(lines.find((line) => line.startsWith(' - Shell:'))).toMatch(/bash -c .*login shell is zsh/);
-    expect(lines.find((line) => line.startsWith(' - Scratchpad directory:'))).toMatch(/^ - Scratchpad directory: \/private\/var\/folders\/x\/T\/gcode-sessions\/s-1\. .*no approval/);
+    expect(lines.find((line) => line.startsWith(' - Scratchpad directory:'))).toMatch(/^ - Scratchpad directory: \/private\/tmp\/gcode-501\/1fadfc9f\. .*no approval/);
   });
 
   it('lists the package manager, the key scripts, the rest by name, and the installed versions', () => {

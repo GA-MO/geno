@@ -98,7 +98,7 @@ async function newSession(
     loadProjectContext(workspace, { app: homeOf(store), home: env['HOME'] || undefined, claude: claudeDirOf(env) }, env['GCODE_RG'] || 'rg'),
     loadCommands(workspace, homesOf(store, env), (await pluginLoader(io)(workspace)).plugins),
     memoryStore(homeOf(store), workspace).list(),
-    captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
+    captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id, { warn: io.err }), env }),
   ]);
   for (const problem of problems) io.err(`instructions: ${problem}`);
   for (const problem of skills.problems) io.err(`commands: ${problem}`);

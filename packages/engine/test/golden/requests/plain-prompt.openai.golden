@@ -89,7 +89,7 @@ messages:
           |  - Platform: <platform>
           |  - OS version: <os-version>
           |  - Shell: the bash tool runs each command with bash -c in the workspace.
-          |  - Scratchpad directory: <tmp>/gcode-sessions/<uuid-1>. Use it for temporary files, such as scripts and intermediate output, instead of /tmp or the workspace. It is this session's own, and writing there needs no approval.
+          |  - Scratchpad directory: <scratchpad>. Use it for temporary files, such as scripts and intermediate output, instead of /tmp or the workspace. It is this session's own, and writing there needs no approval.
           |  - Date: <date>, the local date when this session started. Run date for the current time.
           |  - Model: gpt-fake on OpenAI
           |
