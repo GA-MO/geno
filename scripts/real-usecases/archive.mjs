@@ -17,11 +17,11 @@ const APPEND = process.argv.includes('--append');
 const RUNS = path.join(REPO, 'docs/results/real-usecases/runs');
 const GZIP_OVER = 200 * 1024;
 const env = campaignEnv();
-const SECRETS = [env.DASHSCOPE_API_KEY, env.OPENROUTER_API_KEY].filter((v) => v !== undefined && v.length >= 8);
+const SECRETS = [env.DASHSCOPE_API_KEY, env.OPENROUTER_API_KEY, env.ANTHROPIC_API_KEY].filter((v) => v !== undefined && v.length >= 8);
 const BASE_URL = env.DASHSCOPE_BASE_URL;
 
 /**
- * Takes every key, the Model Studio workspace URL and any Authorization header out of a text before it is written. An
+ * Takes every key, the Model Studio workspace URL and any Authorization or x-api-key header out of a text before it is written. An
  * appended run also loses this checkout's path and the user's home, which every workspace path holds.
  */
 export function redact(text) {
@@ -29,7 +29,7 @@ export function redact(text) {
   if (APPEND) out = out.split(REPO).join('<repo>').split(homedir()).join('<home>');
   for (const secret of SECRETS) out = out.split(secret).join('<redacted-key>');
   if (BASE_URL) out = out.split(BASE_URL.replace(/\/$/, '')).join('<DASHSCOPE_BASE_URL>');
-  return out.replace(/("?authorization"?\s*[:=]\s*"?)(Bearer\s+)?[^"\s,}\\]+/gi, '$1<redacted>').replace(/sk-[A-Za-z0-9]{20,}/g, '<redacted-key>');
+  return out.replace(/("?(?:authorization|x-api-key)"?\s*[:=]\s*"?)(Bearer\s+)?[^"\s,}\\]+/gi, '$1<redacted>').replace(/sk-(?:ant-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})/g, '<redacted-key>');
 }
 
 function write(dir, name, text) {
@@ -238,7 +238,7 @@ for (const runNo of [...new Set(reportsB.map((r) => r.run ?? '1'))]) {
     const shots = existsSync(shotDir) ? readdirSync(shotDir).filter((f) => f.startsWith(report.step.split('-')[0] + '-')).map((f) => `shots/r${runNo}/${f}`) : [];
     write(stepDir, 'case.json', `${JSON.stringify({ case: report.step, layer: 'B', run: runNo, mode: 'ask', suite: 'packages/extension/test/suite/real-model.ts', fixture: 'packages/extension/test/suite/real-model-fixture.ts', sessions: hits.map((h) => h.id), screenshots: shots, wire: `runs/B-panel/${runNo}/${panelFiles.wire}` }, null, 2)}\n`);
     const turns = hits.flatMap((h) => analyze(h.events).calls);
-    index.push({ case: report.step, area: 'ui', layer: 'B', run: Number(runNo), model: 'qwen3.8-flash', date: report.at, passed: report.ok === true, costUsd: Number(costUsd.toFixed(6)), modelCalls: hits.reduce((n, h) => n + analyze(h.events).assistants.length, 0), goodExample: report.ok === true && turns.length <= 10, dir: path.relative(path.join(REPO, 'docs/results/real-usecases'), stepDir), files: { ...files, screenshots: shots } });
+    index.push({ case: report.step, area: 'ui', layer: 'B', run: Number(runNo), model: hits[0]?.events[0]?.session?.model, date: report.at, passed: report.ok === true, costUsd: Number(costUsd.toFixed(6)), modelCalls: hits.reduce((n, h) => n + analyze(h.events).assistants.length, 0), goodExample: report.ok === true && turns.length <= 10, dir: path.relative(path.join(REPO, 'docs/results/real-usecases'), stepDir), files: { ...files, screenshots: shots } });
   }
 }
 const kept = APPEND ? JSON.parse(readFileSync(path.join(RUNS, 'index.json'), 'utf8')) : [];
