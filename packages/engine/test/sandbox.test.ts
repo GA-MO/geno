@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -168,6 +169,64 @@ describe('two sandboxes open at once', () => {
       expect(allowing).toEqual(new EngineError('a sandbox that allows the network hosts [] is open, and this one allows ["example.com"]'));
     } finally {
       if (!(allowing instanceof Error)) await (allowing as Sandbox).close();
+      await b.sandbox.close();
+    }
+  });
+});
+
+/** A unix socket listener outside any sandbox, which counts the connections that reached it. */
+async function listener(file: string): Promise<{ readonly reached: () => number; readonly close: () => Promise<void> }> {
+  let reached = 0;
+  const server = createServer((socket) => {
+    reached++;
+    socket.end('hi');
+  });
+  await new Promise<void>((resolve) => server.listen(file, resolve));
+  return { reached: () => reached, close: () => new Promise((resolve) => server.close(() => resolve())) };
+}
+
+const SERVE_AND_CONNECT = `node -e "const net = require('net'); const s = net.createServer((c) => c.end('served')).listen(process.argv[1], () => net.connect(process.argv[1]).on('data', (d) => { console.log(String(d)); s.close(); }).on('error', (e) => console.log(e.code))).on('error', (e) => console.log(e.code))"`;
+const CONNECT = `node -e "require('net').connect(process.argv[1]).on('data', (d) => console.log(String(d))).on('error', (e) => console.log(e.code))"`;
+
+describe('unix sockets in the sandbox', () => {
+  it.runIf(process.platform === 'darwin')('serves and connects on a unix socket in $TMPDIR and in the workspace', async () => {
+    expect((await run(`${SERVE_AND_CONNECT} "$TMPDIR/s"`)).output.trim()).toBe('served');
+    expect((await run(`${SERVE_AND_CONNECT} ./s`)).output.trim()).toBe('served');
+  });
+
+  it("refuses to connect to a socket outside the workspace and temp dir, as Docker's or the SSH agent's is", async () => {
+    const elsewhere = await realpath(await mkdtemp(path.join(tmpdir(), 'us-')));
+    const outsider = await listener(path.join(elsewhere, 's'));
+    try {
+      const result = await run(`${CONNECT} '${path.join(elsewhere, 's')}'`);
+      expect(result.output.trim()).toBe('EPERM');
+      expect(outsider.reached()).toBe(0);
+    } finally {
+      await outsider.close();
+    }
+  });
+
+  it.runIf(process.platform === 'darwin')("refuses one chat's command a socket in another chat's temp dir", async () => {
+    const chat = async (name: string) => {
+      const tempDir = path.join(root, name);
+      const ws = path.join(root, `${name}-ws`);
+      await mkdir(tempDir);
+      await mkdir(ws);
+      const home = path.join(root, `${name}-home`);
+      return { tempDir, sandbox: await openSandbox(await sandboxPolicy({ store: openStore({ GCODE_HOME: home }), home, workspace: ws, tempDir })) };
+    };
+    const a = await chat('us-a');
+    const b = await chat('us-b');
+    const inB = await listener(path.join(b.tempDir, 's'));
+    try {
+      const connect = (sandbox: Sandbox) => sandbox.run(`${CONNECT} '${path.join(b.tempDir, 's')}'`, { cwd: root, env: childEnv(process.env), timeoutMs: 30_000 });
+      const [fromA, fromB] = await Promise.all([connect(a.sandbox), connect(b.sandbox)]);
+      expect(fromA.output.trim()).toBe('EPERM');
+      expect(fromB.output.trim()).toBe('hi');
+      expect(inB.reached()).toBe(1);
+    } finally {
+      await inB.close();
+      await a.sandbox.close();
       await b.sandbox.close();
     }
   });
