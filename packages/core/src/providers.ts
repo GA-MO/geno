@@ -135,7 +135,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     fields: [apiKey('ANTHROPIC_API_KEY'), baseUrl(baseUrlEnv('anthropic'), 'https://api.anthropic.com')],
     listsModels: true,
     defaultModel: 'claude-opus-5-5',
-    classifierModel: 'claude-haiku-4-5',
+    classifierModel: 'claude-sonnet-5-5',
     sessionHeader: undefined,
   },
   bedrock: {
