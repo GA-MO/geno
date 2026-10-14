@@ -36,6 +36,19 @@ function mainCheckoutEnv(): Record<string, string | undefined> {
   return parseEnv(readFileSync(process.env['GCODE_ENV_FILE'] ?? path.join(path.dirname(common), '.env'), 'utf8'));
 }
 
+/** The provider the main checkout's .env names, Model Studio's qwen3.8-flash or Anthropic's Claude, with only its own key. */
+function providerEnv(env: Record<string, string | undefined>): Record<string, string> {
+  if (env['GCODE_PROVIDER'] === 'anthropic') {
+    const key = env['ANTHROPIC_API_KEY'];
+    if (!key) throw new Error('the main checkout .env needs ANTHROPIC_API_KEY');
+    return { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: env['GCODE_MODEL'] || 'claude-sonnet-5-5', ANTHROPIC_API_KEY: key };
+  }
+  const key = env['DASHSCOPE_API_KEY'];
+  const baseUrl = env['DASHSCOPE_BASE_URL'];
+  if (!key || !baseUrl) throw new Error('the main checkout .env needs DASHSCOPE_API_KEY and DASHSCOPE_BASE_URL');
+  return { GCODE_PROVIDER: 'modelstudio', GCODE_MODEL: 'qwen3.8-flash', DASHSCOPE_API_KEY: key, DASHSCOPE_BASE_URL: baseUrl };
+}
+
 const spent = (): number => {
   const ledger = path.join(SCRATCH, 'ledger.jsonl');
   if (!existsSync(ledger)) return 0;
@@ -108,12 +121,9 @@ afterAll(() => {
 });
 
 describe.skipIf(!REAL)('the chat panel on the real model', () => {
-  it('runs approval cards, review, lanes, a subagent, MCP trust, stop and Thai on qwen3.8-flash', async () => {
+  it('runs approval cards, review, lanes, a subagent, MCP trust, stop and Thai on the .env provider', async () => {
     if (spent() >= CAP_USD) throw new Error(`the campaign already spent $${spent().toFixed(2)}`);
-    const env = mainCheckoutEnv();
-    const key = env['DASHSCOPE_API_KEY'];
-    const baseUrl = env['DASHSCOPE_BASE_URL'];
-    if (!key || !baseUrl) throw new Error('the main checkout .env needs DASHSCOPE_API_KEY and DASHSCOPE_BASE_URL');
+    const provider = providerEnv(mainCheckoutEnv());
     mkdirSync(SHOTS, { recursive: true });
     rmSync(KEPT, { recursive: true, force: true });
     mkdirSync(KEPT, { recursive: true });
@@ -135,10 +145,8 @@ describe.skipIf(!REAL)('the chat panel on the real model', () => {
     try {
       await vscodeWindow.run(suite, { workspace, work }, {
         GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: key,
-        DASHSCOPE_BASE_URL: baseUrl,
+        CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
+        ...provider,
         // Only the suite reads this, for the /ui route; the engine never sees a fake model.
         GCODE_FAKE_MODEL: url,
         GCODE_WIRE_LOG: path.join(KEPT, 'wire.jsonl'),
