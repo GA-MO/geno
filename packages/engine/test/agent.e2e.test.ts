@@ -61,6 +61,18 @@ describe('gcode agent', () => {
     expect(transport.requests).toHaveLength(2);
   });
 
+  it('starts the session at the --effort given, and refuses --effort on a resumed session', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([answer('a is 1.', usage), answer('Still 1.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, '--effort', 'high', '--non-interactive', 'What is a?'], env, { fetch: transport.fetch });
+    expect(result.code, result.stderr).toBe(0);
+    const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
+    expect((await readSessionLog(sessionFile(store, asSessionId(id)))).session.effort).toBe('high');
+    const again = await runCli(['agent', '--session', id, '--effort', 'low', '--non-interactive', 'And now?'], env, { fetch: transport.fetch });
+    expect(again.code).not.toBe(0);
+    expect(again.stderr).toContain('--effort is fixed when a session starts');
+  });
+
   it('sends the project context loaded at session start, unchanged after the files change, on every turn', async () => {
     const { workspace, env, store } = await setup({
       'AGENTS.md': 'Run tests with pnpm test.\n',

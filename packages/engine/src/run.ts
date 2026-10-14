@@ -26,7 +26,7 @@ import { usage } from './usage.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
-  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] [--append-system-prompt "<text>"] <task...>
+  gcode agent [--session <id>] [--workspace <dir>] [--effort low|medium|high|xhigh|max] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] [--append-system-prompt "<text>"] <task...>
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>

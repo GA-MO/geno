@@ -471,6 +471,7 @@ export const agent: Command = async (args, { io, store }) => {
     options: {
       session: { type: 'string' },
       workspace: { type: 'string' },
+      effort: { type: 'string' },
       ...LIMIT_FLAGS,
       check: { type: 'string' },
       'check-after-edit': { type: 'boolean', default: true },

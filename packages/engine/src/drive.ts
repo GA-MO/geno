@@ -166,7 +166,7 @@ export function positiveNumber(flag: string, raw: string, integer: boolean): num
 export async function openForPrompt(
   io: Io,
   store: Store,
-  flags: { readonly session?: string | undefined; readonly workspace?: string | undefined },
+  flags: { readonly session?: string | undefined; readonly workspace?: string | undefined; readonly effort?: string | undefined },
   prompt: string,
   noun: string,
 ): Promise<OpenSession> {
@@ -174,9 +174,10 @@ export async function openForPrompt(
   if (flags.session === undefined) {
     if (prompt === '') throw new UsageError(`a ${noun} is required to start a session`);
     const workspace = await workspaceDir(io.cwd, flags.workspace ?? '.');
-    opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
+    opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: flags.effort });
   } else {
     if (flags.workspace !== undefined) throw new UsageError('--workspace is fixed when a session starts; drop it with --session');
+    if (flags.effort !== undefined) throw new UsageError('--effort is fixed when a session starts; drop it with --session');
     opened = await resumeSession(store, io, flags.session);
   }
   io.out(`session: ${opened.log.session.id}`);
