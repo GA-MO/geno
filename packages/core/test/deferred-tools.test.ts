@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_TOOL_DEFINITIONS } from '../src/agent.js';
 import { BROWSER_TOOLS } from '../src/browser-tools.generated.js';
 import {
+  autoLoadedText,
   coerceToSchema,
   hintOf,
   loadedTools,
@@ -10,7 +11,7 @@ import {
   searchTools,
   toolRoster,
   TOOL_SEARCH_TOOL,
-  unloadedCallError,
+  unloadedInputError,
 } from '../src/deferred-tools.js';
 import { mcpCatalog, mcpToolDefinitions } from '../src/mcp.js';
 import type { TurnEvent } from '../src/session.js';
@@ -145,13 +146,17 @@ describe('loaded tools', () => {
     expect([...loadedTools(events)].sort()).toEqual(loaded);
   });
 
-  it('refuses a deferred tool until it is loaded, with what to call instead', () => {
+  it('shows a tool called before its load with the definition line tool_search shows, before the result or the input problem', () => {
     const { deferred } = toolRoster([...core, ...browser]);
-    expect(unloadedCallError(deferred, new Set(), 'mcp__browser__click')).toBe(
-      'mcp__browser__click is a deferred tool and is not loaded yet. Call tool_search with select: ["mcp__browser__click"] first, then call mcp__browser__click with the input its schema asks for.',
-    );
-    expect(unloadedCallError(deferred, new Set(['mcp__browser__click']), 'mcp__browser__click')).toBeUndefined();
-    expect(unloadedCallError(deferred, new Set(), 'read')).toBeUndefined();
+    const definition = deferred.get('mcp__browser__click')!.definition;
+    const line = searchTools(deferred, { select: ['mcp__browser__click'] }).text.split('\n')[1]!;
+    expect(line.startsWith('{"name":"mcp__browser__click"')).toBe(true);
+    const ran = autoLoadedText(definition, 'clicked').split('\n');
+    expect(ran[1]).toBe(line);
+    expect(ran.at(-1)).toBe('clicked');
+    const refused = unloadedInputError(definition, 'uid is required').split('\n');
+    expect(refused[0]).toContain('so it did not run: uid is required');
+    expect(refused[2]).toBe(line);
   });
 });
 
