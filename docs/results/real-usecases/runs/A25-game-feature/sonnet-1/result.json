@@ -1,0 +1,85 @@
+{
+  "case": "A25-game-feature",
+  "run": "sonnet-1",
+  "session": "0575137f-c71e-44f7-bfdd-702cd40e6c08",
+  "passed": true,
+  "costUsd": 0.034592000000000005,
+  "classifierUsd": 0,
+  "modelCalls": 4,
+  "toolCalls": 9,
+  "tokens": {
+    "input": 10,
+    "cacheRead": 34110,
+    "cacheWrite": 3030,
+    "output": 1563,
+    "latencyMs": 12130
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=888ch"
+    },
+    {
+      "id": "tests-pass",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-install",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-unchecked-said",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

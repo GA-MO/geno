@@ -1,0 +1,31 @@
+{
+  "case": "A27-resume-thai",
+  "area": "resume",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Implement parseDuration in src/duration.ts so test/duration.test.ts passes, then fix formatPrice and slugify so the whole test suite is green.",
+      "maxTurns": 4
+    },
+    {
+      "prompt": "ถึงไหนแล้ว ทำต่อให้เสร็จด้วย",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "297100e3aad3b861d356474be64b0a477fda3ffe"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A27-resume-thai --run <n>"
+}

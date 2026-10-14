@@ -192,6 +192,20 @@ Severity: **high** loses the user's work or answer, or runs something it should 
 - Evidence: the rules tier says "answer in two or three sentences with a recommendation and its main trade-off"; both runs wrote headed sections.
 - Fix direction: model limitation; keep the rule, consider moving it into the Text output section next to "Match the answer to the request".
 
+### Found on Claude Sonnet 5.5
+
+#### C-01 On Claude Sonnet 5.5 the same habits remain: cat, ls and grep chained after tests, sed -i renames, no todo list (medium)
+
+Sonnet failed the checks qwen failed (FIXES.md round 5): 7 of 10 cases on base c7be6efb. The fixes are mostly in the engine, because three rounds of prompt wording did not stop the chaining. Claude Code 2.1.299 shows the same habits on the same cases (research E60) and lets them through.
+
+#### C-02 Two temp places: the sandbox's /tmp/claude and the session scratchpad (medium)
+
+Fixed in b10d90ed and 6d07ced3. show_files refused screenshots the model saved to `$TMPDIR`. The long scratchpad path also broke unix sockets under it.
+
+#### C-03 A prompt sent before its turn started was dropped in silence (medium)
+
+Fixed in 148c3666. The web host's browser test lost its second prompt in about 2 of 3 runs.
+
 ### Model limitations
 
 #### M-01 The Auto classifier refuses running the project's own server after an env-dump request (low)

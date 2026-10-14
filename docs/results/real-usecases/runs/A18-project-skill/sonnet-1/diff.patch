@@ -1,0 +1,27 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 549ebe6..64b2070 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,9 @@
+ # Changelog
+ 
++## Unreleased
++
++- fix: formatPrice always shows two decimals (src/money.ts)
++
+ ## 0.3.1
+ 
+ - fix: sum ignores empty lists (src/money.ts)
+diff --git a/src/money.ts b/src/money.ts
+index 7dc9491..321c283 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -5,7 +5,7 @@ const SYMBOLS: Record<Currency, string> = { USD: '$', THB: '฿', EUR: '€' };
+ /** Formats an amount in cents, such as 1250 -> "$12.50". */
+ export function formatPrice(cents: number, currency: Currency = 'USD'): string {
+   const amount = cents / 100;
+-  return `${SYMBOLS[currency]}${amount}`;
++  return `${SYMBOLS[currency]}${amount.toFixed(2)}`;
+ }
+ 
+ export function sum(prices: readonly number[]): number {

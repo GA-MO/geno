@@ -1,0 +1,80 @@
+{
+  "case": "A28-explain-then-change",
+  "run": "sonnet-1",
+  "session": "f766c5f1-1673-42b9-af2f-a413613f80f9",
+  "passed": true,
+  "costUsd": 0.0146178,
+  "classifierUsd": 0,
+  "modelCalls": 2,
+  "toolCalls": 1,
+  "tokens": {
+    "input": 6,
+    "cacheRead": 16229,
+    "cacheWrite": 1095,
+    "output": 698,
+    "latencyMs": 6481
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1453ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "short-reco",
+      "pass": true,
+      "detail": "1453 chars"
+    }
+  ]
+}

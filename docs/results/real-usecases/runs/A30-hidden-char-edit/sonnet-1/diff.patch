@@ -1,0 +1,11 @@
+diff --git a/src/config.ts b/src/config.ts
+index 55b90c7..069e7ba 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -1,5 +1,5 @@
+ export const config = {
+-	retries: 3,
++	retries:​ 7,
+ 	timeout: 1000,
+ 	baseUrl: 'http://localhost:8080',
+ };

@@ -1,0 +1,66 @@
+diff --git a/src/logic/score.js b/src/logic/score.js
+index 7d1a666..bb5bc32 100644
+--- a/src/logic/score.js
++++ b/src/logic/score.js
+@@ -1,4 +1,8 @@
+-export const createState = () => ({ coins: 0, score: 0 });
++export const createState = () => ({ coins: 0, score: 0, paused: false });
++
++export function togglePause(state) {
++  return { ...state, paused: !state.paused };
++}
+ 
+ export function collectCoin(state) {
+   return { ...state, coins: state.coins + 1 };
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..7b1c6bc 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,4 +1,4 @@
+-import { createState, collectCoin } from '../logic/score.js';
++import { createState, collectCoin, togglePause } from '../logic/score.js';
+ 
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+@@ -16,9 +16,20 @@ export class GameScene extends Phaser.Scene {
+       this.state = collectCoin(this.state);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
++    this.pausedText = this.add
++      .text(400, 300, 'PAUSED', { fontSize: '48px', color: '#ffffff' })
++      .setOrigin(0.5)
++      .setVisible(false);
++    this.input.keyboard.on('keydown-P', () => {
++      this.state = togglePause(this.state);
++      this.pausedText.setVisible(this.state.paused);
++      if (this.state.paused) this.physics.pause();
++      else this.physics.resume();
++    });
+   }
+ 
+   update() {
++    if (this.state.paused) return;
+     const speed = 200;
+     const body = this.player.body;
+     body.setVelocity(0);
+diff --git a/test/score.test.js b/test/score.test.js
+index 9fe2f9e..a513a5e 100644
+--- a/test/score.test.js
++++ b/test/score.test.js
+@@ -1,6 +1,15 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { collectCoin, createState } from '../src/logic/score.js';
++import { collectCoin, createState, togglePause } from '../src/logic/score.js';
++
++test('pause toggles on and off without touching other state', () => {
++  const start = collectCoin(createState());
++  assert.equal(start.paused, false);
++  const paused = togglePause(start);
++  assert.equal(paused.paused, true);
++  assert.equal(paused.coins, 1);
++  assert.equal(togglePause(paused).paused, false);
++});
+ 
+ test('collecting a coin counts it', () => {
+   assert.equal(collectCoin(createState()).coins, 1);

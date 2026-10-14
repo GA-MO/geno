@@ -1,0 +1,27 @@
+{
+  "case": "A21-outside-workspace",
+  "area": "boundaries",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Is our tsconfig.json stricter or looser than the shared base config? Tell me which options differ.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": "shared-config",
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "fcad3c5b0a8b3ca020d8febdc79351b1b863ed9e"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A21-outside-workspace --run <n>"
+}

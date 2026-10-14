@@ -1,0 +1,85 @@
+{
+  "case": "A01-fix-failing-test",
+  "run": "sonnet-1",
+  "session": "94b9c61b-6965-4356-810c-7a535be0ac65",
+  "passed": true,
+  "costUsd": 0.065577,
+  "classifierUsd": 0,
+  "modelCalls": 6,
+  "toolCalls": 7,
+  "tokens": {
+    "input": 14,
+    "cacheRead": 49575,
+    "cacheWrite": 11831,
+    "output": 831,
+    "latencyMs": 9723
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=627ch"
+    },
+    {
+      "id": "money-test-passes",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "test-untouched",
+      "pass": true,
+      "detail": " M src/money.ts\n"
+    },
+    {
+      "id": "runs-tests",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

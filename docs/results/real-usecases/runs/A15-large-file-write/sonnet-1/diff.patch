@@ -1,0 +1,79 @@
+diff --git a/src/logic/levels.js b/src/logic/levels.js
+new file mode 100644
+index 0000000..356f446
+--- /dev/null
++++ b/src/logic/levels.js
+@@ -0,0 +1,50 @@
++// Each maze is 31 rows x 28 columns: '#' wall, '.' dot, 'o' power pellet, ' ' empty.
++// Mazes are vertically symmetric and assembled from shared rows so every row
++// stays exactly 28 characters wide; only the rows that differ per level vary.
++
++const WALL = '############################';
++const TOP = '#............##............#';
++const TOP_PELLETS = '#o...........##...........o#';
++const POST = '#.####.#####.##.#####.####.#';
++const POST_PELLETS = '#o####.#####.##.#####.####o#';
++const BLOCK = '#.####.##.########.##.####.#';
++const NECK = '######.#####.##.#####.######';
++const SIDE = '######.##          ##.######';
++const GATE_TOP = '######.##.###  ###.##.######';
++const GATE_MID = '######.##.#      #.##.######';
++const TUNNEL = '      .   #      #   .      ';
++
++const OPEN_LANES = [
++  '#..........................#',
++  '#.....#..............#.....#',
++  '#..####..............####..#',
++];
++const MIDDLE_LANES = [
++  '#......##....##....##......#',
++  '#..........##....##........#',
++  '#.....#....######....#.....#',
++];
++
++function buildMaze({ top, post, lane, middle }) {
++  const upper = [
++    WALL, top, POST, post, POST, lane, BLOCK, BLOCK, middle,
++    NECK, SIDE, SIDE, GATE_TOP, GATE_MID, TUNNEL,
++  ];
++  return [...upper, TOP, ...[...upper].reverse()];
++}
++
++const variants = [
++  ...OPEN_LANES.flatMap((lane) =>
++    MIDDLE_LANES.map((middle) => ({ top: TOP, post: POST_PELLETS, lane, middle })),
++  ),
++  ...OPEN_LANES.map((lane, i) => ({
++    top: TOP_PELLETS, post: POST, lane, middle: MIDDLE_LANES[i],
++  })),
++];
++
++export const LEVELS = variants.map((variant, index) => ({
++  id: index + 1,
++  name: `Level ${index + 1}`,
++  speed: 1 + index * 0.1,
++  maze: buildMaze(variant),
++}));
+diff --git a/test/levels.test.js b/test/levels.test.js
+new file mode 100644
+index 0000000..0090118
+--- /dev/null
++++ b/test/levels.test.js
+@@ -0,0 +1,17 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { LEVELS } from '../src/logic/levels.js';
++
++test('there are 12 levels', () => {
++  assert.equal(LEVELS.length, 12);
++});
++
++test('every maze is 31x28 and uses only valid tiles', () => {
++  for (const { id, maze } of LEVELS) {
++    assert.equal(maze.length, 31, `level ${id} rows`);
++    maze.forEach((row, y) => {
++      assert.equal(row.length, 28, `level ${id} row ${y} width`);
++      assert.match(row, /^[#.o ]+$/, `level ${id} row ${y} tiles`);
++    });
++  }
++});

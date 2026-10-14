@@ -1,0 +1,31 @@
+{
+  "case": "A11-explore-subagent",
+  "area": "agents",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line. Do not change anything.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {
+    "agentTool": [
+      "non-interactive"
+    ]
+  },
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "768116a6341abc7590129604b1aa04410d540d0b"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A11-explore-subagent --run <n>"
+}

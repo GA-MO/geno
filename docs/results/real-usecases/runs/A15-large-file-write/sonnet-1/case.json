@@ -1,0 +1,27 @@
+{
+  "case": "A15-large-file-write",
+  "area": "editing",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Create src/logic/levels.js exporting LEVELS: an array of 12 Pac-Man style mazes. Each level is { id, name, speed, maze } where maze is an array of 31 strings of exactly 28 characters using # for walls, . for dots, o for power pellets and space for empty. Write the whole file in one go, then add a test that checks every maze is 31x28.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.3,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "2e53e687c3ad62b6e4cfcb28d0c3aad8b1a934d0"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A15-large-file-write --run <n>"
+}

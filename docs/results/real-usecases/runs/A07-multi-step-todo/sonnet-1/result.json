@@ -1,0 +1,90 @@
+{
+  "case": "A07-multi-step-todo",
+  "run": "sonnet-1",
+  "session": "ddbfd8f6-3023-4060-9e2b-4047f34740ad",
+  "passed": true,
+  "costUsd": 0.04002,
+  "classifierUsd": 0,
+  "modelCalls": 5,
+  "toolCalls": 12,
+  "tokens": {
+    "input": 14,
+    "cacheRead": 46870,
+    "cacheWrite": 3407,
+    "output": 1699,
+    "latencyMs": 14173
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=150ch"
+    },
+    {
+      "id": "keeps-todo",
+      "pass": true,
+      "detail": "2 todo calls, last: done,done,done,done"
+    },
+    {
+      "id": "tests-pass",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "rename-complete",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "changelog",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

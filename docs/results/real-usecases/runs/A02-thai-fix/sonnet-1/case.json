@@ -1,0 +1,27 @@
+{
+  "case": "A02-thai-fix",
+  "area": "thai",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "ab701309e3ddfdf94187c283fe6b6ed8c0347457"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A02-thai-fix --run <n>"
+}
