@@ -8,7 +8,7 @@ import { DISK_FILES } from '../src/files.js';
 import { bindSession, createLane, laneRepoOf, type LaneSession } from '../src/lanes.js';
 import { permissionStore } from '../src/permissions.js';
 import type { Sandbox } from '../src/sandbox.js';
-import { agentExecutors, freshAuto, NON_INTERACTIVE, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
+import { agentExecutors, NON_INTERACTIVE, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import { runTool, type ToolContext } from '../src/tools/index.js';
 import { ruleAttacher } from '../src/tools/rules.js';
 import { twoColorPng } from '../../core/test/png.js';
@@ -62,7 +62,6 @@ async function show(at: Place, input: unknown, { mode = 'ask', answers = [], rul
           classify: async () => {
             throw new Error('no classifier in these tests');
           },
-          auto: freshAuto(),
         };
   const permissions = permissionStore(path.join(at.root, 'home'), at.workspace);
   for (const rule of rules) await permissions.add(rule);

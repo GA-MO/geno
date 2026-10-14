@@ -106,9 +106,9 @@ describe('the command classifier', () => {
     expect(transport.requests).toHaveLength(1);
   });
 
-  it('asks when the model refuses', async () => {
+  it('denies when the model refuses to judge, as Claude does on an attack', async () => {
     const { run } = await classify([refusal]);
-    expect(run.verdict).toBe('ask');
+    expect(run.verdict).toBe('deny');
   });
 
   it('asks without calling anything when the provider key is missing', async () => {

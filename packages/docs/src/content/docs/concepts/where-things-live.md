@@ -26,7 +26,7 @@ flowchart LR
 | การเรียก model | `packages/engine/src/gateway.ts`, `wire.ts`, `wire-openai.ts`, `stream-watch.ts`; `packages/core/src/model-error.ts` |
 | Compaction | `packages/core/src/compaction.ts`; `packages/engine/src/compact.ts` |
 | tool | `packages/engine/src/tools/*.ts`, `process.ts`, `files.ts`; `packages/core/src/tool-batch.ts`, `edit.ts` |
-| นโยบาย | `packages/core/src/approval.ts`, `permission-rules.ts`, `auto.ts`, `classifier.ts`; `packages/engine/src/tools/agent.ts`, `permissions.ts` |
+| นโยบาย | `packages/core/src/approval.ts`, `permission-rules.ts`, `classifier.ts`; `packages/engine/src/tools/agent.ts`, `permissions.ts` |
 | Hooks | `packages/core/src/hooks.ts`; `packages/engine/src/hooks.ts`, `hook-config.ts` |
 | Sandbox | `packages/engine/src/sandbox.ts`, `sandbox-host.ts` |
 | Subagent และการปลุก | `packages/core/src/subagent.ts`, `wake.ts`; `packages/engine/src/subagents.ts`, `inbox.ts`, `wakes.ts`, `wake-hooks.ts` |

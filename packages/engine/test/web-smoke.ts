@@ -13,7 +13,7 @@ import { startSession } from '../src/chat.js';
 import { commandClassifier } from '../src/classifier.js';
 import type { Io } from '../src/command.js';
 import { openStore } from '../src/store.js';
-import { freshAuto } from '../src/tools/agent.js';
+
 import type { ReadRun } from '../src/tools/web.js';
 import { rgCommand } from './helpers.js';
 
@@ -67,7 +67,6 @@ async function main(): Promise<number> {
           return 'reject';
         },
         classify: commandClassifier(env, globalThis.fetch),
-        auto: freshAuto(),
       },
       web: { onRead: (run) => reads.push(run) },
     });

@@ -9,7 +9,7 @@ import type { Io } from '../src/command.js';
 import { drive } from '../src/drive.js';
 import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
 import { openStore } from '../src/store.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
@@ -50,7 +50,6 @@ async function runEchoes(mode: SessionMode, reply: PermissionAnswer) {
       return reply;
     },
     classify: async () => ({ verdict: 'ask', reason: 'unsure', model: 'fake', latencyMs: 1, costUsd: 0 }),
-    auto: freshAuto(),
   };
   const toolset = (await hub.toolset(approval))!;
   const uses: FakeToolUse[] = [
@@ -99,8 +98,8 @@ describe('read-only MCP tools of one turn', () => {
   it('runs read-only calls together in Auto, which asks nobody about them', async () => {
     const { asked, logged, executors } = await runEchoes('auto', 'reject');
 
-    expect(asked, 'env goes to the classifier, whose ask blocks it without asking the user').toEqual([]);
-    expect(logged.map((e) => e.status)).toEqual(['ok', 'ok', 'ok', 'denied']);
+    expect(asked, 'env goes to the classifier, whose ask puts the card to the user').toEqual(['mcp__fake__env']);
+    expect(logged.map((e) => e.status)).toEqual(['ok', 'ok', 'ok', 'rejected']);
     const [first, second, third] = logged.map((e) => e.timing!);
     expect(Math.max(first!.startAt, second!.startAt, third!.startAt)).toBeLessThan(Math.min(first!.endAt, second!.endAt, third!.endAt) + 1);
     expect(executors['mcp__fake__echo']!.concurrent?.({})).toBe(true);

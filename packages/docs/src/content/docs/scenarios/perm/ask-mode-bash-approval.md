@@ -151,7 +151,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` และเลื่อนสถานะ Auto ด้วย `nextAutoState`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow`
                   บันทึกนี้ติดไปกับผลของ call ให้แผงแชตแสดงได้ว่าใครอนุญาต
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
