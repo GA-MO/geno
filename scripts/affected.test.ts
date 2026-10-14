@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { onlyScriptsChanged, readSuites, selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
+import { MANIFESTS, onlyScriptsChanged, readSuites, selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
 
 const suite = (name: string, text: string, extra: string[] = []): Suite => ({
   name,
@@ -66,6 +66,28 @@ describe('selectVscode', () => {
       const picked = selectVscode([file], '', real).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
       expect(picked, file).toEqual(expect.arrayContaining(broke));
     }
+  });
+
+  it('runs the suites that script bash commands when a file that judges bash changes', () => {
+    const scripted = [...SUITES, suite('permissions', "bash('ls -t ..')"), suite('agents', 'no commands here')];
+    const picked = (changed: string[]) => selectVscode(changed, '', scripted).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
+    for (const file of ['packages/core/src/shell-intent.ts', 'packages/core/src/approval.ts', 'packages/engine/src/sandbox.ts']) {
+      expect(picked([file]), file).toContain('permissions');
+      expect(picked([file]), file).not.toContain('agents');
+    }
+  });
+
+  it('leaves the harness alone when the extension manifest changes only its settings, and runs the suites that name the setting', () => {
+    const before = JSON.stringify({ name: 'g-code', version: '1.0.0', contributes: { configuration: { properties: {} }, commands: [] } });
+    const settingOnly = JSON.stringify({ name: 'g-code', version: '1.0.1', contributes: { configuration: { properties: { 'gcode.sandbox.packageHosts': {} } }, commands: [] } });
+    const command = JSON.stringify({ name: 'g-code', version: '1.0.0', contributes: { configuration: { properties: {} }, commands: [{ command: 'gcode.x' }] } });
+    expect(MANIFESTS['packages/extension/package.json']!(before, settingOnly)).toBe(true);
+    expect(MANIFESTS['packages/extension/package.json']!(before, command), 'a command is not a setting').toBe(false);
+    const named = [...SUITES, suite('settings', "'gcode.sandbox.packageHosts'")];
+    const diff = '+      "gcode.sandbox.packageHosts": {';
+    const picked = selectVscode(['packages/extension/package.json'], diff, named, { harmless: ['packages/extension/package.json'] }).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
+    expect(picked).toEqual(['settings']);
+    expect(selectVscode(['packages/extension/package.json'], diff, named)).toHaveLength(named.length);
   });
 
   it('runs everything when the harness changes', () => {

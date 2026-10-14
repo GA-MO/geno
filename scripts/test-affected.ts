@@ -1,12 +1,13 @@
 /**
- * `pnpm test:affected [--base <ref>] [--docker] [--dry]`: typecheck and the boundary lint, the unit tests related to
- * what changed since the merge base with main, the webview tests, and only the VS Code integration files that change
- * can break.
+ * `pnpm test:affected [--base <ref>] [--quick] [--docker] [--dry]`: typecheck and the boundary lint, the unit tests
+ * related to what changed since the merge base with main, the webview tests, and only the VS Code integration files
+ * that change can break. `--quick` (`pnpm test:quick`) stops before VS Code: the loop while working takes a minute or
+ * two, and the integration files run once, before a push.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { onlyScriptsChanged, readSuites, selectVscode } from './affected.js';
+import { MANIFESTS, readSuites, selectVscode } from './affected.js';
 import { vscodeWorkers } from './vscode-workers.js';
 
 const args = process.argv.slice(2);
@@ -22,7 +23,7 @@ const changed = [
     ...git('ls-files', '--others', '--exclude-standard').split('\n'),
   ]),
 ].filter(Boolean);
-const panelDiff = git('diff', mergeBase, '--', 'packages/extension/src');
+const panelDiff = git('diff', mergeBase, '--', 'packages/extension/src', 'packages/extension/package.json');
 
 const suites = readSuites(root);
 
@@ -33,9 +34,11 @@ const show = (ref: string, file: string) => {
     return '';
   }
 };
-const scriptsOnly = changed.includes('package.json') && onlyScriptsChanged(show(mergeBase, 'package.json'), readFileSync(path.join(root, 'package.json'), 'utf8'));
-if (scriptsOnly) console.log('package.json: only its scripts changed, which no VS Code suite runs');
-const picks = selectVscode(scriptsOnly ? changed.filter((p) => p !== 'package.json') : changed, panelDiff, suites);
+const harmless = Object.entries(MANIFESTS)
+  .filter(([file, test]) => changed.includes(file) && test(show(mergeBase, file), readFileSync(path.join(root, file), 'utf8')))
+  .map(([file]) => file);
+for (const file of harmless) console.log(`${file}: only a part no VS Code harness reads changed`);
+const picks = selectVscode(changed, panelDiff, suites, { harmless });
 console.log(`changed since ${base} (${mergeBase.slice(0, 7)}): ${changed.length} files`);
 const windows = Math.min(picks.length, vscodeWorkers(process.env));
 console.log(picks.length === 0 ? 'VS Code: nothing to run' : `VS Code: ${picks.length} of ${suites.length} files, in ${windows} pooled window${windows === 1 ? '' : 's'}`);
@@ -52,6 +55,10 @@ run('pnpm', ['lint:deps']);
 run('pnpm', ['vitest', 'run', '--project', 'unit', '--changed', mergeBase, '--passWithNoTests']);
 // The webview files load the panel's bundles, which vitest's import graph does not see, and take seconds, so all run.
 run('pnpm', ['vitest', 'run', '--project', 'webview']);
+if (flag('quick')) {
+  console.log(picks.length === 0 ? '\nquick: done' : `\nquick: done; ${picks.length} VS Code files left for \`pnpm test:affected\` before a push`);
+  process.exit(0);
+}
 if (picks.length > 0) {
   run('pnpm', ['build']);
   const files = picks.map((p) => p.file);
