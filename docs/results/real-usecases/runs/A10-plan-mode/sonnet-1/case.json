@@ -1,0 +1,27 @@
+{
+  "case": "A10-plan-mode",
+  "area": "modes",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "plan",
+  "prompts": [
+    {
+      "prompt": "Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "b921af6f6d256bc504fd30238f5f41842bfbaf0d"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A10-plan-mode --run <n>"
+}

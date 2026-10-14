@@ -1,0 +1,10 @@
+diff --git a/src/slug.ts b/src/slug.ts
+index 1486261..f3780a5 100644
+--- a/src/slug.ts
++++ b/src/slug.ts
+@@ -1,4 +1,4 @@
+ /** Turns a title into a URL slug: lower case, words joined by single dashes. */
+ export function slugify(title: string): string {
+-  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');
++  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+ }

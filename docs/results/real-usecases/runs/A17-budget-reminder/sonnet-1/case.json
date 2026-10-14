@@ -1,0 +1,27 @@
+{
+  "case": "A17-budget-reminder",
+  "area": "limits",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add an @returns line to every exported function in src/shop/ whose doc comment lacks one.",
+      "maxTurns": 6
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "5837c75ddb6ca9880fe9b7c07c7077578e642cca"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A17-budget-reminder --run <n>"
+}

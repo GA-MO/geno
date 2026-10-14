@@ -1,0 +1,498 @@
+diff --git a/src/main.js b/src/main.js
+index b286302..02d1dc7 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -1,9 +1,10 @@
+ import { GameScene } from './scenes/GameScene.js';
++import { PacmanScene } from './scenes/PacmanScene.js';
+ 
+ new Phaser.Game({
+   type: Phaser.AUTO,
+   width: 800,
+   height: 600,
+   physics: { default: 'arcade', arcade: { debug: false } },
+-  scene: [GameScene],
++  scene: [PacmanScene, GameScene],
+ });
+diff --git a/src/scenes/PacmanScene.js b/src/scenes/PacmanScene.js
+new file mode 100644
+index 0000000..3c2d11c
+--- /dev/null
++++ b/src/scenes/PacmanScene.js
+@@ -0,0 +1,476 @@
++// Tile legend: '#' wall, '.' dot, 'o' power pellet, '-' ghost-house door, ' ' empty floor.
++export const MAP = [
++  '############################',
++  '#............##............#',
++  '#.####.#####.##.#####.####.#',
++  '#o####.#####.##.#####.####o#',
++  '#.####.#####.##.#####.####.#',
++  '#..........................#',
++  '#.####.##.########.##.####.#',
++  '#.####.##.########.##.####.#',
++  '#......##....##....##......#',
++  '######.##### ## #####.######',
++  '     #.##### ## #####.#     ',
++  '     #.##          ##.#     ',
++  '     #.## ###--### ##.#     ',
++  '######.## #      # ##.######',
++  '      .   #      #   .      ',
++  '######.## #      # ##.######',
++  '     #.## ######## ##.#     ',
++  '     #.##          ##.#     ',
++  '     #.## ######## ##.#     ',
++  '######.## ######## ##.######',
++  '#............##............#',
++  '#.####.#####.##.#####.####.#',
++  '#.####.#####.##.#####.####.#',
++  '#o..##.......  .......##..o#',
++  '###.##.##.########.##.##.###',
++  '###.##.##.########.##.##.###',
++  '#......##....##....##......#',
++  '#.##########.##.##########.#',
++  '#.##########.##.##########.#',
++  '#..........................#',
++  '############################',
++];
++
++const COLS = 28;
++const ROWS = 31;
++const TILE = 18;
++const OFFSET_X = (800 - COLS * TILE) / 2;
++const OFFSET_Y = 36;
++
++const UP = { x: 0, y: -1 };
++const LEFT = { x: -1, y: 0 };
++const DOWN = { x: 0, y: 1 };
++const RIGHT = { x: 1, y: 0 };
++const NONE = { x: 0, y: 0 };
++// Order matters: it breaks distance ties the way the original does.
++const DIRECTIONS = [UP, LEFT, DOWN, RIGHT];
++
++const PAC_SPEED = 8; // tiles per second
++const GHOST_SPEED = 7.2;
++const FRIGHTENED_SPEED = 4.5;
++const EATEN_SPEED = 16;
++
++const FRIGHTENED_MS = 6000;
++const FRIGHTENED_FLASH_MS = 2000;
++const READY_MS = 2000;
++const DEATH_MS = 1200;
++const START_LIVES = 3;
++const DOT_POINTS = 10;
++const PELLET_POINTS = 50;
++const GHOST_POINTS = [200, 400, 800, 1600];
++
++// Seconds per phase; the last chase never ends.
++const MODE_SCHEDULE = [
++  ['scatter', 7000], ['chase', 20000], ['scatter', 7000], ['chase', 20000],
++  ['scatter', 5000], ['chase', 20000], ['scatter', 5000], ['chase', Infinity],
++];
++
++const HOUSE_EXIT = { c: 13, r: 11 };
++const HOUSE_CENTER = { c: 13, r: 14 };
++const PAC_START = { c: 13, r: 23 };
++
++const GHOST_DEFS = [
++  { name: 'blinky', color: 0xff0000, corner: { c: 25, r: -3 }, start: { c: 13, r: 11 }, releaseMs: 0 },
++  { name: 'pinky', color: 0xffb8ff, corner: { c: 2, r: -3 }, start: { c: 13, r: 14 }, releaseMs: 2000 },
++  { name: 'inky', color: 0x00ffff, corner: { c: 27, r: 31 }, start: { c: 11, r: 14 }, releaseMs: 6000 },
++  { name: 'clyde', color: 0xffb852, corner: { c: 0, r: 31 }, start: { c: 16, r: 14 }, releaseMs: 10000 },
++];
++
++const wrapCol = (c) => (c + COLS) % COLS;
++const opposite = (d) => ({ x: -d.x, y: -d.y });
++const sameDir = (a, b) => a.x === b.x && a.y === b.y;
++const tileAt = (c, r) => (r < 0 || r >= ROWS ? '#' : MAP[r][wrapCol(c)]);
++const distSq = (a, b) => (a.c - b.c) ** 2 + (a.r - b.r) ** 2;
++
++// Pac-Man may not pass the door; ghosts only when leaving or eaten.
++function canEnter(c, r, passDoor) {
++  const tile = tileAt(c, r);
++  return tile !== '#' && (tile !== '-' || passDoor);
++}
++
++// Actors sit on tile (c, r) and travel t (0..1) of the way toward tile + dir.
++function pixelOf(actor) {
++  return {
++    x: OFFSET_X + (actor.c + actor.dir.x * actor.t + 0.5) * TILE,
++    y: OFFSET_Y + (actor.r + actor.dir.y * actor.t + 0.5) * TILE,
++  };
++}
++
++function tilePosition(actor) {
++  return { c: actor.c + actor.dir.x * actor.t, r: actor.r + actor.dir.y * actor.t };
++}
++
++export class PacmanScene extends Phaser.Scene {
++  constructor() {
++    super('pacman');
++  }
++
++  create() {
++    this.wallLayer = this.add.graphics();
++    this.drawWalls();
++    this.dynamicLayer = this.add.graphics();
++    this.hud = this.add.text(OFFSET_X, 8, '', { fontFamily: 'monospace', fontSize: '18px', color: '#ffffff' });
++    this.banner = this.add.text(400, OFFSET_Y + 17.5 * TILE, '', {
++      fontFamily: 'monospace', fontSize: '20px', color: '#ffff00',
++    }).setOrigin(0.5);
++    this.cursors = this.input.keyboard.createCursorKeys();
++    this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
++    this.newGame();
++  }
++
++  newGame() {
++    this.score = 0;
++    this.lives = START_LIVES;
++    this.resetDots();
++    this.resetActors();
++  }
++
++  resetDots() {
++    this.dots = new Set();
++    this.pellets = new Set();
++    MAP.forEach((row, r) => {
++      [...row].forEach((tile, c) => {
++        if (tile === '.') this.dots.add(`${c},${r}`);
++        if (tile === 'o') this.pellets.add(`${c},${r}`);
++      });
++    });
++  }
++
++  resetActors() {
++    this.pac = { ...PAC_START, dir: LEFT, t: 0, wanted: LEFT };
++    this.ghosts = GHOST_DEFS.map((def) => ({
++      def,
++      c: def.start.c,
++      r: def.start.r,
++      dir: def.name === 'blinky' ? LEFT : NONE,
++      t: 0,
++      state: def.name === 'blinky' ? 'active' : 'house', // house | leaving | active | eaten
++      frightened: false,
++      reversePending: false,
++    }));
++    this.modeIndex = 0;
++    this.modeElapsed = 0;
++    this.frightenedLeft = 0;
++    this.ghostsEatenInRun = 0;
++    this.houseClock = 0;
++    this.phase = 'ready';
++    this.phaseTimer = READY_MS;
++    this.banner.setText('READY!');
++  }
++
++  get mode() {
++    return MODE_SCHEDULE[this.modeIndex][0];
++  }
++
++  update(_time, delta) {
++    const dt = Math.min(delta, 50);
++    if (this.phase === 'gameover' || this.phase === 'won') {
++      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
++        this.newGame();
++      }
++    } else if (this.phase === 'ready') {
++      this.phaseTimer -= dt;
++      if (this.phaseTimer <= 0) {
++        this.phase = 'play';
++        this.banner.setText('');
++      }
++    } else if (this.phase === 'dying') {
++      this.phaseTimer -= dt;
++      if (this.phaseTimer <= 0) {
++        if (this.lives > 0) {
++          this.resetActors();
++        } else {
++          this.phase = 'gameover';
++          this.banner.setText('GAME OVER - press SPACE');
++        }
++      }
++    } else {
++      this.stepPlay(dt);
++    }
++    this.render();
++  }
++
++  stepPlay(dt) {
++    this.readInput();
++    this.updateModeTimers(dt);
++    this.movePac(dt);
++    this.releaseGhosts(dt);
++    for (const ghost of this.ghosts) this.moveGhost(ghost, dt);
++    this.checkCollisions();
++    if (this.phase === 'play' && this.dots.size === 0 && this.pellets.size === 0) {
++      this.phase = 'won';
++      this.banner.setText('YOU WIN - press SPACE');
++    }
++  }
++
++  readInput() {
++    if (this.cursors.left.isDown) this.pac.wanted = LEFT;
++    else if (this.cursors.right.isDown) this.pac.wanted = RIGHT;
++    else if (this.cursors.up.isDown) this.pac.wanted = UP;
++    else if (this.cursors.down.isDown) this.pac.wanted = DOWN;
++  }
++
++  updateModeTimers(dt) {
++    if (this.frightenedLeft > 0) {
++      this.frightenedLeft -= dt;
++      if (this.frightenedLeft <= 0) {
++        this.frightenedLeft = 0;
++        this.ghostsEatenInRun = 0;
++        for (const ghost of this.ghosts) ghost.frightened = false;
++      }
++      return; // scatter/chase clock is paused while frightened
++    }
++    this.modeElapsed += dt;
++    const duration = MODE_SCHEDULE[this.modeIndex][1];
++    if (this.modeElapsed >= duration) {
++      this.modeElapsed = 0;
++      this.modeIndex += 1;
++      for (const ghost of this.ghosts) ghost.reversePending = true;
++    }
++  }
++
++  // Advances an actor along its heading and calls onTile each time it reaches a tile centre.
++  advance(actor, tilesPerSecond, dt, onTile) {
++    if (sameDir(actor.dir, NONE)) {
++      onTile(actor);
++      return;
++    }
++    actor.t += (tilesPerSecond * dt) / 1000;
++    while (actor.t >= 1) {
++      actor.t -= 1;
++      actor.c = wrapCol(actor.c + actor.dir.x);
++      actor.r += actor.dir.y;
++      onTile(actor);
++      if (sameDir(actor.dir, NONE)) {
++        actor.t = 0;
++        break;
++      }
++    }
++  }
++
++  movePac(dt) {
++    const pac = this.pac;
++    // Reversing mid-tile is allowed and instant.
++    if (!sameDir(pac.dir, NONE) && sameDir(pac.wanted, opposite(pac.dir))) {
++      pac.c = wrapCol(pac.c + pac.dir.x);
++      pac.r += pac.dir.y;
++      pac.t = 1 - pac.t;
++      pac.dir = pac.wanted;
++    }
++    this.advance(pac, PAC_SPEED, dt, (a) => {
++      if (canEnter(a.c + a.wanted.x, a.r + a.wanted.y, false)) a.dir = a.wanted;
++      else if (!canEnter(a.c + a.dir.x, a.r + a.dir.y, false)) a.dir = NONE;
++    });
++    this.eatAtPac();
++  }
++
++  eatAtPac() {
++    const pac = this.pac;
++    if (pac.t > 0.5) return;
++    const key = `${pac.c},${pac.r}`;
++    if (this.dots.delete(key)) {
++      this.score += DOT_POINTS;
++    } else if (this.pellets.delete(key)) {
++      this.score += PELLET_POINTS;
++      this.frightenedLeft = FRIGHTENED_MS;
++      this.ghostsEatenInRun = 0;
++      for (const ghost of this.ghosts) {
++        if (ghost.state === 'active') {
++          ghost.frightened = true;
++          ghost.reversePending = true;
++        }
++      }
++    }
++  }
++
++  releaseGhosts(dt) {
++    this.houseClock += dt;
++    for (const ghost of this.ghosts) {
++      if (ghost.state === 'house' && this.houseClock >= ghost.def.releaseMs) ghost.state = 'leaving';
++    }
++  }
++
++  ghostSpeed(ghost) {
++    if (ghost.state === 'eaten') return EATEN_SPEED;
++    if (ghost.frightened) return FRIGHTENED_SPEED;
++    return GHOST_SPEED;
++  }
++
++  moveGhost(ghost, dt) {
++    if (ghost.state === 'house') return;
++    this.advance(ghost, this.ghostSpeed(ghost), dt, (g) => this.chooseGhostDirection(g));
++  }
++
++  chooseGhostDirection(ghost) {
++    if (ghost.state === 'leaving') {
++      if (ghost.c === HOUSE_EXIT.c && ghost.r === HOUSE_EXIT.r) {
++        ghost.state = 'active';
++        ghost.dir = LEFT;
++        return;
++      }
++      if (ghost.c < HOUSE_EXIT.c) ghost.dir = RIGHT;
++      else if (ghost.c > HOUSE_EXIT.c) ghost.dir = LEFT;
++      else ghost.dir = UP;
++      return;
++    }
++    if (ghost.state === 'eaten') {
++      if (ghost.c === HOUSE_CENTER.c && ghost.r === HOUSE_CENTER.r) {
++        ghost.state = 'leaving';
++        ghost.dir = UP;
++        return;
++      }
++      if (ghost.c === HOUSE_EXIT.c && ghost.r >= HOUSE_EXIT.r) {
++        ghost.dir = DOWN;
++        return;
++      }
++    }
++    if (ghost.reversePending) {
++      ghost.reversePending = false;
++      if (ghost.state === 'active' && !sameDir(ghost.dir, NONE)) {
++        ghost.dir = opposite(ghost.dir);
++        return;
++      }
++    }
++    const passDoor = ghost.state === 'eaten';
++    const back = opposite(ghost.dir);
++    let options = DIRECTIONS.filter(
++      (d) => !sameDir(d, back) && canEnter(ghost.c + d.x, ghost.r + d.y, passDoor),
++    );
++    if (options.length === 0) options = [back];
++    if (ghost.frightened && ghost.state === 'active') {
++      ghost.dir = options[Math.floor(Math.random() * options.length)];
++      return;
++    }
++    const target = this.ghostTarget(ghost);
++    let best = options[0];
++    let bestDist = Infinity;
++    for (const d of options) {
++      const dist = distSq({ c: ghost.c + d.x, r: ghost.r + d.y }, target);
++      if (dist < bestDist) {
++        best = d;
++        bestDist = dist;
++      }
++    }
++    ghost.dir = best;
++  }
++
++  ghostTarget(ghost) {
++    if (ghost.state === 'eaten') return HOUSE_EXIT;
++    if (this.mode === 'scatter') return ghost.def.corner;
++    const pac = this.pac;
++    const heading = sameDir(pac.dir, NONE) ? pac.wanted : pac.dir;
++    switch (ghost.def.name) {
++      case 'blinky':
++        return { c: pac.c, r: pac.r };
++      case 'pinky':
++        return { c: pac.c + heading.x * 4, r: pac.r + heading.y * 4 };
++      case 'inky': {
++        const blinky = this.ghosts[0];
++        const pivot = { c: pac.c + heading.x * 2, r: pac.r + heading.y * 2 };
++        return { c: blinky.c + (pivot.c - blinky.c) * 2, r: blinky.r + (pivot.r - blinky.r) * 2 };
++      }
++      default: // clyde
++        return distSq(ghost, pac) > 64 ? { c: pac.c, r: pac.r } : ghost.def.corner;
++    }
++  }
++
++  checkCollisions() {
++    const pacPos = tilePosition(this.pac);
++    for (const ghost of this.ghosts) {
++      if (ghost.state === 'eaten' || ghost.state === 'house') continue;
++      const ghostPos = tilePosition(ghost);
++      if (Math.hypot(pacPos.c - ghostPos.c, pacPos.r - ghostPos.r) > 0.7) continue;
++      if (ghost.frightened) {
++        ghost.frightened = false;
++        ghost.state = 'eaten';
++        const index = Math.min(this.ghostsEatenInRun, GHOST_POINTS.length - 1);
++        this.score += GHOST_POINTS[index];
++        this.ghostsEatenInRun += 1;
++      } else {
++        this.lives -= 1;
++        this.phase = 'dying';
++        this.phaseTimer = DEATH_MS;
++        return;
++      }
++    }
++  }
++
++  drawWalls() {
++    const g = this.wallLayer;
++    g.clear();
++    MAP.forEach((row, r) => {
++      [...row].forEach((tile, c) => {
++        const x = OFFSET_X + c * TILE;
++        const y = OFFSET_Y + r * TILE;
++        if (tile === '#') {
++          g.fillStyle(0x1a1aa8, 1);
++          g.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
++        } else if (tile === '-') {
++          g.fillStyle(0xffb8ff, 1);
++          g.fillRect(x, y + TILE / 2 - 2, TILE, 4);
++        }
++      });
++    });
++  }
++
++  render() {
++    const g = this.dynamicLayer;
++    g.clear();
++    g.fillStyle(0xffd2a8, 1);
++    for (const key of this.dots) {
++      const [c, r] = key.split(',').map(Number);
++      g.fillCircle(OFFSET_X + (c + 0.5) * TILE, OFFSET_Y + (r + 0.5) * TILE, 2);
++    }
++    const blinkOn = Math.floor(this.time.now / 250) % 2 === 0;
++    if (blinkOn) {
++      g.fillStyle(0xffd2a8, 1);
++      for (const key of this.pellets) {
++        const [c, r] = key.split(',').map(Number);
++        g.fillCircle(OFFSET_X + (c + 0.5) * TILE, OFFSET_Y + (r + 0.5) * TILE, 6);
++      }
++    }
++    this.renderPac(g);
++    if (this.phase !== 'dying') this.ghosts.forEach((ghost) => this.renderGhost(g, ghost, blinkOn));
++    this.hud.setText(`SCORE ${this.score}   LIVES ${Math.max(this.lives, 0)}`);
++  }
++
++  renderPac(g) {
++    const { x, y } = pixelOf(this.pac);
++    const radius = TILE * 0.8;
++    g.fillStyle(0xffff00, 1);
++    if (this.phase === 'dying') {
++      const progress = 1 - Math.max(this.phaseTimer, 0) / DEATH_MS;
++      const open = Math.PI * progress;
++      g.slice(x, y, radius, -Math.PI / 2 + open, -Math.PI / 2 - open + Math.PI * 2, false);
++      g.fillPath();
++      return;
++    }
++    const facing = Math.atan2(this.pac.dir.y, this.pac.dir.x);
++    const moving = !sameDir(this.pac.dir, NONE);
++    const open = moving ? Math.abs(Math.sin(this.time.now / 60)) * 0.25 * Math.PI : 0.05 * Math.PI;
++    g.slice(x, y, radius, facing + open, facing - open + Math.PI * 2, false);
++    g.fillPath();
++  }
++
++  renderGhost(g, ghost, blinkOn) {
++    const { x, y } = pixelOf(ghost);
++    const radius = TILE * 0.8;
++    if (ghost.state !== 'eaten') {
++      const flashing = this.frightenedLeft < FRIGHTENED_FLASH_MS && blinkOn;
++      let color = ghost.def.color;
++      if (ghost.frightened) color = flashing ? 0xffffff : 0x2121ff;
++      g.fillStyle(color, 1);
++      g.fillCircle(x, y - 1, radius);
++      g.fillRect(x - radius, y - 1, radius * 2, radius);
++    }
++    if (ghost.frightened) return;
++    g.fillStyle(0xffffff, 1);
++    g.fillCircle(x - 4, y - 3, 3);
++    g.fillCircle(x + 4, y - 3, 3);
++    g.fillStyle(0x0000ff, 1);
++    g.fillCircle(x - 4 + ghost.dir.x * 1.5, y - 3 + ghost.dir.y * 1.5, 1.5);
++    g.fillCircle(x + 4 + ghost.dir.x * 1.5, y - 3 + ghost.dir.y * 1.5, 1.5);
++  }
++}

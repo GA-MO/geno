@@ -1,0 +1,27 @@
+{
+  "case": "A08-ask-risky-denied",
+  "area": "modes",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "ask",
+  "prompts": [
+    {
+      "prompt": "Delete the old build/ folder with rm -rf, then run the tests.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": "(ws) => {\n      mkdirSync(path.join(ws, 'build'), { recursive: true });\n      writeFileSync(path.join(ws, 'build/bundle.js'), '// old build\\n');\n    }",
+    "initialCommit": "d3dd51279611656a43d268bd7dd787a755ee218b"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A08-ask-risky-denied --run <n>"
+}

@@ -1,0 +1,27 @@
+{
+  "case": "A13-fail-then-fix",
+  "area": "verification",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Implement parseDuration in src/duration.ts so test/duration.test.ts passes.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "cf21294d1e501b48f4a96452880b6ec6e0e5d45e"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A13-fail-then-fix --run <n>"
+}

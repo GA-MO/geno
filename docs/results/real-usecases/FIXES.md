@@ -196,3 +196,54 @@ Case A35-show-before-after gives qwen3.8-flash a static sign-in page and `shot.m
 | 3 | e7a483e3 and the fix | PASS | The same, in 8 model calls. |
 
 The fix: `parseShowFilesInput` takes `files` as an array, as its JSON text, or as one path. None of the 18 archived files, the gzipped one included, holds `pstack model configuration`, `EXTREMELY_IMPORTANT` or `/Users/me`. The three runs cost $0.0590 of the $0.30 cap.
+
+# Round 5: Claude Sonnet 5.5
+
+From 2026-10-14 the campaign runs on Claude Sonnet 5.5 through Geno's `anthropic` provider, not qwen3.8-flash. Claude is the stronger model, so the same failure on both models points at Geno's prompt or tools, not the model. On base c7be6efb, 3 of 10 cases that qwen often failed passed. The failures were the same checks qwen failed: `dedicated-file-tools`, `keeps-todo` and `short-reco`. Three rounds of prompt wording did not stop Sonnet from chaining `cat`, `ls` and `grep` after its test commands, so most of the fixes below are in the engine's structure, not the prompt.
+
+## How the runs were made
+
+- `node scripts/real-usecases/run.mjs --all --run sonnet-1 --cost-scale 2.5`, with `GCODE_PROVIDER=anthropic` and `GCODE_MODEL=claude-sonnet-5-5` in the main checkout's .env. `--cost-scale` multiplies each case's `--max-cost`, which is sized for qwen. Without it, the cap cut A31 off at $0.40 once its cache was written.
+- Each run has its own HOME, CLAUDE_CONFIG_DIR and GCODE_HOME. The scratch campaign lives in the session's own scratchpad, outside the repository.
+- The archived runs are `runs/<case>/sonnet-1/`, on engine c5102e0b. The Layer B panel run on the same engine is in `shots/r3/`. It passed 9 of 9 steps and cost $0.19. Its run folder is not archived, because `archive.mjs --append` archives Layer A only.
+
+## Per change
+
+| Change | Commit | Evidence |
+|---|---|---|
+| The principles prompt tier, which Sonnet and Opus get, now has the todo rule and the short answer to an options question that the rules tier already had. The todo rule has a concrete example, and the tier shows the one-turn way to rename across files. | 4a55a88c, 857ccd35 | A07 opened a todo list in 0 of 4 runs with the generic wording and in 3 of 3 with the example. A28 went from 1,953 characters to under 1,500. |
+| The macOS environment line no longer teaches `sed -i ''`. | 4a55a88c | A07 renamed with `sed -i` straight after reading it. |
+| When the model ends its turn with its todo list under way, Geno reminds it once. | 7d5667c3 | In 3 of 3 A07 runs, Sonnet left 1 item in_progress and 3 pending, and the reminder closed the list. |
+| bash refuses, before running anything, a line with a step that only reads a file (cat, head, tail, less, more, sed -n) or writes literal text into a workspace file (echo, printf, cat, tee). A read after `&&` a program that changes something runs. grep, find and ls run, as in Claude Code. | f04bcdca, 1c550cf6, 0e4232aa, 6cdf8419, ad17fb5e | A01 had chained `npm test` with `grep` and `cat` in 3 of 3 runs. A15 wrote its test file with a heredoc. |
+| grep lines from a file count as a view that the edit gate accepts. | c8a802ad | A30's edit, built from a grep line, had been refused once. |
+| A deferred tool called before tool_search runs when its input fits its schema, and the call records the load. | d670f005 | A12 called task_stop straight away, as Geno's own background-start text suggests, and was refused. |
+| Tool input that is not JSON gets an error naming the text. Unquoted tool_search names, Claude Code's `select:` habit, are repaired. | 824cbff7, fa093cc9 | Sonnet sent `{"select": show_files}` in A35 and `{"select": task_stop}` in A12, three times in all. |
+| Sandboxed commands get the session's scratchpad as `$TMPDIR` instead of the shared /tmp/claude, and read, grep, glob and list reach it unasked. | b10d90ed, 575638ed | A35 saved its screenshots to `$TMPDIR`, and show_files refused them as outside the workspace. |
+| New sessions get a short scratchpad, `/tmp/gcode-<uid>/<8 hex>`, and the sandbox allows unix sockets in the workspace and the scratchpad, on macOS only. | 6d07ced3, 607899c6 | This repository's cache.conformance test failed 16 of 16 inside Geno's sandbox with `listen EPERM`, and passed 16 of 16 after both changes. |
+| A prompt the panel sends before it hears its turn start is queued. A failed send comes back to the composer. | 148c3666 | The web host's Undo test lost "Edit b" in about 2 of 3 runs. The host had refused it in silence. |
+| `gcode agent --effort` | b7a1d2c7 | Sonnet at high against medium, 3 runs each: A07 passed every time at both levels. On a real rename in this repository, neither level kept a todo list, and high cost 11% more. Geno stays at medium. |
+
+The checks changed with the engine. `dedicated-file-tools` and `edits-with-edit` now ask the engine's own shell rules through `scripts/real-usecases/shell-facts.ts`, and count only commands that ran. A21 passes when Geno stays in the workspace and asks where the base config is, as its system prompt says. A16's `compacted` is n/a when Geno declined to compact because the newest turn held the context. A31 asks for one read per turn, so that it still reaches compaction. A35 accepts one image at least twice a shot's width.
+
+## Results
+
+| Run | Engine | Passed | USD |
+|---|---|---|---|
+| claude1 (10 cases) | c7be6efb | 3 of 10 | 0.29 |
+| first full run | 1c550cf6 | 26 of 35 | 1.84 |
+| sonnet-1 | c5102e0b | 34 of 35 | 2.29 |
+
+In sonnet-1, Sonnet averaged 4.8 model calls a case. qwen3.8-flash averaged 8.7. The one failure is A29: the Pac-Man scene is right (31 rows of 28, wired in, tests pass), but the answer to the Thai prompt came back in English. Its four earlier Claude runs answered in Thai.
+
+None of the 211 new archived files, the gzipped ones included, holds the home path, `pstack model configuration`, `EXTREMELY_IMPORTANT`, `sk-ant-`, the key or the user's email. The same goes for the screenshots in shots/r3.
+
+## Claude Code on the same cases
+
+Claude Code 2.1.299 ran headless on Sonnet 5.5 with the same fixtures, prompts and key (research/claude-code-harness E60). Its request carries 23 tools, but no Grep, Glob or todo tool. Its Bash description warns only against cat, head, tail, sed, awk and echo. Its 6.1K system prompt has one tool line: "Prefer the dedicated file/search tools over shell commands when one fits." Every outcome check passed. 6 of 8 runs read files with cat, ls and grep in bash. A07 renamed with `sed -i`. A01 edited a file it had never read, and Claude Code let the edit through. No run kept a todo list. Claude Code adapts its harness to the model's habits, while Geno enforces reads and writes, because its panel, diffs, Undo and file tracking need them.
+
+## Left open after round 5
+
+- A29 answered a Thai prompt in English once, after a long code edit.
+- On a rename with a typecheck and a test run, Sonnet keeps no todo list. It reads the work as one change and its checks.
+- Linux's sandbox still blocks every unix socket. sandbox-runtime cannot scope them by path there.
+- A `case … in a) echo` before `&&` still exempts a read after it.

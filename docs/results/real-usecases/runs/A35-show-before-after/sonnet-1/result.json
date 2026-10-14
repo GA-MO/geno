@@ -1,0 +1,80 @@
+{
+  "case": "A35-show-before-after",
+  "run": "sonnet-1",
+  "session": "8e881ecf-37a9-4da7-9888-b80955eb4668",
+  "passed": true,
+  "costUsd": 0.032975000000000004,
+  "classifierUsd": 0,
+  "modelCalls": 5,
+  "toolCalls": 7,
+  "tokens": {
+    "input": 12,
+    "cacheRead": 47165,
+    "cacheWrite": 3482,
+    "output": 959,
+    "latencyMs": 12313
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=745ch"
+    },
+    {
+      "id": "fixed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "shows-pair",
+      "pass": true,
+      "detail": "ok: [\"/private/tmp/gcode-501/8e881ecf/s/before.png\",\"/private/tmp/gcode-501/8e881ecf/s/after.png\"]"
+    }
+  ]
+}

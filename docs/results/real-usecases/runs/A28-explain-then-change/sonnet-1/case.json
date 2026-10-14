@@ -1,0 +1,27 @@
+{
+  "case": "A28-explain-then-change",
+  "area": "conversation",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "What could we do about prices in currencies with no minor unit, like JPY? Do not change code yet.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "5a354fe9db65dd961902eac51b37e53ce3f60dab"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A28-explain-then-change --run <n>"
+}

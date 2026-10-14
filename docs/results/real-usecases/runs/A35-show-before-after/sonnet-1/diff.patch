@@ -1,0 +1,13 @@
+diff --git a/index.html b/index.html
+index e20660a..53c6848 100644
+--- a/index.html
++++ b/index.html
+@@ -5,7 +5,7 @@
+ <main class="card" style="width: 260px">
+   <input placeholder="Email">
+   <input placeholder="Password" type="password">
+-  <button id="sign-in" style="background: #d6403a; margin-left: 140px">Sign in</button>
++  <button id="sign-in" style="background: #2ea05c; margin-left: 0px">Sign in</button>
+ </main>
+ </body>
+ </html>

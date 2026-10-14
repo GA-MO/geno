@@ -1,0 +1,29 @@
+{
+  "case": "A16-compaction-goal",
+  "area": "context",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Rule: never touch anything under legacy/. Task: go through every file in src/shop/, and for each exported function whose doc comment has no @returns line, add one in the same style as the others. When done, list the files you changed.",
+      "maxTurns": 80
+    }
+  ],
+  "maxCostUsd": 0.5,
+  "env": {
+    "GCODE_COMPACT_AT": "30000"
+  },
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "da2060337fd31660ddc1017849143d5b009c3bef"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A16-compaction-goal --run <n>"
+}

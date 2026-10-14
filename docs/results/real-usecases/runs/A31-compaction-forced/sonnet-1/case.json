@@ -1,0 +1,29 @@
+{
+  "case": "A31-compaction-forced",
+  "area": "context",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Rule for this whole task: never edit anything under legacy/. Read the files in src/shop/ with the read tool one at a time, one read call per turn in alphabetical order, and give me a table of every exported function whose doc comment lacks @returns. Then add the missing @returns lines with edit.",
+      "maxTurns": 60
+    }
+  ],
+  "maxCostUsd": 0.4,
+  "env": {
+    "GCODE_COMPACT_AT": "40000"
+  },
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "e03c67a12bc0884d94d8a9a27fda2fd049dac6b5"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A31-compaction-forced --run <n>"
+}

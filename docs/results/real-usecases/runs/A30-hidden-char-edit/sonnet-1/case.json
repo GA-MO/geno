@@ -1,0 +1,27 @@
+{
+  "case": "A30-hidden-char-edit",
+  "area": "editing",
+  "layer": "A",
+  "run": "sonnet-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "In src/config.ts set retries to 7.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "c5102e0b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": "(ws) => writeFileSync(path.join(ws, 'src/config.ts'), \"export const config = {\\n\\tretries:​ 3,\\n\\ttimeout: 1000,\\n\\tbaseUrl: 'http://localhost:8080',\\n};\\n\")",
+    "initialCommit": "ae5e0ba5ef91f87093f92c7a9d23a040387aa0ef"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A30-hidden-char-edit --run <n>"
+}

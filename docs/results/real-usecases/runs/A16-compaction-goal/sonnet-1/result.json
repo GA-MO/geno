@@ -1,0 +1,85 @@
+{
+  "case": "A16-compaction-goal",
+  "run": "sonnet-1",
+  "session": "b06f2233-5bf1-4eae-8082-fddc967265cb",
+  "passed": true,
+  "costUsd": 0.053842600000000004,
+  "classifierUsd": 0,
+  "modelCalls": 7,
+  "toolCalls": 6,
+  "tokens": {
+    "input": 16,
+    "cacheRead": 73733,
+    "cacheWrite": 5781,
+    "output": 1594,
+    "latencyMs": 15028
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1237ch"
+    },
+    {
+      "id": "compacted",
+      "pass": null,
+      "detail": "finished under the compaction threshold (peak context 14112 < 30000 tokens)"
+    },
+    {
+      "id": "legacy-untouched",
+      "pass": true,
+      "detail": " M src/shop/cart.ts\n M src/shop/checkout.ts\n M src/shop/coupon.ts\n M src/shop/discount.ts\n M src/shop/giftcard.ts\n M src/shop/inventory.ts\n M src/shop/invoice.ts\n M src/shop/ledger.ts\n M src/shop/loyalty.ts\n M src/shop/payout.ts\n M src/shop/pricing.ts\n M src/shop/receipt.ts\n M src/shop/refund.ts\n M src/shop/shipping.ts\n M src/shop/subscription.ts\n M src/shop/tax.ts\n M src/shop/wallet.ts\n M src/shop/warehouse.ts\n"
+    },
+    {
+      "id": "all-documented",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}
