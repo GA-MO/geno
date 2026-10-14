@@ -182,13 +182,18 @@ export function resumeEnvOf(settings: Settings): Record<string, string> {
 export const wakeEnvOf = (settings: Settings): Record<string, string> => (settings.get<unknown>('wake.auto', true) === false ? { GCODE_AUTO_WAKE: 'off' } : {});
 
 /**
- * The `gcode.sandbox.allowedDomains` setting as the engine reads it: only a list with hosts needs saying. Only the
- * user's own value counts, as for the base URL, since a repository's settings must not open the network.
+ * The `gcode.sandbox.allowedDomains` and `gcode.sandbox.packageHosts` settings as the engine reads them: only a list
+ * with hosts, and the package hosts turned off, need saying. Only the user's own values count, as for the base URL,
+ * since a repository's settings must not change the network.
  */
 export function sandboxEnvOf(settings: Settings): Record<string, string> {
   const value = settings.inspect<unknown>('sandbox.allowedDomains')?.globalValue;
   const domains = Array.isArray(value) ? value.filter((domain): domain is string => typeof domain === 'string' && domain.trim() !== '').map((domain) => domain.trim()) : [];
-  return domains.length === 0 ? {} : { GCODE_SANDBOX_ALLOWED_DOMAINS: domains.join(',') };
+  const packageHosts = settings.inspect<unknown>('sandbox.packageHosts')?.globalValue;
+  return {
+    ...(domains.length === 0 ? {} : { GCODE_SANDBOX_ALLOWED_DOMAINS: domains.join(',') }),
+    ...(packageHosts === false ? { GCODE_SANDBOX_PACKAGE_HOSTS: 'off' } : {}),
+  };
 }
 
 /**

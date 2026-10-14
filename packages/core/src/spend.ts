@@ -4,7 +4,7 @@ import { EXTERNAL_BACKENDS } from './backends.js';
 import { ratesOf } from './cost.js';
 import type { ProviderName } from './providers.js';
 import type { CompactEvent } from './compact.js';
-import { classifierCostOf, type TurnEvent } from './session.js';
+import { classifierCostOf, helperCostOf, type TurnEvent } from './session.js';
 import { startsTurn } from './steer.js';
 import { childRunKey, childrenOf } from './subagent.js';
 
@@ -25,7 +25,9 @@ export type TurnSpend =
       readonly children: readonly ChildSpend[];
       /** What the Auto classifier's calls cost in this turn; absent is none. */
       readonly classifierCostUsd?: number | undefined;
-      /** The requests, the children and the classifier together. */
+      /** What the tools' own model calls cost in this turn, such as web_search's searches; absent is none. */
+      readonly helperCostUsd?: number | undefined;
+      /** The requests, the children, the classifier and the tools' calls together. */
       readonly costUsd: number | null;
     }
   | { readonly kind: 'external'; readonly seq: number; readonly prompt: string; readonly plan: string; readonly costUsd: number | null };
@@ -40,6 +42,8 @@ export type SessionSpend = {
   readonly childrenCostUsd: number | null;
   /** The Auto classifier's calls, which run outside any model request of the session; absent is none. */
   readonly classifierCostUsd?: number | undefined;
+  /** The tools' own model calls, such as web_search's searches; absent is none. */
+  readonly helperCostUsd?: number | undefined;
   readonly costUsd: number | null;
   readonly turns: readonly TurnSpend[];
   /** The seqs of the costliest turns, at most TOP_TURNS, costliest first. */
@@ -99,8 +103,19 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
     }
     const breakdown = [...calls.map((c) => requestBreakdown(c.promptParts, c.usage, rates)), ...compactions.map((c) => requestBreakdown([['compaction', inputOf(c.usage)]], c.usage, rates))].reduce(addBreakdowns, EMPTY_BREAKDOWN);
     const own = runs.filter((run) => within(run.seq)).map(({ seq: _, ...spend }): ChildSpend => spend);
-    const classifierCostUsd = events.reduce((sum, e) => sum + ('seq' in e && within(e.seq) ? classifierCostOf(e) : 0), 0);
-    return { kind: 'model', seq: start.seq, prompt: start.prompt, breakdown, children: own, ...(classifierCostUsd > 0 ? { classifierCostUsd } : {}), costUsd: addCost(addCost(breakdown.total.costUsd, sumCost(own.map((c) => c.costUsd))), classifierCostUsd) };
+    const sideOf = (cost: (e: TurnEvent) => number) => events.reduce((sum, e) => sum + ('seq' in e && within(e.seq) ? cost(e) : 0), 0);
+    const classifierCostUsd = sideOf(classifierCostOf);
+    const helperCostUsd = sideOf(helperCostOf);
+    return {
+      kind: 'model',
+      seq: start.seq,
+      prompt: start.prompt,
+      breakdown,
+      children: own,
+      ...(classifierCostUsd > 0 ? { classifierCostUsd } : {}),
+      ...(helperCostUsd > 0 ? { helperCostUsd } : {}),
+      costUsd: addCost(addCost(breakdown.total.costUsd, sumCost(own.map((c) => c.costUsd))), classifierCostUsd + helperCostUsd),
+    };
   });
   const breakdown = turns.reduce((sum, t) => (t.kind === 'model' ? addBreakdowns(sum, t.breakdown) : sum), EMPTY_BREAKDOWN);
   const spent = children.map((c): ChildSpend => ({ child: c.child, role: c.role, turns: c.turns, costUsd: c.costUsd }));
@@ -111,6 +126,7 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
     .slice(0, TOP_TURNS)
     .map((t) => t.seq);
   const classifierCostUsd = turns.reduce((sum, t) => sum + (t.kind === 'model' ? (t.classifierCostUsd ?? 0) : 0), 0);
+  const helperCostUsd = turns.reduce((sum, t) => sum + (t.kind === 'model' ? (t.helperCostUsd ?? 0) : 0), 0);
   const external = turns.flatMap((t) => (t.kind === 'external' ? [t.costUsd] : []));
   const externalCost = external.length === 0 ? 0 : external.some((c) => c !== null) ? external.reduce<number>((a, c) => a + (c ?? 0), 0) : null;
   return {
@@ -121,7 +137,8 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
     children: spent,
     childrenCostUsd,
     ...(classifierCostUsd > 0 ? { classifierCostUsd } : {}),
-    costUsd: sumCost([breakdown.total.costUsd, childrenCostUsd, externalCost, classifierCostUsd]),
+    ...(helperCostUsd > 0 ? { helperCostUsd } : {}),
+    costUsd: sumCost([breakdown.total.costUsd, childrenCostUsd, externalCost, classifierCostUsd, helperCostUsd]),
     turns,
     top,
   };

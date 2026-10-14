@@ -7,14 +7,13 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
-import type { SessionMode, TurnEvent } from '@g-code/core';
+import type { HelperSpend, SessionMode, TurnEvent } from '@g-code/core';
 import { runAgent } from '../src/agent.js';
 import { startSession } from '../src/chat.js';
 import { commandClassifier } from '../src/classifier.js';
 import type { Io } from '../src/command.js';
 import { openStore } from '../src/store.js';
 
-import type { ReadRun } from '../src/tools/web.js';
 import { rgCommand } from './helpers.js';
 
 const MODEL = 'qwen3.8-flash';
@@ -50,7 +49,7 @@ async function main(): Promise<number> {
   const io: Io = { env, cwd: workspace, out: () => {}, err: (line) => console.error(line), write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: globalThis.fetch };
   const store = openStore(env);
   const tokens: Tokens = { input: 0, output: 0 };
-  const reads: ReadRun[] = [];
+  const reads: HelperSpend[] = [];
 
   const ask = async (mode: SessionMode, prompt: string) => {
     const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
@@ -68,7 +67,6 @@ async function main(): Promise<number> {
         },
         classify: commandClassifier(env, globalThis.fetch),
       },
-      web: { onRead: (run) => reads.push(run) },
     });
     for (const event of result.events) {
       if (event.kind !== 'assistant' || event.usage === undefined) continue;
@@ -77,6 +75,7 @@ async function main(): Promise<number> {
     }
     const calls = result.events.flatMap((e) => (e.kind === 'assistant' ? e.content.flatMap((b) => (b.type === 'tool_use' ? [`${b.name} ${JSON.stringify(b.input)}`] : [])) : []));
     const results = result.events.filter((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result');
+    reads.push(...results.flatMap((r) => (r.helper === undefined ? [] : [r.helper])));
     const last = result.events.findLast((e) => e.kind === 'assistant');
     const reply = last?.kind === 'assistant' ? last.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim() : '';
     return { calls, results, reply, asked };
@@ -98,7 +97,7 @@ async function main(): Promise<number> {
       tokens.output += run.usage.output;
     }
     const cost = estimate(tokens.input, tokens.output);
-    console.log(`helper reads: ${reads.length}, ${reads.map((r) => `${r.model} ${r.usage.input} in/${r.usage.output} out ${r.latencyMs}ms`).join('; ')}`);
+    console.log(`helper reads: ${reads.length}, ${reads.map((r) => `${r.model} ${r.usage.input} in/${r.usage.output} out`).join('; ')}`);
     console.log(`tokens: ${tokens.input} in, ${tokens.output} out; estimated cost: $${cost.toFixed(6)} (budget $${BUDGET_USD})`);
 
     const checks: [boolean, string][] = [

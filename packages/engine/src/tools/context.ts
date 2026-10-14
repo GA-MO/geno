@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ShownFiles, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type HelperSpend, type PathRule, type PathTool, type ChapterMark, type ShownFiles, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import type { PermissionStore } from '../permissions.js';
 import { isMissing } from '../store.js';
@@ -99,6 +99,8 @@ export type ToolReply =
       readonly status?: 'error';
       readonly change?: FileChange | undefined;
       readonly approval?: ApprovalRecord | undefined;
+      /** The model call the tool made for its own work, such as web_search's search. */
+      readonly helper?: HelperSpend | undefined;
       readonly images?: readonly ImageAttachment[] | undefined;
       readonly widget?: WidgetRef | undefined;
       readonly editorAction?: EditorAction | undefined;

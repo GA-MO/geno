@@ -20,7 +20,7 @@ import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } fr
 
 const engineCli = (context: vscode.ExtensionContext): string => path.join(context.extensionPath, 'dist', 'engine', 'cli.js');
 
-const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles', 'gcode.resume.afterLimit', 'gcode.wake.auto', 'gcode.sandbox.allowedDomains', 'gcode.additionalDirectories'];
+const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles', 'gcode.resume.afterLimit', 'gcode.wake.auto', 'gcode.sandbox.allowedDomains', 'gcode.sandbox.packageHosts', 'gcode.additionalDirectories'];
 
 async function engineSettings(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<EngineSettings> {
   const folder = vscode.workspace.workspaceFolders?.[0];

@@ -137,7 +137,7 @@ function providerCard(view: ProviderView, chat: ProviderName, state: CardState, 
   );
 }
 
-/** A search provider's card: always open, since it holds one key. With no key, Geno does not offer web_search. */
+/** A search provider's card: always open, since it holds one key. With no key, web_search runs on the chat provider's own search where it has one. */
 function searchCard(view: SearchView, post: (message: SettingsFromView) => void): HTMLElement {
   const ready = view.key.set !== undefined;
   return h(
@@ -243,7 +243,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
     h('p', { class: 'settings-intro' }, 'Keys go to VS Code’s secret storage and are never shown again. Base URLs are kept in your user settings, never a workspace’s.'),
     providers,
     h('h3', { class: 'settings-heading' }, 'Web search'),
-    h('p', { class: 'settings-intro' }, 'A search key lets Geno search the web with web_search. Without one, Geno does not offer search; web_fetch still reads pages.'),
+    h('p', { class: 'settings-intro' }, "A search key lets Geno search the web with web_search. Without one, Geno uses the web search of Anthropic's API when the chat runs on Anthropic or Vertex, and offers no search on other providers; web_fetch still reads pages."),
     search,
     permissions.element,
     hooks.element,

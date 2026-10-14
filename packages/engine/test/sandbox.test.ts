@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { childEnv } from '../src/child-env.js';
 import { EngineError } from '../src/errors.js';
-import { CREDENTIAL_PATHS } from '@g-code/core';
+import { CREDENTIAL_PATHS, PACKAGE_HOSTS } from '@g-code/core';
 import { openSandbox, sandboxDomainsOf, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { runShell } from '../src/process.js';
 import { openStore } from '../src/store.js';
@@ -80,7 +80,7 @@ describe('the bash sandbox', () => {
     expect(result.output).toContain('Operation not permitted');
   });
 
-  it('has no network', async () => {
+  it('reaches no host off its allowlist', async () => {
     const result = await run(
       `node -e "fetch('https://example.com').then(() => process.exit(0), () => process.exit(7))" && curl -sS -m 5 https://example.com`,
     );
@@ -89,10 +89,11 @@ describe('the bash sandbox', () => {
 });
 
 describe('the sandbox network allowlist', () => {
-  it('B/B-87 is off unless the engine was started with hosts, and keeps only what sandbox-runtime takes as a host', () => {
-    expect(sandboxDomainsOf({})).toEqual([]);
-    expect(sandboxDomainsOf({ GCODE_SANDBOX_ALLOWED_DOMAINS: '' })).toEqual([]);
-    expect(sandboxDomainsOf({ GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org, *.github.com https://x.test/a *' })).toEqual(['registry.npmjs.org', '*.github.com']);
+  it('B/B-87 keeps only what sandbox-runtime takes as a host, and none at all with the package hosts off', () => {
+    const off = { GCODE_SANDBOX_PACKAGE_HOSTS: 'off' };
+    expect(sandboxDomainsOf(off)).toEqual([]);
+    expect(sandboxDomainsOf({ ...off, GCODE_SANDBOX_ALLOWED_DOMAINS: '' })).toEqual([]);
+    expect(sandboxDomainsOf({ ...off, GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org, *.github.com https://x.test/a *' })).toEqual(['registry.npmjs.org', '*.github.com']);
   });
 });
 
@@ -165,8 +166,8 @@ describe('two sandboxes open at once', () => {
     const policy = await sandboxPolicy({ store: openStore({ GCODE_HOME: home }), home, workspace, tempDir, allowedDomains: ['example.com'] });
     const allowing = await openSandbox(policy).catch((error: unknown) => error);
     try {
-      expect((await b.run('curl -sS -m 5 -o /dev/null https://example.com')).code, 'no network for the sandbox that allows none').not.toBe(0);
-      expect(allowing).toEqual(new EngineError('a sandbox that allows the network hosts [] is open, and this one allows ["example.com"]'));
+      expect((await b.run('curl -sS -m 5 -o /dev/null https://example.com')).code, 'example.com is closed to the sandbox that allows only the package hosts').not.toBe(0);
+      expect(allowing).toEqual(new EngineError(`a sandbox that allows the network hosts ${JSON.stringify([...PACKAGE_HOSTS].sort())} is open, and this one allows ["example.com"]`));
     } finally {
       if (!(allowing instanceof Error)) await (allowing as Sandbox).close();
       await b.sandbox.close();
