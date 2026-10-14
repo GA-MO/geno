@@ -15,6 +15,8 @@ export type SandboxPolicy = {
   readonly readable: readonly string[];
   /** Empty means no network at all. */
   readonly allowedDomains: readonly string[];
+  /** Every command's $TMPDIR: the session's scratchpad the model is told of, rather than sandbox-runtime's shared /tmp/claude. */
+  readonly tempDir: string;
 };
 
 /** `writable` lets this one command also write there, as the check writes its build info outside the workspace. */
@@ -30,6 +32,8 @@ export type Sandbox = {
   retain(): () => Promise<void>;
   close(): Promise<void>;
 };
+
+const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
 async function withRealPaths(paths: readonly string[]): Promise<string[]> {
   const real = await Promise.all(
@@ -82,6 +86,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
     ]),
     readable: await withRealPaths([input.workspace]),
     allowedDomains: input.allowedDomains ?? sandboxDomainsOf(process.env),
+    tempDir: input.tempDir,
   };
 }
 
@@ -159,6 +164,10 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
     const { denyRead, denyWrite } = await denials();
     return { ...base, denyRead: [...base.denyRead, ...denyRead], denyWrite: [...denyWrite] };
   };
+  // sandbox-runtime sets TMPDIR from its process-wide CLAUDE_CODE_TMPDIR, which an engine serving several sessions
+  // cannot give each one, so the command sets its own after the runtime's.
+  const sandboxed = async (command: string, filesystem: Awaited<ReturnType<typeof rules>>) =>
+    SandboxManager.wrapWithSandbox(`export TMPDIR=${shellQuote(policy.tempDir)}\n${command}`, undefined, { filesystem });
   // The opener's hold and one per retained command; the runtime is left once all have let go.
   let holds = 1;
   const release = async () => {
@@ -171,12 +180,12 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
     run: async (command, options) => {
       const filesystem = await rules();
       const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
-      const result = await runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
+      const result = await runShell(await sandboxed(command, { ...filesystem, allowWrite }), options);
       if (result.lingering !== undefined) lingering.add(result.lingering);
       return result;
     },
-    spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }), options),
-    wrap: async (command) => SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }),
+    spawn: async (command, options) => spawnShell(await sandboxed(command, await rules()), options),
+    wrap: async (command) => sandboxed(command, await rules()),
     retain() {
       holds++;
       let released = false;

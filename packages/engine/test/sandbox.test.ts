@@ -6,6 +6,7 @@ import { childEnv } from '../src/child-env.js';
 import { EngineError } from '../src/errors.js';
 import { CREDENTIAL_PATHS } from '@g-code/core';
 import { openSandbox, sandboxDomainsOf, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
+import { runShell } from '../src/process.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 
@@ -103,8 +104,35 @@ describe('two sandboxes open at once', () => {
     await mkdir(tempDir);
     const home = path.join(dir, 'home');
     const opened = await openSandbox(await sandboxPolicy({ store: openStore({ GCODE_HOME: home }), home, workspace: ws, tempDir }));
-    return { ws, sandbox: opened, run: (command: string) => opened.run(command, { cwd: ws, env: childEnv(process.env), timeoutMs: 30_000 }) };
+    return { ws, tempDir, sandbox: opened, run: (command: string) => opened.run(command, { cwd: ws, env: childEnv(process.env), timeoutMs: 30_000 }) };
   }
+
+  /** What a command printed when started in the background, as a run_in_background bash call starts it. */
+  async function spawned(sandbox: Sandbox, cwd: string, command: string): Promise<string> {
+    const chunks: Buffer[] = [];
+    const shell = await sandbox.spawn(command, { cwd, env: childEnv(process.env), onOutput: (chunk) => chunks.push(chunk) });
+    await shell.exited;
+    return Buffer.concat(chunks).toString('utf8');
+  }
+
+  it("gives each one's commands its own temp dir as TMPDIR, in the foreground, the background and a hook, never the runtime's shared /tmp/claude", async () => {
+    const a = await chat('chat-tmp-a');
+    const b = await chat("chat tmp 'b'");
+    try {
+      const write = 'echo "$TMPDIR" && echo shot > "$TMPDIR/shot.png"';
+      expect((await a.run(write)).output.trim()).toBe(a.tempDir);
+      expect((await b.run(write)).output.trim()).toBe(b.tempDir);
+      expect(await readFile(path.join(a.tempDir, 'shot.png'), 'utf8')).toBe('shot\n');
+      expect(await readFile(path.join(b.tempDir, 'shot.png'), 'utf8')).toBe('shot\n');
+      expect((await spawned(a.sandbox, a.ws, 'echo "$TMPDIR" && echo bg > "$TMPDIR/bg.txt"')).trim()).toBe(a.tempDir);
+      expect(await readFile(path.join(a.tempDir, 'bg.txt'), 'utf8')).toBe('bg\n');
+      const hook = await runShell(await b.sandbox.wrap('echo "$TMPDIR"'), { cwd: b.ws, env: childEnv(process.env), timeoutMs: 30_000 });
+      expect(hook.output.trim()).toBe(b.tempDir);
+    } finally {
+      await a.sandbox.close();
+      await b.sandbox.close();
+    }
+  });
 
   it("each writes its own workspace and never the other's", async () => {
     const a = await chat('chat-a');
