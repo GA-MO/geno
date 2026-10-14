@@ -34,7 +34,6 @@ export * from './approval.js';
 export * from './shell-intent.js';
 export * from './permission-rules.js';
 export * from './classifier.js';
-export * from './auto.js';
 export * from './agent.js';
 export * from './agent-prompts.js';
 export * from './acp.js';

@@ -12,6 +12,7 @@ import {
   DEFERRED_TOOLS_NOTE,
   toolRoster,
   webToolDefinitions,
+  ALERT_META,
   APPROVAL_META,
   ATTACHMENT_META,
   PROGRESS_META,
@@ -505,20 +506,18 @@ describe('gcode serve', () => {
     expect(turns).toEqual(['plan', 'ask']);
   });
 
-  it('asks in Ask, then after a switch to Auto runs what the classifier allows, blocks three asks unasked, asks on the fourth, and blocks unasked again after the user allows it', async () => {
+  it('asks in Ask, then after a switch to Auto runs what the classifier allows and puts every classifier ask to the user as a card', async () => {
     const outside = (n: number) => use('bash', { command: `cd ~ && du -d 1 .gcode-test-missing-${n}` });
     const gray = (n: number) => use('bash', { command: `node -e "console.log(${n})"` });
     const verdict = (answer: 'allow' | 'ask', reason: string) => toolCall('', [use(CLASSIFIER_TOOL.name, { verdict: answer, reason })], usage);
     const asked = outside(0);
     const allowed = [outside(1), outside(2)];
-    const blocked = [gray(1), gray(2), gray(3)];
-    const prompted = gray(4);
-    const after = gray(5);
+    const prompted = [gray(1), gray(2), gray(3), gray(4)];
     const { editor, transport, connect } = await setup([
       toolCall('Measuring.', [asked], usage),
       answer('Measured.', usage),
       ...allowed.flatMap((call) => [toolCall('Measuring.', [call], usage), verdict('allow', 'measures disk use the user asked about')]),
-      ...[...blocked, prompted, after].flatMap((call) => [toolCall('Building.', [call], usage), verdict('ask', 'unclear why this is needed')]),
+      ...prompted.flatMap((call) => [toolCall('Building.', [call], usage), verdict('ask', 'unclear why this is needed')]),
       answer('Done.', usage),
     ]);
     editor.answerPermission = { outcome: 'selected', optionId: 'allow' };
@@ -529,18 +528,41 @@ describe('gcode serve', () => {
       await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Clean it up.' }] });
     });
 
-    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, prompted.id]);
+    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, ...prompted.map((call) => call.id)]);
     expect(editor.permissions[0]!.toolCall.title).toBe(`Allow \`cd ~\` in \`cd ~ && du -d 1 .gcode-test-missing-0\`? It uses a path outside the workspace.`);
-    expect(editor.permissions[1]!.toolCall.title).toBe('Allow `node -e console.log(4)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.');
+    expect(editor.permissions[1]!.toolCall.title).toBe('Allow `node -e console.log(1)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.');
     const results = new Map(
       transport.requests.flatMap((r) =>
         (r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: string }[]).flatMap((b) => (b.type === 'tool_result' ? [[b.tool_use_id!, b.content!] as const] : [])),
       ),
     );
     for (const call of allowed) expect(results.get(call.id)).not.toContain('denied');
-    for (const call of [...blocked, after]) expect(results.get(call.id)).toContain('Auto mode blocked `node -e console.log(');
-    expect(results.get(prompted.id)).toContain('4');
-    expect(results.get(prompted.id)).not.toContain('denied');
+    for (const [i, call] of prompted.entries()) {
+      expect(results.get(call.id)).toContain(String(i + 1));
+      expect(results.get(call.id)).not.toContain('denied');
+    }
+  });
+
+  it('tells the user once, in the chat and on stderr, that Auto’s classifier cannot judge, and asks about each command it would have judged', async () => {
+    const gray = (n: number) => use('bash', { command: `node -e "console.log(${n})"` });
+    const calls = [gray(1), gray(2), gray(3)];
+    const { editor, transport, connect, stderr } = await setup(
+      [...calls.map((call) => toolCall('Building.', [call], usage)), answer('Done.', usage)],
+      { GCODE_CLASSIFIER_PROVIDER: 'anthropic' },
+    );
+    editor.answerPermission = { outcome: 'selected', optionId: 'allow' };
+
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Build it.' }] });
+    });
+
+    const notice = "Auto mode's classifier is not working (ANTHROPIC_API_KEY is not set; put your anthropic API key in it), so commands it would judge ask you instead.";
+    const alerts = editor.updates.filter((u) => u.sessionUpdate === 'notice' && u._meta?.[ALERT_META] === true);
+    expect(alerts).toEqual([expect.objectContaining({ severity: 'warning', title: notice })]);
+    expect(stderr.filter((line) => line === notice)).toHaveLength(1);
+    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual(calls.map((call) => call.id));
+    expect(transport.requests.filter((r) => r.url.includes('anthropic.com'))).toEqual([]);
   });
 
   it('keeps a mode switched during a turn when the engine stops before the turn ends', async () => {

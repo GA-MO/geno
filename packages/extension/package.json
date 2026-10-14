@@ -239,7 +239,7 @@
                 "provider"
               ],
               "additionalProperties": false,
-              "description": "The Auto mode classifier, which judges commands no rule settles."
+              "description": "The Auto mode classifier, which judges commands no rule settles. Left out, it runs on the chat provider. A provider without a model runs that provider's classifier default, or its default model."
             },
             "explore": {
               "type": "object",

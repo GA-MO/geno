@@ -114,6 +114,7 @@ import {
   type SessionScope,
   type SessionSummary,
   type SessionSummaryMeta,
+  ALERT_META,
   APPROVAL_META,
   approvalQuestion,
   DEFAULT_SESSION_MODE,
@@ -138,7 +139,6 @@ import {
   type Spend,
   type Session,
   sessionModeOf,
-  type AutoState,
   type SessionMode,
   type CheckpointTextResponse,
   type PermissionInput,
@@ -284,7 +284,7 @@ import { openSessionLog, resumeSession, startExternalSession, startSession, type
 import { backendInfos, findBackend } from './backends.js';
 import { chosenModelOf, ExternalAgents, modelConfigOptions, runExternalTurn, type KeyOf } from './external.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
-import { commandClassifier } from './classifier.js';
+import { brokenClassifierNotice, commandClassifier } from './classifier.js';
 import { catalogService } from './catalog.js';
 import { homeOf, homesOf, pluginLoader, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
@@ -307,7 +307,7 @@ import { wakeMetaOf, backgroundUpdate, compactUpdate, errorUpdate, replayUpdates
 import { listSessions, renameSession, trashSession } from './history.js';
 import { sessionIndex } from './session-index.js';
 import type { Store } from './store.js';
-import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
+import { type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import type { Editor } from './tools/editor.js';
 import { readTerminalResponse, type TerminalReader } from './tools/terminal.js';
@@ -402,7 +402,7 @@ const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'
   ask: { name: 'Ask', description: 'Ask before commands off the safe list.' },
   auto: {
     name: 'Auto',
-    description: 'Run safe commands on its own and let a classifier judge the rest, without asking. Asks before deleting the workspace or anything outside it, and once the classifier has blocked too many actions.',
+    description: 'Run safe commands on its own and let a classifier judge the rest. Asks when the classifier is unsure, and before deleting the workspace or anything outside it.',
   },
 };
 
@@ -1124,8 +1124,8 @@ export function engineShared(io: Io, options: EngineOptions = {}) {
     turns,
     // Running subagents by their own session ids, which `session/cancel` may name.
     childCancels: new Map<string, () => void>(),
-    // Each session's Auto state, kept across its turns for as long as the engine runs.
-    autos: new Map<string, { state: AutoState }>(),
+    // The sessions told that Auto's classifier cannot judge anything, so each is told once while the engine runs.
+    classifierNoticed: new Set<string>(),
     // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
     modes: new Map<string, SessionMode>(),
     writers,
@@ -1249,7 +1249,7 @@ type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, sessionDirectories, runLimits, hooks } = shared;
+  const { turns, childCancels, classifierNoticed, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, sessionDirectories, runLimits, hooks } = shared;
   const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
   const directoriesOf = (sessionId: string) => sessionDirectories.get(sessionId) ?? sessionDirectories.set(sessionId, new Set()).get(sessionId)!;
   let peer: Peer = NO_PEER;
@@ -1264,7 +1264,17 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
     const dir = attachmentsDir(store, asSessionId(sessionId));
     return { uri: pathToFileURL(widgetFile(dir, widget)).href, html: await readWidget(dir, widget) };
   };
-  const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
+  /** Auto's classifier for a turn of `sessionId`, which tells the user once, in the chat and on stderr, when it cannot judge anything. */
+  const classifierOf = (sessionId: string, peer: Peer, updates: { send(update: acp.SessionUpdate): void }) =>
+    commandClassifier(io.env, io.fetch, {
+      onBroken: (problem) => {
+        if (classifierNoticed.has(sessionId)) return;
+        classifierNoticed.add(sessionId);
+        const text = brokenClassifierNotice(problem);
+        io.err(text);
+        if (peer.notices) updates.send({ sessionUpdate: 'notice', severity: 'warning', title: text, _meta: { [ALERT_META]: true } });
+      },
+    });
   wakes.bind(store, io);
   const gh = ghCli(io.env);
   schedules.bind(homeOf(store), io.err);
@@ -1645,8 +1655,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
               kind: 'interactive',
               mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
               approve: shown.approve,
-              classify: commandClassifier(io.env, io.fetch),
-              auto: autoOf(sessionId),
+              classify: classifierOf(sessionId, from.peer, shown.updates),
             },
             surface: shown.surface,
             signal: controller.signal,
@@ -1688,8 +1697,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
           kind: 'interactive',
           mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
           approve: shown.approve,
-          classify: commandClassifier(io.env, io.fetch),
-          auto: autoOf(sessionId),
+          classify: classifierOf(sessionId, from.peer, shown.updates),
         };
         const result =
           target === undefined

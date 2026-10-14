@@ -272,10 +272,10 @@ describe('an external ACP agent as a backend', () => {
     t.shared.externals.closeAll();
   });
 
-  it('lets the classifier settle Auto: a safe command runs, a gray edit it allows runs, three blocks pause Auto, then the user decides', async () => {
+  it('lets the classifier settle Auto: a safe command runs, a gray edit it allows runs, and one it is unsure of goes to the user', async () => {
     const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
     const verdict = (v: 'allow' | 'ask') => toolCall('', [{ id: `c${v}`, name: CLASSIFIER_TOOL.name, input: { reason: v === 'allow' ? 'an edit in the lane' : 'unclear', verdict: v } }], usage);
-    const t = await setup([verdict('allow'), verdict('ask'), verdict('ask'), verdict('ask'), verdict('ask')]);
+    const t = await setup([verdict('allow'), verdict('ask')]);
     const agent = await t.open();
     const { sessionId: chat } = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [], _meta: { [BACKEND_META]: { id: 'cursor' } } });
     await agent.request(acp.methods.agent.session.setMode, { sessionId: chat, modeId: 'auto' });
@@ -287,12 +287,9 @@ describe('an external ACP agent as a backend', () => {
     await t.prompt(agent, chat, 'gray one');
     expect(outcomes().at(-1)).toBe('allow-once');
     expect(t.shown(chat)).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: 'g1', _meta: { [APPROVAL_META]: expect.objectContaining({ decidedBy: 'classifier', verdict: 'allow' }) } }));
-    for (let i = 0; i < 3; i++) await t.prompt(agent, chat, 'gray again');
-    expect(outcomes().slice(-3)).toEqual(['reject-once', 'reject-once', 'reject-once']);
     expect(t.asked).toHaveLength(0);
-    // Paused after three blocks in a row: the next one the classifier will not allow goes to the user.
     t.answers.push('allow');
-    await t.prompt(agent, chat, 'gray last');
+    await t.prompt(agent, chat, 'gray again');
     expect(t.asked).toHaveLength(1);
     expect(outcomes().at(-1)).toBe('allow-once');
     t.shared.externals.closeAll();

@@ -1,6 +1,6 @@
 ---
 title: "โหมด Auto ยังขึ้นการ์ดถามคุณ"
-description: สามทางที่โหมด Auto ถามผู้ใช้แทน classifier เมื่อ Auto พักเพราะบล็อกบ่อย เมื่อคำสั่ง rm -rf แตะ workspace หรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
+description: สามทางที่โหมด Auto ถามผู้ใช้ เมื่อ classifier ไม่แน่ใจ เมื่อคำสั่ง rm -rf แตะ workspace หรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
 scenario:
   surface: vscode
   given:
@@ -8,8 +8,8 @@ scenario:
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
     model ขอเรียก `bash` ด้วยคำสั่งที่ไม่อยู่ใน safe list
-  covers: [perm.auto-paused-asks-user, perm.auto-hard-ask, perm.workspace-ask-rule]
-  related: [perm.auto-classifier-blocks, perm.classifier-unavailable, perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-rule]
+  covers: [perm.auto-classifier-asks-user, perm.auto-hard-ask, perm.workspace-ask-rule]
+  related: [perm.classifier-unavailable, perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-rule]
   steps:
     - id: asks
       lane: model
@@ -44,17 +44,16 @@ scenario:
       fork:
         ask: ทำไมคำสั่งนี้ไปถึงผู้ใช้
         options:
-          - id: paused
-            label: Auto พักอยู่ (node scripts/build-icons.mjs)
+          - id: unsure
+            label: classifier ไม่แน่ใจ (node scripts/build-icons.mjs)
             then: ask
             steps:
               - lane: policy
                 at: rules
                 beat:
-                  title: "Auto พักอยู่ คำถามจึงไปถึงคุณ"
+                  title: "Classifier ไม่แน่ใจ คำถามจึงไปถึงคุณ"
                   text: >-
-                    `node scripts/build-icons.mjs` ไปที่ classifier ซึ่งไม่แน่ใจ ก่อนหน้านี้ classifier บล็อกครบ 3 ครั้งติดกัน
-                    Auto จึงพักอยู่ ความไม่แน่ใจจึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier แทนการบล็อก
+                    `node scripts/build-icons.mjs` ไปที่ classifier ซึ่งไม่แน่ใจ ความไม่แน่ใจจึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier
                   from: engine
                   to: engine
                 do: >-
@@ -69,10 +68,9 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  ก่อนหน้านี้ classifier บล็อกครบ 3 ครั้งติดกัน สถานะ Auto จึงเป็น `paused` ตาราง `CLASSIFIER_OUTCOMES.paused`
-                  แปลง `ask` เป็น `ask-user` ไม่ใช่ `block` `settle` ส่งคำถามให้ผู้ใช้พร้อมเหตุผลของ classifier
-                ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
-                emits: [paused, ask-user]
+                  `settle` ส่งคำตอบ `ask` ของ classifier ให้ผู้ใช้พร้อมเหตุผลของ classifier
+                ref: packages/engine/src/tools/agent.ts#settle
+                emits: [ask-user]
           - id: hard
             label: rm -rf นอก workspace (rm -rf ../old-build)
             then: ask
@@ -170,8 +168,7 @@ scenario:
                 beat:
                   title: "คุณกด Allow"
                   text: >-
-                    การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาต ถ้า Auto พักอยู่ การอนุญาตนี้ทำให้ Auto กลับมาใช้ classifier
-                    ถ้าไม่ได้พัก ตัวนับการบล็อกเริ่มใหม่
+                    การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาต
                   from: you
                   to: panel
                 do: >-
@@ -186,11 +183,9 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้วเลื่อนสถานะ Auto ด้วย `user-allow`
-                  ถ้า Auto พักอยู่ การอนุญาตนี้ทำให้กลับไปเป็น `classifying` และคำสั่งถัดไปที่ classifier ตอบ `ask` จะถูกบล็อกอีกครั้งโดยไม่ถาม
-                  ถ้า Auto ไม่ได้พัก ตัวนับการบล็อกติดกันเริ่มใหม่
-                ref: packages/core/src/auto.ts#nextAutoState
-                emits: [user-allow]
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow`
+                ref: packages/engine/src/tools/agent.ts#settle
+                emits: [allow]
                 phase: running-tools
           - id: deny
             label: Deny
@@ -200,7 +195,7 @@ scenario:
                 beat:
                   title: "คุณกด Deny"
                   text: >-
-                    turn จบรอคุณเหมือนการปฏิเสธในโหมด Ask Auto ที่พักอยู่ยังพักต่อ ทัวร์นั้นเล่าต่อ
+                    turn จบรอคุณเหมือนการปฏิเสธในโหมด Ask ทัวร์นั้นเล่าต่อ
                   from: you
                   to: panel
                   end: "คุณปฏิเสธ turn จบ"
@@ -216,7 +211,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` คืนบันทึก `verdict: deny` โดยไม่มีความเห็น จึงเป็น `ToolRejected` สถานะ Auto ไม่เปลี่ยน (Auto ที่พักยังพักอยู่)
+                  `settle` คืนบันทึก `verdict: deny` โดยไม่มีความเห็น จึงเป็น `ToolRejected`
                   turn จบรอผู้ใช้เหมือนการปฏิเสธในโหมด Ask
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]
@@ -263,14 +258,13 @@ scenario:
 
 | ทาง | classifier ถูกเรียกไหม | หลังผู้ใช้อนุญาต |
 | --- | --- | --- |
-| Auto พัก (บล็อก 3 ครั้งติดกัน หรือ 20 ครั้งรวม) | เรียก และตอบ `ask` | Auto กลับมาตัดสินเอง |
+| classifier ไม่แน่ใจ หรือใช้ไม่ได้ | เรียก และได้ `ask` | ครั้งหน้า classifier ตัดสินใหม่ |
 | `rm -rf` ของ workspace, `.git` หรือนอก workspace | ไม่ | ครั้งหน้าถามอีก กฎ allow ครอบไม่ได้ |
 | กฎ ask ของ workspace | ไม่ | ครั้งหน้าถามอีก จนกว่าผู้ใช้ลบกฎ |
 
 สิ่งที่ควรสังเกต
 
-- **Auto ที่พักยังรันสิ่งที่ classifier อนุญาต** การพักเปลี่ยนแค่ทางของ `ask` คำตอบ `allow` และ `deny` ของ classifier ยังมีผลตามเดิม
-- **การปฏิเสธไม่ปลด Auto** มีแค่การอนุญาตของผู้ใช้ที่ทำให้ Auto กลับไปตัดสินเอง ผู้ใช้ที่กด Deny ไปเรื่อยๆ จะเห็นการ์ดทุกครั้งที่ classifier ไม่แน่ใจ
+- **มีแค่ `ask` ที่ไปถึงคุณ** คำตอบ `allow` และ `deny` ของ classifier มีผลโดยไม่ถาม
 - **`rm -rf` ภายใน workspace ต่างออกไป** กฎ `rm-rf-in-workspace` ให้ classifier ตัดสินในโหมด Auto
   เฉพาะการลบ workspace ทั้งก้อน `.git` หรือนอก workspace ที่ถามผู้ใช้เสมอ
 

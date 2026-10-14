@@ -49,7 +49,7 @@ export type SimpleCommand = {
 /**
  * `plan` reads and runs only what is clearly safe, and changes nothing. `ask` asks the user before every flagged command.
  * `auto` runs what is clearly safe, asks before an `rm -rf` outside the workspace, and lets the classifier judge the
- * rest; what the classifier will not allow is blocked without asking, until the blocks pause Auto (see auto.ts).
+ * rest: it runs what the classifier allows, refuses what it denies, and asks the user about the rest.
  * Non-interactive runs, such as evals, have nobody to ask.
  */
 export const APPROVAL_MODES = ['plan', 'ask', 'auto', 'non-interactive'] as const;

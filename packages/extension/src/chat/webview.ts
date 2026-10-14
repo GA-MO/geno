@@ -31,7 +31,7 @@ import { compactStep } from './compact-view.js';
 import type { TodoList } from '@g-code/core/todo';
 import { progressLabel } from '@g-code/core/call-progress';
 import { laneOffer } from './backend-model.js';
-import { applyLaneButton, askingStep, callsStep, noReplyNotice, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { alertBlock, applyLaneButton, askingStep, callsStep, noReplyNotice, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
 import { slashPicker } from './slash-view.js';
@@ -314,6 +314,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.block, quiet], build: () => permissionCard(step.block, ui, quiet) };
     case 'error':
       return { deps: [step.block], build: () => errorBlock(step.block, ui) };
+    case 'alert':
+      return { deps: [step.block], build: () => alertBlock(step.block) };
     case 'steer':
       return { deps: [step.block], build: () => steerStep(step.block) };
     case 'compact':

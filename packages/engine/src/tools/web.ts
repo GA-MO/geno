@@ -10,7 +10,8 @@ import {
   changesHost,
   classifierInputOf,
   costOf,
-  DEFAULT_CLASSIFIER_MODEL,
+  classifierChoiceOf,
+  CLASSIFIER_ENV,
   decodeEntities,
   fetchAnswerText,
   htmlToMarkdown,
@@ -41,7 +42,6 @@ import {
   type WebTarget,
   type WebTool,
 } from '@g-code/core';
-import { CLASSIFIER_ENV } from '../classifier.js';
 import { messagesOf, usageOf } from '../gateway.js';
 import { wireFor } from '../wire.js';
 import { denialText, modeOf, refusalOf, settle, type Approval } from './agent.js';
@@ -228,11 +228,9 @@ export function readerChoices(env: Env, session: WebDeps['session']): Choice[] {
     const model = env['GCODE_EXPLORE_MODEL'] || specOf(explore).defaultModel;
     if (model !== undefined) choices.push({ provider: explore, model, role: 'explore' });
   }
-  const classifierProvider = env[CLASSIFIER_ENV.provider];
-  const classifierModel = env[CLASSIFIER_ENV.model];
-  if ((classifierProvider || classifierModel) && classifierModel !== 'off') {
-    const provider = classifierProvider || 'modelstudio';
-    if (isProviderName(provider)) choices.push({ provider, model: classifierModel || DEFAULT_CLASSIFIER_MODEL, role: 'classifier' });
+  if (env[CLASSIFIER_ENV.provider] || env[CLASSIFIER_ENV.model]) {
+    const { provider, model } = classifierChoiceOf(env);
+    if (isProviderName(provider) && model !== undefined && model !== 'off') choices.push({ provider, model, role: 'classifier' });
   }
   choices.push({ ...session, role: 'session' });
   return choices;

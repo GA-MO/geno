@@ -822,16 +822,16 @@ scenarios:
       - editor
       - panel
     terminal: Model continues; badge "Denied by a rule"
-  - id: perm.auto-classifier-blocks
-    thai: Auto บล็อกเมื่อ classifier ไม่แน่ใจ
-    english: Auto blocks on classifier "ask"
+  - id: perm.auto-classifier-asks-user
+    thai: Auto ถามคุณเมื่อ classifier ไม่แน่ใจ
+    english: Auto asks the user on classifier "ask"
     chapter: 8
     priority: P2
     lanes:
       - policy
-      - loop
       - panel
-    terminal: Model continues; may pause Auto
+      - user
+    terminal: Per answer
   - id: perm.auto-classifier-denies
     thai: classifier ปฏิเสธ
     english: Classifier denies outright
@@ -894,16 +894,6 @@ scenarios:
       - panel
       - user
     terminal: Per branch (Deny ends the turn)
-  - id: perm.auto-paused-asks-user
-    thai: Auto หยุดพักแล้วถามผู้ใช้
-    english: Auto paused, asks the user
-    chapter: 8
-    priority: P3
-    lanes:
-      - policy
-      - panel
-      - user
-    terminal: Runs or the turn ends
   - id: perm.auto-hard-ask
     thai: Auto ยังถามก่อน rm -rf
     english: Hard ask in Auto
@@ -952,7 +942,7 @@ scenarios:
     lanes:
       - policy
       - panel
-    terminal: Blocks, then pauses, then cards
+    terminal: Cards, with one notice that the classifier is not working
   - id: perm.rm-rf-refused-run
     thai: การรันจริง ขอ rm -rf ในโหมด Ask แล้วถูกปฏิเสธ
     english: "Real run: rm -rf asked in Ask mode and refused"
