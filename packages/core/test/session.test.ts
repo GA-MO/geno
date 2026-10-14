@@ -256,6 +256,30 @@ describe('buildRequest', () => {
       expect(buildRequest(opus, events).max_tokens).toBe(1);
     });
 
+    it('forces a tool with thinking off in the shape the model takes, and offers it with auto to a model that refuses a forced tool', () => {
+      const forced = (s: Session) => {
+        const { thinking, tool_choice } = buildRequest(s, [start, user(1, 'hi')], TOOL_DEFINITIONS, 'system', undefined, 'read');
+        return { thinking, tool_choice };
+      };
+      const haiku: Session = { ...session, provider: 'anthropic', model: 'claude-haiku-4-5' };
+      const sonnet: Session = { ...session, provider: 'anthropic', model: 'claude-sonnet-5-5' };
+      expect(forced(flash)).toEqual({ thinking: { type: 'disabled' }, tool_choice: { type: 'tool', name: 'read' } });
+      expect(forced(haiku)).toEqual({ thinking: { type: 'disabled' }, tool_choice: { type: 'tool', name: 'read' } });
+      expect(forced(unknown)).toEqual({ thinking: { type: 'disabled' }, tool_choice: { type: 'tool', name: 'read' } });
+      // Claude Sonnet and Opus 5.5 answer a forced tool_choice, and a disabled thinking, with a 400.
+      expect(forced(sonnet)).toEqual({ thinking: { type: 'adaptive', display: 'omitted' }, tool_choice: undefined });
+      expect(forced(opus)).toEqual({ thinking: { type: 'adaptive', display: 'omitted' }, tool_choice: undefined });
+    });
+
+    it('turns the tools off on a last call with tool_choice none on every model, Claude 5.5 too', () => {
+      const sonnet: Session = { ...session, provider: 'anthropic', model: 'claude-sonnet-5-5' };
+      for (const s of [flash, sonnet, opus]) {
+        const request = buildRequest(s, [start, user(1, 'hi')], TOOL_DEFINITIONS, 'system', undefined, undefined, true);
+        expect(request.tool_choice, s.model).toEqual({ type: 'none' });
+        expect((request.thinking as { type?: string } | undefined)?.type, s.model).not.toBe('disabled');
+      }
+    });
+
     it('sends the fallback output limit, unclamped, for a model whose window is unknown', () => {
       const events = [start, user(1, 'hi'), measured(2, 5_000_000), user(3, 'go on')];
       expect(buildRequest(unknown, events).max_tokens).toBe(64_000);

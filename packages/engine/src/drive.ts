@@ -414,9 +414,11 @@ export async function drive(
     const left = openWaitOf(events);
     let lastWait = left;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
-    // The last call a limit allows must answer: a child's goes to its report, any other run's with the tools off.
+    // The last call a limit allows must answer: a child's goes to its report, any other run's with the tools off. A child
+    // whose model refuses a forced tool answers with the tools off too, and its last text is its report.
     const last = mode.forced === undefined && lastCallDue(events, run);
-    const forced = mode.forced ?? (last && run.handback === true && mode.tools.some((tool) => tool.name === REPORT_TOOL) ? REPORT_TOOL : undefined);
+    const reportForced = last && run.handback === true && capabilitiesOf(session.provider, session.model).forcesTool && mode.tools.some((tool) => tool.name === REPORT_TOOL);
+    const forced = mode.forced ?? (reportForced ? REPORT_TOOL : undefined);
     const send = async () => gateway.turn({
       snapshot,
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
