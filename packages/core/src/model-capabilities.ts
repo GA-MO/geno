@@ -15,7 +15,7 @@ export type Thinking = 'adaptive' | 'omit';
 export type CacheTtl = '5m' | '1h';
 
 /** The fields a row may choose without a source. A window and an output limit always have one. */
-export type GuessedField = 'thinking' | 'effort' | 'promptTier' | 'cacheTtl' | 'compactAt';
+export type GuessedField = 'thinking' | 'thinkingOff' | 'legacyControls' | 'effort' | 'promptTier' | 'cacheTtl' | 'compactAt';
 
 /** What Geno knows about one model: the limits a request must respect, and the settings it sends. */
 export type ModelCapabilities = {
@@ -24,6 +24,13 @@ export type ModelCapabilities = {
   /** The most output tokens a call may ask for, before the request clamps it to what the window has left. */
   readonly maxOutput: number;
   readonly thinking: Thinking;
+  /**
+   * The `thinking` type that turns thinking off, as a forced tool call needs. Claude 5.5 refuses `disabled` with a 400
+   * and takes `between_tools`, under which it does not think before it answers.
+   */
+  readonly thinkingOff: 'disabled' | 'between_tools';
+  /** Whether a request may set `temperature` and force a tool with `tool_choice`. Claude 5.5 refuses both with a 400. */
+  readonly legacyControls: boolean;
   /** Whether a request carries `output_config.effort`. Haiku 4.5 refuses a request that does. */
   readonly effort: boolean;
   readonly promptTier: PromptTier;
@@ -43,7 +50,7 @@ export type ModelCapabilities = {
  */
 const SPILL_CHARS = 24_000;
 
-type Choices = Pick<ModelCapabilities, 'thinking' | 'effort' | 'promptTier' | 'cacheTtl' | 'guessed'>;
+type Choices = Pick<ModelCapabilities, 'thinking' | 'thinkingOff' | 'legacyControls' | 'effort' | 'promptTier' | 'cacheTtl' | 'guessed'>;
 
 /** A known model. `compactAt` is 80% of the window, Geno's trigger since U47, unless a row's eval says otherwise. */
 const known = (source: string, window: number, maxOutput: number, choices: Choices, compactAt = Math.floor(0.8 * window)): ModelCapabilities => ({
@@ -61,12 +68,12 @@ const modelStudioDocs = (page: string): string => `https://www.alibabacloud.com/
 
 // Opus and Sonnet 5.5 run adaptive thinking when the field is omitted, so sending it changes nothing but the wire.
 // Every Claude platform Geno reaches takes the 1 h TTL; OpenRouter's pass-through of it is untested.
-const CLAUDE_STRONG: Choices = { thinking: 'adaptive', effort: true, promptTier: 'principles', cacheTtl: '1h', guessed: [] };
+const CLAUDE_STRONG: Choices = { thinking: 'adaptive', thinkingOff: 'between_tools', legacyControls: false, effort: true, promptTier: 'principles', cacheTtl: '1h', guessed: [] };
 const CLAUDE_SONNET: Choices = { ...CLAUDE_STRONG, guessed: ['promptTier'] };
-const CLAUDE_HAIKU: Choices = { thinking: 'omit', effort: false, promptTier: 'rules', cacheTtl: '1h', guessed: [] };
-const OPENROUTER_CLAUDE: Choices = { thinking: 'omit', effort: true, promptTier: 'principles', cacheTtl: '5m', guessed: ['effort'] };
+const CLAUDE_HAIKU: Choices = { thinking: 'omit', thinkingOff: 'disabled', legacyControls: true, effort: false, promptTier: 'rules', cacheTtl: '1h', guessed: [] };
+const OPENROUTER_CLAUDE: Choices = { thinking: 'omit', thinkingOff: 'between_tools', legacyControls: false, effort: true, promptTier: 'principles', cacheTtl: '5m', guessed: ['effort', 'thinkingOff', 'legacyControls'] };
 // Model Studio has taken `output_config.effort` from qwen since U21 (docs/results/u21-effort.md).
-const QWEN_FLASH: Choices = { thinking: 'omit', effort: true, promptTier: 'rules', cacheTtl: '5m', guessed: [] };
+const QWEN_FLASH: Choices = { thinking: 'omit', thinkingOff: 'disabled', legacyControls: true, effort: true, promptTier: 'rules', cacheTtl: '5m', guessed: [] };
 const QWEN_LARGER: Choices = { ...QWEN_FLASH, guessed: ['promptTier'] };
 
 /**
@@ -76,7 +83,7 @@ const QWEN_LARGER: Choices = { ...QWEN_FLASH, guessed: ['promptTier'] };
 export const MODEL_CAPABILITIES: { readonly [P in ProviderName]: Readonly<Record<string, ModelCapabilities>> } = {
   openrouter: {
     'anthropic/claude-opus-5.5': known(OPENROUTER_MODELS, 1_000_000, 128_000, OPENROUTER_CLAUDE),
-    'anthropic/claude-sonnet-5.5': known(CLAUDE_DOCS, 1_000_000, 128_000, { ...OPENROUTER_CLAUDE, guessed: ['effort', 'promptTier'] }),
+    'anthropic/claude-sonnet-5.5': known(CLAUDE_DOCS, 1_000_000, 128_000, { ...OPENROUTER_CLAUDE, guessed: ['effort', 'thinkingOff', 'legacyControls', 'promptTier'] }),
   },
   // Each page's "Context limits"; the output limits answered a live request at the limit and refused one above it.
   // Flash compacts at 200,000: a long session then costs about 30% of what it does at 800,000
@@ -122,6 +129,8 @@ export const UNKNOWN_MODEL: ModelCapabilities = {
   window: undefined,
   maxOutput: 64_000,
   thinking: 'omit',
+  thinkingOff: 'disabled',
+  legacyControls: true,
   effort: false,
   promptTier: 'rules',
   cacheTtl: '5m',
