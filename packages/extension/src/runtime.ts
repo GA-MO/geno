@@ -1,6 +1,7 @@
 import {
   DEFAULT_RESUME_AFTER_LIMIT,
   isProviderName,
+  PROVIDERS,
   isResumeAfterLimit,
   missingField,
   ROLE_SPECS,
@@ -8,11 +9,13 @@ import {
   SEARCH_PROVIDERS,
   specOf,
   type FieldId,
+  type NoCredentials,
   type ProviderField,
   type ProviderName,
   type Role,
   type SearchProviderName,
 } from '@g-code/core';
+import type { ErrorFix } from './chat/messages.js';
 
 export const SET_KEY_COMMAND = 'gcode.setApiKey';
 export const SETTINGS_COMMAND = 'gcode.chat.settings';
@@ -112,6 +115,10 @@ const valuesOf = (runtime: ModelRuntime): Partial<Record<FieldId, Supplied>> => 
   ...runtime.more,
 });
 
+/** What a provider's value is called in a sentence: its API key is its key, and ID and URL stay capitalised. */
+const valueName = (provider: ProviderName, field: FieldId): string =>
+  field === 'apiKey' ? 'key' : (specOf(provider).fields.find((f) => f.id === field)?.label ?? field).toLowerCase().replace(/\b(id|url)\b/g, (word) => word.toUpperCase());
+
 /** What stops the engine from reaching the model, and the command that fixes it. */
 export type SetupProblem = { readonly message: string; readonly fix: { readonly label: string; readonly command: string; readonly args: unknown[] } };
 
@@ -134,8 +141,25 @@ export function setupProblem(runtime: ModelRuntime, env: Env = {}): SetupProblem
     };
   }
   return {
-    message: `Geno needs your ${spec.label} ${missing.label.toLowerCase().replace(/\b(id|url)\b/g, (word) => word.toUpperCase())}. Set it in Geno’s settings.`,
+    message: `Geno needs your ${spec.label} ${valueName(runtime.provider, missing.id)}. Set it in Geno’s settings.`,
     fix: { label: 'Open Geno Settings', command: SETTINGS_COMMAND, args: [] },
+  };
+}
+
+/**
+ * The notice for a chat whose provider has no key in this engine, which `current` would give a new chat. A session
+ * keeps its provider and model, so the way on is a new chat on the current provider, or the old provider's value.
+ */
+export function unreachableNotice(chat: NoCredentials, current: { readonly provider: ProviderName; readonly model: string }): { readonly message: string; readonly fixes: readonly ErrorFix[] } {
+  const old = specOf(chat.provider).label;
+  const missing = `${old} ${valueName(chat.provider, chat.field)}`;
+  const secret = specOf(chat.provider).fields.find((f) => f.id === chat.field)?.secret === true;
+  return {
+    message: `This chat ran on ${old} · ${chat.model}, and Geno has no ${missing}. Start a new chat to use ${specOf(current.provider).label} · ${current.model}, or set the ${missing}.`,
+    fixes: [
+      { label: 'New chat', fix: 'new-chat' },
+      secret ? { label: 'Set key', fix: 'set-key', provider: chat.provider, field: chat.field } : { label: 'Open settings', fix: 'open-settings' },
+    ],
   };
 }
 
@@ -194,6 +218,8 @@ export type SearchRuntime = { readonly provider: SearchProviderName; readonly ke
 export type EngineRuntime = {
   readonly chat: ModelRuntime;
   readonly roles: readonly { readonly role: ProviderRole; readonly runtime: ModelRuntime }[];
+  /** Every other provider with a value set, so an older chat on one goes on running there: a session keeps its provider. */
+  readonly others: readonly ModelRuntime[];
   readonly search: readonly SearchRuntime[];
 };
 
@@ -222,12 +248,22 @@ export async function readEngineRuntime(settings: Settings, secrets: Secrets, en
     const model = typeof choice.model === 'string' && choice.model !== '' ? choice.model : undefined;
     roles.push({ role, runtime: await providerRuntime(provider, model, settings, secrets, env) });
   }
-  return { chat, roles, search: await searchKeys(secrets, env) };
+  const others: ModelRuntime[] = [];
+  for (const provider of PROVIDERS) {
+    if (provider === chat.provider || roles.some(({ runtime }) => runtime.provider === provider)) continue;
+    const runtime = await providerRuntime(provider, undefined, settings, secrets, env);
+    if (Object.keys(valuesOf(runtime)).length > 0) others.push(runtime);
+  }
+  return { chat, roles, others, search: await searchKeys(secrets, env) };
 }
 
-/** The engine's variables for every role: each role's provider values, its provider and model, then chat's. */
-export function engineEnvOf({ chat, roles, search }: EngineRuntime): Record<string, string> {
+/** The engine's variables: every provider's values, each role's provider and model, then chat's, which new sessions use. */
+export function engineEnvOf({ chat, roles, others, search }: EngineRuntime): Record<string, string> {
   const env: Record<string, string> = Object.fromEntries(search.map(({ provider, key }) => [SEARCH_PROVIDER_SPECS[provider].keyEnv, key.value]));
+  for (const runtime of others) {
+    const { GCODE_PROVIDER: _provider, GCODE_MODEL: _model, ...values } = engineEnv(runtime);
+    Object.assign(env, values);
+  }
   for (const { role, runtime } of roles) {
     const { GCODE_PROVIDER: _provider, GCODE_MODEL: _model, ...values } = engineEnv(runtime);
     const names = ROLE_SPECS[role].env!;
@@ -236,9 +272,10 @@ export function engineEnvOf({ chat, roles, search }: EngineRuntime): Record<stri
   return { ...env, ...engineEnv(chat) };
 }
 
-export const describeEngineRuntime = ({ chat, roles, search }: EngineRuntime): string =>
+export const describeEngineRuntime = ({ chat, roles, others, search }: EngineRuntime): string =>
   [
     describeRuntime(chat),
     ...roles.map(({ role, runtime }) => `${role}: ${describeRuntime(runtime)}`),
+    ...others.map((runtime) => `also: ${runtime.provider}, ${Object.entries(valuesOf(runtime)).map(([id, value]) => `${id} from ${value.source}`).join(', ')}`),
     ...search.map(({ provider, key }) => `search: ${provider}, key from ${key.source}`),
   ].join('; ');

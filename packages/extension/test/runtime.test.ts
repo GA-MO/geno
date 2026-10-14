@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, sandboxEnvOf, searchSecretName, secretName, settingKey, setupProblem } from '../src/runtime.js';
+import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, sandboxEnvOf, searchSecretName, secretName, settingKey, setupProblem, unreachableNotice } from '../src/runtime.js';
 
 /** Settings as the user set them; `workspace` holds what a workspace's settings.json says, which may differ. */
 const settingsOf = (values: Record<string, unknown>, workspace: Record<string, unknown> = {}) => ({
@@ -113,11 +113,24 @@ describe('every provider’s runtime', () => {
     expect(JSON.stringify(engineEnv(modelstudio))).not.toContain('attacker');
   });
 
-  it('passes nothing new when no role is set, so today’s engine starts exactly as before', async () => {
-    const settings = settingsOf({ baseUrl: URL });
-    const secrets = secretsOf({ 'gcode.apiKey.modelstudio': STORED, 'gcode.apiKey.openai': 'sk-openai' });
+  it('hands the engine every provider’s values the user set, so an older chat goes on running on its own provider', async () => {
+    const settings = settingsOf({ provider: 'anthropic', model: 'claude-sonnet-5-5', baseUrl: URL, providers: { bedrock: { region: 'eu-west-1' } } });
+    const secrets = secretsOf({ 'gcode.apiKey.anthropic': 'sk-ant-stored', 'gcode.apiKey.modelstudio': STORED, 'gcode.apiKey.openai': 'sk-openai-stored' });
     const engine = await readEngineRuntime(settings, secrets, {});
-    expect(engineEnvOf(engine)).toEqual(engineEnv(await readModelRuntime(settings, secrets, {})));
+    expect(engineEnvOf(engine)).toEqual({
+      GCODE_PROVIDER: 'anthropic',
+      GCODE_MODEL: 'claude-sonnet-5-5',
+      ANTHROPIC_API_KEY: 'sk-ant-stored',
+      DASHSCOPE_API_KEY: STORED,
+      DASHSCOPE_BASE_URL: URL,
+      AWS_REGION: 'eu-west-1',
+      OPENAI_API_KEY: 'sk-openai-stored',
+    });
+    const described = describeEngineRuntime(engine);
+    expect(described).toBe(
+      'anthropic, model claude-sonnet-5-5, key from secret-storage; also: modelstudio, apiKey from secret-storage, baseUrl from settings; also: bedrock, region from settings; also: openai, apiKey from secret-storage',
+    );
+    for (const secret of ['sk-ant-stored', STORED, 'sk-openai-stored']) expect(described).not.toContain(secret);
   });
 
   it('maps the classifier and explore roles to their own provider and model, with that provider’s key', async () => {
@@ -182,5 +195,23 @@ describe('the limit resume setting', () => {
     expect(resumeEnvOf(settingsOf({}))).toEqual({ GCODE_RESUME_AFTER_LIMIT: 'short' });
     expect(resumeEnvOf(settingsOf({ 'resume.afterLimit': 'always' }))).toEqual({ GCODE_RESUME_AFTER_LIMIT: 'always' });
     expect(resumeEnvOf(settingsOf({ 'resume.afterLimit': 'sometimes' }))).toEqual({});
+  });
+});
+
+describe('a chat whose provider has no key here', () => {
+  it('names the chat’s provider and model, what a new chat would use, and offers a new chat or the key', () => {
+    expect(unreachableNotice({ reason: 'no-credentials', provider: 'modelstudio', model: 'qwen3.8-flash', field: 'apiKey' }, { provider: 'anthropic', model: 'claude-sonnet-5-5' })).toEqual({
+      message: 'This chat ran on Model Studio · qwen3.8-flash, and Geno has no Model Studio key. Start a new chat to use Anthropic · claude-sonnet-5-5, or set the Model Studio key.',
+      fixes: [
+        { label: 'New chat', fix: 'new-chat' },
+        { label: 'Set key', fix: 'set-key', provider: 'modelstudio', field: 'apiKey' },
+      ],
+    });
+  });
+
+  it('sends a missing setting, such as the endpoint, to the settings', () => {
+    const notice = unreachableNotice({ reason: 'no-credentials', provider: 'modelstudio', model: 'qwen3.8-flash', field: 'baseUrl' }, { provider: 'anthropic', model: 'claude-sonnet-5-5' });
+    expect(notice.message).toBe('This chat ran on Model Studio · qwen3.8-flash, and Geno has no Model Studio base URL. Start a new chat to use Anthropic · claude-sonnet-5-5, or set the Model Studio base URL.');
+    expect(notice.fixes[1]).toEqual({ label: 'Open settings', fix: 'open-settings' });
   });
 });
