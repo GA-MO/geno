@@ -1,13 +1,25 @@
 import type { ContentBlock, Message, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages/messages';
+import { TOOL_SEARCH_TOOL } from './deferred-tools.js';
+
+const NAMES = String.raw`[\w.:-]+(?:\s*,\s*[\w.:-]+)*`;
+const BARE_SELECT = new RegExp(String.raw`^\s*\{\s*"select"\s*:\s*(?:\[\s*(${NAMES})\s*\]|(${NAMES}))\s*\}\s*$`);
+
+/** Claude sends tool_search `{"select": show_files}` with the names unquoted, as Claude Code's ToolSearch takes them in a bare `select:a,b` query. */
+function bareSelect(tool: string, json: string): { readonly select: readonly string[] } | undefined {
+  if (tool !== TOOL_SEARCH_TOOL) return undefined;
+  const match = BARE_SELECT.exec(json);
+  const names = match?.[1] ?? match?.[2];
+  return names === undefined ? undefined : { select: names.split(',').map((name) => name.trim()) };
+}
 
 /** Arguments that are not a JSON object reach the tool as `{ invalid_json }`, so its error shows the model what it sent (`invalidInputError`). */
-export function parseToolInput(json: string): unknown {
+export function parseToolInput(tool: string, json: string): unknown {
   if (json.trim() === '') return {};
   try {
     const parsed: unknown = JSON.parse(json);
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : { invalid_json: json };
   } catch {
-    return { invalid_json: json };
+    return bareSelect(tool, json) ?? { invalid_json: json };
   }
 }
 
@@ -68,7 +80,7 @@ export function messageFromEvents(events: readonly MessageStreamEvent[]): Messag
         if (block === undefined || buffered === undefined) break;
         // Set last, as the SDK's own stream does, so the next request sends the block's fields in the same order.
         delete block['input'];
-        block['input'] = parseToolInput(buffered);
+        block['input'] = parseToolInput(block['name'] as string, buffered);
         break;
       }
       case 'message_delta':

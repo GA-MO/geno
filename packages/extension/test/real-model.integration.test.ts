@@ -16,16 +16,18 @@ import { click, connectWindow, evaluate, press, typeText, webview, type Window }
 import { setUp } from './launch.js';
 import { captureWindow } from './screenshot.js';
 import { leaseWindow } from './pool/client.js';
+import { realRunLabel } from './real-run.js';
 import { FILES, MCP_SERVER, STEPS } from './suite/real-model-fixture.js';
 
 const REAL = process.env['GCODE_REAL_MODEL'] === '1';
 const EXTENSION = 'g-code.g-code';
-/** GCODE_REAL_RUN numbers a run, so a retry keeps the earlier run's shots and logs. */
-const RUN = process.env['GCODE_REAL_RUN'] ?? '1';
 /** GCODE_REAL_STEPS, comma-separated, runs only those steps of the suite. */
 const STEPS_CHOSEN = process.env['GCODE_REAL_STEPS']?.split(',').map((s) => s.trim());
-const SHOTS = path.resolve('docs/results/real-usecases/shots', `r${RUN}`);
+const SHOTS_ROOT = path.resolve('docs/results/real-usecases/shots');
 const SCRATCH = path.resolve('scratchpad/real-usecases');
+/** GCODE_REAL_RUN numbers a run, so a retry keeps the earlier run's shots and logs; unset, the run takes the next free number. */
+const RUN = realRunLabel(process.env['GCODE_REAL_RUN'], [[SHOTS_ROOT, 'r'], [SCRATCH, 'layer-b-r'], [path.resolve('docs/results/real-usecases/runs/B-panel'), '']]);
+const SHOTS = path.join(SHOTS_ROOT, `r${RUN}`);
 const KEPT = path.join(SCRATCH, `layer-b-r${RUN}`);
 const CAP_USD = 2.8;
 const MCP_FIXTURE = path.resolve('packages/engine/test/fake-mcp-server.ts');
@@ -130,7 +132,7 @@ describe.skipIf(!REAL)('the chat panel on the real model', () => {
     mkdirSync(SHOTS, { recursive: true });
     rmSync(KEPT, { recursive: true, force: true });
     mkdirSync(KEPT, { recursive: true });
-    const mcpServer = { type: 'stdio', command: process.execPath, args: ['--import', TSX, MCP_FIXTURE], env: { MARKER: path.join(SCRATCH, 'mcp-ran') } };
+    const mcpServer = { type: 'stdio', command: process.execPath, args: ['--import', TSX, MCP_FIXTURE] };
     const { workspace, work, home, suite } = await setUp(
       'real-model',
       { ...FILES, '.vscode/mcp.json': JSON.stringify({ servers: { [MCP_SERVER]: mcpServer } }) },

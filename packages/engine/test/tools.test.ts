@@ -252,11 +252,11 @@ describe('the tool table', () => {
   });
 
   it('answers input that was not a JSON object by naming the problem and echoing what the model sent', async () => {
-    expect(await call('read', parseToolInput('{"path": src/a.ts}'))).toEqual({
+    expect(await call('read', parseToolInput('read', '{"path": src/a.ts}'))).toEqual({
       status: 'error',
       text: `Your input to read was not valid JSON: {"path": src/a.ts}. Send it again as a JSON object that matches the tool's input_schema.`,
     });
-    expect(await call('list', parseToolInput('["src"]'))).toEqual({
+    expect(await call('list', parseToolInput('list', '["src"]'))).toEqual({
       status: 'error',
       text: `Your input to list was JSON but not an object: ["src"]. Send it again as a JSON object that matches the tool's input_schema.`,
     });

@@ -275,7 +275,7 @@ export function chatStream() {
       close(events);
       for (const draft of tools.values()) {
         const block = content[draft.index];
-        if (block?.type === 'tool_use') block.input = parseToolInput(draft.json);
+        if (block?.type === 'tool_use') block.input = parseToolInput(block.name, draft.json);
         events.push({ type: 'content_block_stop', index: draft.index });
       }
       const final = chatUsage(usage);
