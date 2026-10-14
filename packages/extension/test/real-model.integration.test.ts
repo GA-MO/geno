@@ -36,7 +36,10 @@ function mainCheckoutEnv(): Record<string, string | undefined> {
   return parseEnv(readFileSync(process.env['GCODE_ENV_FILE'] ?? path.join(path.dirname(common), '.env'), 'utf8'));
 }
 
-/** The provider the main checkout's .env names, Model Studio's qwen3.8-flash or Anthropic's Claude, with only its own key. */
+/**
+ * The provider the main checkout's .env names, Model Studio's qwen3.8-flash or Anthropic's Claude, with only its own key.
+ * The panel takes the provider and model from its gcode.provider and gcode.model settings, and the key from this env.
+ */
 function providerEnv(env: Record<string, string | undefined>): Record<string, string> {
   if (env['GCODE_PROVIDER'] === 'anthropic') {
     const key = env['ANTHROPIC_API_KEY'];
@@ -131,7 +134,7 @@ describe.skipIf(!REAL)('the chat panel on the real model', () => {
     const { workspace, work, home, suite } = await setUp(
       'real-model',
       { ...FILES, '.vscode/mcp.json': JSON.stringify({ servers: { [MCP_SERVER]: mcpServer } }) },
-      { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'gcode.review.mode': 'review', 'chat.mcp.enabled': false, 'chat.mcp.access': 'none', 'chat.mcp.autostart': 'never' },
+      { 'gcode.provider': provider['GCODE_PROVIDER'], 'gcode.model': provider['GCODE_MODEL'], 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'gcode.review.mode': 'review', 'chat.mcp.enabled': false, 'chat.mcp.access': 'none', 'chat.mcp.autostart': 'never' },
     );
     const git = (...args: string[]) => execFileSync('git', ['-c', 'user.email=dev@example.com', '-c', 'user.name=Dev', ...args], { cwd: workspace });
     git('init', '-q', '-b', 'main');
