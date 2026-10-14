@@ -279,7 +279,7 @@ function pipelineTools(pipelines: readonly Step[][]): ('read' | undefined)[] {
     const own = fileToolOf(pipeline);
     const word = /^(?:(?:do|then|else)\s+)*(\w+)/.exec(pipeline[0]!.text)?.[1] ?? '';
     if (OPENERS.has(word)) blocks.push(false);
-    // A closer with no opener in the line counts as a program, as it did before the line said what it closes.
+    // A closer whose opener is not in the line closes a body that may have run anything.
     const program = CLOSERS.has(word) ? (blocks.pop() ?? true) : own === undefined && !isLabel(pipeline) && !onlyLooks(pipeline);
     const tool = own === 'read' && !afterProgram ? own : undefined;
     if (program) {
