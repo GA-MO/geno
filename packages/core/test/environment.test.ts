@@ -45,7 +45,7 @@ describe('renderEnvironment', () => {
     expect(lines).toContain(' - OS version: Darwin 27.0.0');
     expect(lines).toContain(' - Date: 2026-10-08, the local date when this session started. Run date for the current time.');
     expect(lines).toContain(' - Model: qwen3.8-flash on Model Studio');
-    expect(lines.find((line) => line.startsWith(' - Platform:'))).toMatch(/darwin.*BSD.*sed -i ''/);
+    expect(lines.find((line) => line.startsWith(' - Platform:'))).toMatch(/darwin.*BSD.*GNU-only/);
     expect(lines.find((line) => line.startsWith(' - Shell:'))).toMatch(/bash -c .*login shell is zsh/);
     expect(lines.find((line) => line.startsWith(' - Scratchpad directory:'))).toMatch(/^ - Scratchpad directory: \/private\/var\/folders\/x\/T\/gcode-sessions\/s-1\. .*no approval/);
   });

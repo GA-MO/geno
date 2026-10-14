@@ -239,10 +239,17 @@ function pipelineTools(command: string): { readonly pipeline: Step[]; readonly t
     if (all[i - 1]?.at(-1)!.then !== '&&') afterProgram = false;
     const own = fileToolOf(pipeline);
     const tool = afterProgram ? undefined : own;
-    if (own === undefined && !isLabel(pipeline)) afterProgram = true;
+    if (own === undefined && !isLabel(pipeline) && !onlyLooks(pipeline)) afterProgram = true;
     return { pipeline, tool };
   });
 }
+
+/** Programs that only look and change nothing, so a file step after them checks no effect. */
+const LOOKERS = new Set(['wc', 'file', 'stat', 'du', 'tree', 'which']);
+const GIT_LOOKS = new Set(['status', 'log', 'diff', 'show', 'ls-files', 'branch']);
+
+const onlyLooks = (pipeline: readonly Step[]): boolean =>
+  pipeline.every(({ commands }) => commands.every(({ program, args }) => LOOKERS.has(program) || (program === 'git' && GIT_LOOKS.has(args[0] ?? ''))));
 
 /**
  * The pipelines of a command line that a dedicated tool does as well, wherever they sit in the line, such as the cat
