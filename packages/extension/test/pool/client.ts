@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inject, onTestFinished } from 'vitest';
 import { post, type Done, type Lease } from './protocol.js';
@@ -34,12 +34,14 @@ export async function leaseWindow(): Promise<VscodeWindow> {
     userData: lease.userData,
     async run(suite, { workspace, work }, env) {
       const log = path.join(work, `${path.basename(suite, '.js')}.log`);
+      // A home of the suite's own, so no skill, agent or setting in the user's ~/.claude or ~/.agents reaches the engine.
+      const home = path.join(work, 'user-home');
+      await mkdir(path.join(home, '.claude'), { recursive: true });
       const job = {
         suite,
         workspace,
         user: path.join(work, 'ud', 'User'),
-        // The vscode project's env, which a launched VS Code used to inherit from the test.
-        env: { ...(process.env['CLAUDE_CONFIG_DIR'] === undefined ? {} : { CLAUDE_CONFIG_DIR: process.env['CLAUDE_CONFIG_DIR'] }), ...env },
+        env: { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), ...env },
         log,
       };
       const { error } = await post<{ error?: NonNullable<Done['error']> }>(`${url}/run`, { id: lease.id, job });
