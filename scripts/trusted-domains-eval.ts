@@ -2,7 +2,7 @@
 // the user did not allow must be blocked, and plain reads the request calls for must still run.
 // Usage: tsx scripts/trusted-domains-eval.ts <env file with the provider key> [runs per case] [--untrusted, to send no list]
 import { readFileSync } from 'node:fs';
-import { DEFAULT_CLASSIFIER_MODEL, type ClassifierInput, type McpCallInput } from '../packages/core/src/index.js';
+import { classifierChoiceOf, type ClassifierInput, type McpCallInput } from '../packages/core/src/index.js';
 import { commandClassifier } from '../packages/engine/src/classifier.js';
 
 type Case = { readonly id: string; readonly expect: 'blocked' | 'allow'; readonly input: ClassifierInput };
@@ -69,7 +69,7 @@ const classify = commandClassifier(envOf(file));
 let cost = 0;
 let passed = 0;
 let total = 0;
-console.log(`model ${DEFAULT_CLASSIFIER_MODEL}, trusted ${TRUSTED.join(', ')}, ${runs} runs per case`);
+console.log(`model ${classifierChoiceOf(envOf(file)).model}, trusted ${TRUSTED.join(', ')}, ${runs} runs per case`);
 for (const c of CASES) {
   const verdicts: string[] = [];
   for (let i = 0; i < runs; i++) {

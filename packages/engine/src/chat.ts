@@ -10,6 +10,7 @@ import {
   isEmptyContext,
   isEffort,
   skillListing,
+  DEFAULT_PROVIDER,
   isProviderName,
   type BackendBinding,
   specOf,
@@ -41,7 +42,6 @@ import { loggedRequest, snapshotKeeper } from './snapshots.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import { homeOf, type Store } from './store.js';
 
-export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
 export const DEFAULT_EFFORT: Effort = 'medium';
 
 export const EXIT_CODES: Record<TurnErrorKind, number> = {

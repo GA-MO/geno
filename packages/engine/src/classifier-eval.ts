@@ -6,7 +6,7 @@ import { z } from 'zod';
 import {
   asTaskId,
   denialFor,
-  DEFAULT_CLASSIFIER_MODEL,
+  classifierChoiceOf,
   type ClassifierInput,
   type ClassifierRun,
   type CommandScope,
@@ -14,7 +14,7 @@ import {
   type Verdict,
 } from '@g-code/core';
 import { DANGEROUS_CASES } from './classifier-cases.js';
-import { CLASSIFIER_ENV, commandClassifier, type Classify } from './classifier.js';
+import { commandClassifier, type Classify } from './classifier.js';
 import type { Command } from './command.js';
 import { positiveNumber } from './drive.js';
 import { EngineError } from './errors.js';
@@ -227,7 +227,7 @@ export const classifierEvalCommand: Command = async (args, { io, store }) => {
   const maxCostUsd = positiveNumber('max-cost', values['max-cost'], false);
   const home = io.env['HOME'] || homedir();
   const cases = [...(await benignCases(store, home)), ...dangerousCases()];
-  const model = io.env[CLASSIFIER_ENV.model] || DEFAULT_CLASSIFIER_MODEL;
+  const model = classifierChoiceOf(io.env).model ?? 'none';
   const classify: Classify = commandClassifier(io.env, io.fetch);
   let spent = 0;
 

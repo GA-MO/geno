@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   baseUrlOf,
+  classifierChoiceOf,
   costOf,
   missingField,
   PRICES,
@@ -98,5 +99,38 @@ describe('costOf per provider', () => {
     expect(costOf('openai', 'qwen3.8-flash', million)).toBeNull();
     expect(costOf('anthropic', 'anthropic/claude-opus-5.5', million)).toBeNull();
     expect(costOf('bedrock', 'anthropic.claude-opus-5-5', million)).toBeNull();
+  });
+});
+
+describe('the classifier choice', () => {
+  const anthropicDefault = specOf('anthropic').classifierModel;
+  const CASES: readonly (readonly [string, Record<string, string>, { provider: string; model: string | undefined }])[] = [
+    ['follows the default provider when nothing is set', {}, { provider: 'modelstudio', model: 'qwen3.8-flash' }],
+    ['keeps Model Studio on its flash model whatever the chat model', { GCODE_PROVIDER: 'modelstudio', GCODE_MODEL: 'qwen3.7-plus' }, { provider: 'modelstudio', model: 'qwen3.8-flash' }],
+    ['follows chat to Anthropic, on Anthropic’s classifier default', { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: 'claude-sonnet-5-5' }, { provider: 'anthropic', model: anthropicDefault }],
+    ['takes a role provider without a model to that provider’s default', { GCODE_PROVIDER: 'modelstudio', GCODE_CLASSIFIER_PROVIDER: 'anthropic' }, { provider: 'anthropic', model: anthropicDefault }],
+    ['uses the chat model on a provider with no classifier default', { GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-judge' }, { provider: 'openai', model: 'gpt-judge' }],
+    ['never takes the chat model to another provider', { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: 'claude-sonnet-5-5', GCODE_CLASSIFIER_PROVIDER: 'openrouter' }, { provider: 'openrouter', model: 'anthropic/claude-opus-5.5' }],
+    ['leaves the model unnamed when nothing names one', { GCODE_PROVIDER: 'anthropic', GCODE_CLASSIFIER_PROVIDER: 'openai' }, { provider: 'openai', model: undefined }],
+    ['lets the role’s own settings win', { GCODE_PROVIDER: 'anthropic', GCODE_CLASSIFIER_PROVIDER: 'openai', GCODE_CLASSIFIER_MODEL: 'gpt-x' }, { provider: 'openai', model: 'gpt-x' }],
+    ['pairs a named model with the chat provider', { GCODE_PROVIDER: 'anthropic', GCODE_CLASSIFIER_MODEL: 'claude-sonnet-5-5' }, { provider: 'anthropic', model: 'claude-sonnet-5-5' }],
+    ['keeps off as off', { GCODE_PROVIDER: 'anthropic', GCODE_CLASSIFIER_MODEL: 'off' }, { provider: 'anthropic', model: 'off' }],
+  ];
+
+  it.each(CASES)('%s', (_name, env, choice) => {
+    expect(classifierChoiceOf(env)).toEqual(choice);
+  });
+
+  it('never sends a Qwen model to Anthropic', () => {
+    for (const env of [{ GCODE_PROVIDER: 'anthropic' }, { GCODE_CLASSIFIER_PROVIDER: 'anthropic' }, { GCODE_PROVIDER: 'modelstudio', GCODE_CLASSIFIER_PROVIDER: 'anthropic' }]) {
+      expect(classifierChoiceOf(env).model, JSON.stringify(env)).toMatch(/^claude-/);
+    }
+  });
+
+  it('names a classifier default only from the provider’s own priced models', () => {
+    for (const id of PROVIDERS) {
+      const model = specOf(id).classifierModel;
+      if (model !== undefined) expect(PRICES[id][model], `${id} ${model}`).toBeDefined();
+    }
   });
 });
