@@ -3,7 +3,6 @@ import type { ApprovalMode, ApprovalRuleId, Denial, Verdict } from './approval.j
 import type { TurnEvent } from './session.js';
 import { AGENT_TOOL } from './subagent.js';
 
-export const DEFAULT_CLASSIFIER_MODEL = 'qwen3.8-flash';
 export const CLASSIFIER_TIMEOUT_MS = 8000;
 
 /** What the classifier sees: the user's request for this turn, the agent's latest text, the whole command line, and what flagged it. */

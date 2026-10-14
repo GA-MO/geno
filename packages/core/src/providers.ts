@@ -68,6 +68,11 @@ export type ProviderSpec = {
   readonly listsModels: boolean;
   /** Undefined when Geno cannot know which models the user has, so they pick one. */
   readonly defaultModel: string | undefined;
+  /**
+   * The model Auto's classifier runs on when it follows this provider and nothing names one: a fast model of the
+   * provider's own family, picked with `gcode eval classifier`. Undefined uses the chat model.
+   */
+  readonly classifierModel: string | undefined;
   /** A header carrying the session id, which OpenRouter uses to route a session to the provider holding its cache. */
   readonly sessionHeader: string | undefined;
 };
@@ -87,6 +92,7 @@ function openaiCompatible<P extends ProviderName>(id: P, label: string, keyEnv: 
     fields: [apiKey(keyEnv, keyRequired), baseUrl(baseUrlEnv(id), url)],
     listsModels: true,
     defaultModel: undefined,
+    classifierModel: undefined,
     sessionHeader: undefined,
   };
 }
@@ -104,6 +110,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     fields: [apiKey('OPENROUTER_API_KEY'), baseUrl(baseUrlEnv('openrouter'), 'https://openrouter.ai/api')],
     listsModels: true,
     defaultModel: 'anthropic/claude-opus-5.5',
+    classifierModel: undefined,
     sessionHeader: 'x-session-id',
   },
   modelstudio: {
@@ -116,6 +123,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     fields: [apiKey('DASHSCOPE_API_KEY'), baseUrl('DASHSCOPE_BASE_URL', 'your Model Studio Anthropic endpoint', true)],
     listsModels: false,
     defaultModel: 'qwen3.8-flash',
+    classifierModel: 'qwen3.8-flash',
     sessionHeader: undefined,
   },
   anthropic: {
@@ -127,6 +135,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     fields: [apiKey('ANTHROPIC_API_KEY'), baseUrl(baseUrlEnv('anthropic'), 'https://api.anthropic.com')],
     listsModels: true,
     defaultModel: 'claude-opus-5-5',
+    classifierModel: 'claude-haiku-4-5',
     sessionHeader: undefined,
   },
   bedrock: {
@@ -146,6 +155,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     ],
     listsModels: false,
     defaultModel: 'anthropic.claude-opus-5-5',
+    classifierModel: undefined,
     sessionHeader: undefined,
   },
   vertex: {
@@ -163,6 +173,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     ],
     listsModels: false,
     defaultModel: 'claude-opus-5-5',
+    classifierModel: undefined,
     sessionHeader: undefined,
   },
   openai: openaiCompatible('openai', 'OpenAI', 'OPENAI_API_KEY', 'https://api.openai.com/v1'),
@@ -175,6 +186,7 @@ export const PROVIDER_SPECS: { readonly [P in ProviderName]: ProviderSpec & { re
     fields: [apiKey('AZURE_OPENAI_API_KEY'), baseUrl(baseUrlEnv('azure-openai'), 'https://<resource>.openai.azure.com/openai/v1', true)],
     listsModels: true,
     defaultModel: undefined,
+    classifierModel: undefined,
     sessionHeader: undefined,
   },
   gemini: openaiCompatible('gemini', 'Google Gemini', 'GEMINI_API_KEY', 'https://generativelanguage.googleapis.com/v1beta/openai'),
@@ -253,12 +265,39 @@ export type RoleSpec = {
   readonly env: { readonly provider: string; readonly model: string } | undefined;
 };
 
+const CHAT_ENV = { provider: 'GCODE_PROVIDER', model: 'GCODE_MODEL' } as const;
+
+/** The settings that choose Auto's classifier; GCODE_CLASSIFIER_MODEL=off turns it off, so every command it would judge asks the user. */
+export const CLASSIFIER_ENV = { provider: 'GCODE_CLASSIFIER_PROVIDER', model: 'GCODE_CLASSIFIER_MODEL' } as const;
+
 export const ROLE_SPECS: { readonly [R in Role]: RoleSpec } = {
-  chat: { label: 'Chat', env: { provider: 'GCODE_PROVIDER', model: 'GCODE_MODEL' } },
-  classifier: { label: 'Auto-mode classifier', env: { provider: 'GCODE_CLASSIFIER_PROVIDER', model: 'GCODE_CLASSIFIER_MODEL' } },
+  chat: { label: 'Chat', env: CHAT_ENV },
+  classifier: { label: 'Auto-mode classifier', env: CLASSIFIER_ENV },
   // Read by the explore helper once it exists; until then nothing reads it.
   explore: { label: 'Explore helper', env: { provider: 'GCODE_EXPLORE_PROVIDER', model: 'GCODE_EXPLORE_MODEL' } },
   tab: { label: 'Tab', env: undefined },
 };
+
+/** The provider a session runs on when neither a flag nor GCODE_PROVIDER names one. */
+export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
+
+/** `provider` as the environment names it, which may be no provider Geno knows; `model` is undefined when nothing names one. */
+export type ClassifierChoice = { readonly provider: string; readonly model: string | undefined };
+
+/**
+ * What Auto's classifier runs on. The classifier role's own settings win. Otherwise it follows the chat provider, on
+ * the model that provider's row names for the classifier, else on the chat model. A model never crosses providers:
+ * the chat model counts only when the classifier runs on the chat provider, and another provider gets its own default.
+ */
+export function classifierChoiceOf(env: Readonly<Record<string, string | undefined>>): ClassifierChoice {
+  const chat = env[CHAT_ENV.provider] || DEFAULT_PROVIDER;
+  const provider = env[CLASSIFIER_ENV.provider] || chat;
+  const named = env[CLASSIFIER_ENV.model];
+  if (named) return { provider, model: named };
+  if (!isProviderName(provider)) return { provider, model: undefined };
+  const spec = specOf(provider);
+  const chatModel = provider === chat ? env[CHAT_ENV.model] || undefined : undefined;
+  return { provider, model: spec.classifierModel ?? chatModel ?? spec.defaultModel };
+}
 
 export type RoleChoice = { readonly provider: ProviderName; readonly model: string | undefined };
