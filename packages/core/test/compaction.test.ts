@@ -2,6 +2,7 @@ import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages
 import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
+  autoLoadedText,
   compactedText,
   compactionEvent,
   contextTokens,
@@ -182,6 +183,22 @@ describe('what a compaction keeps verbatim', () => {
     const text = compactedText({ summary: 'S', kept });
     expect(text).toContain('[~] 2: Fix the parser');
     expect(text).toContain(echoDefinition);
+  });
+
+  it('keeps the definition of a tool a call loaded before any tool_search, and none from a call that failed', () => {
+    const stop = { name: 'task_stop', description: 'Stop a background job.', input_schema: { type: 'object' as const, properties: { id: { type: 'string' } } } };
+    const other = JSON.stringify({ name: 'mcp__fake__echo', note: 'a line of the tool output' });
+    const called: TurnEvent[] = [
+      start,
+      user(1, 'Stop bg-1.'),
+      assistant(2, 'Stopping.', [['tu_stop', 'task_stop', { id: 'bg-1' }], ['tu_fail', 'mcp__fake__echo', {}]], 2_000),
+      { kind: 'tool-result', seq: 3, at, toolUseId: 'tu_stop', name: 'task_stop', status: 'ok', output: autoLoadedText(stop, `Stopped bg-1.\n${other}`), loaded: ['task_stop'] },
+      { kind: 'tool-result', seq: 4, at, toolUseId: 'tu_fail', name: 'mcp__fake__echo', status: 'error', output: autoLoadedText(JSON.parse(echoDefinition), 'text is required'), loaded: ['mcp__fake__echo'] },
+      assistant(5, 'Stopped.', [], 2_100),
+      user(6, 'Thanks.'),
+      assistant(7, 'Done.', [], 2_200),
+    ];
+    expect(plan(called, 100).kept.tools).toEqual([JSON.stringify(stop)]);
   });
 
   it('leaves loaded tools callable, since the log keeps the load', () => {

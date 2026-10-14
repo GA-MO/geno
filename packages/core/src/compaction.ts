@@ -24,7 +24,6 @@ import { renderContextItems } from './context.js';
 import { CHARS_PER_TOKEN, textTokens } from './context-window.js';
 import { noticeTexts } from './notice.js';
 import { hookContextTexts } from './hooks.js';
-import { TOOL_SEARCH_TOOL } from './deferred-tools.js';
 import { replayMessages, restoredNotice, toolResultText, toolUsesOf, type Session, type Spend, type TurnEvent, type TurnEventKind } from './session.js';
 import type { TodoList } from './todo.js';
 import { wakeNoteText } from './wake.js';
@@ -135,14 +134,19 @@ function withinBudget(messages: readonly KeptMessage[]): { readonly messages: Ke
   return { messages: kept, dropped: messages.length - kept.length };
 }
 
-/** The definitions a tool_search result showed the model, one JSON line per tool. */
+/**
+ * The definitions a result that loaded tools showed the model, one JSON line per tool: tool_search's, or a deferred
+ * tool's call that loaded it, whose result opens with its definition (`autoLoadedText`).
+ */
 function loadedDefinitions(event: EventOf<'tool-result'>): [string, string][] {
-  if (event.name !== TOOL_SEARCH_TOOL || event.status !== 'ok' || 'spill' in event) return [];
-  return event.output.split('\n').flatMap((line): [string, string][] => {
+  const loaded = new Set(event.status === 'ok' ? (event.loaded ?? []) : []);
+  if (loaded.size === 0) return [];
+  const text = 'spill' in event ? event.spill.head : event.output;
+  return text.split('\n').flatMap((line): [string, string][] => {
     if (!line.startsWith('{')) return [];
     try {
       const name = (JSON.parse(line) as { readonly name?: unknown }).name;
-      return typeof name === 'string' ? [[name, line]] : [];
+      return typeof name === 'string' && loaded.has(name) ? [[name, line]] : [];
     } catch {
       return [];
     }
