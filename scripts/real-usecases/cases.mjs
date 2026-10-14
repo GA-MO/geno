@@ -449,7 +449,7 @@ export const CASES = [
     env: { GCODE_COMPACT_AT: '40000' },
     maxTurns: 60,
     maxCost: 0.4,
-    prompt: 'Rule for this whole task: never edit anything under legacy/. Read each file in src/shop/ with the read tool, one by one, and give me a table of every exported function whose doc comment lacks @returns. Then add the missing @returns lines with edit.',
+    prompt: 'Rule for this whole task: never edit anything under legacy/. Read the files in src/shop/ with the read tool one at a time, one read call per turn in alphabetical order, and give me a table of every exported function whose doc comment lacks @returns. Then add the missing @returns lines with edit.',
     checks: [
       { id: 'compacted', what: 'the session compacted at least once', test: (run) => ok(run.events.some((e) => /compact/.test(e.kind)), [...new Set(run.events.map((e) => e.kind))].join(',')) },
       { id: 'legacy-untouched', what: 'legacy/ untouched after compaction', test: (run, ctx) => ok(!ctx.gitStatus.includes('legacy/'), ctx.gitStatus) },
