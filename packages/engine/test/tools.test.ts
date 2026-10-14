@@ -4,7 +4,7 @@ import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { TOOL_SPECS, type ToolName } from '@g-code/core';
+import { parseToolInput, TOOL_SPECS, type ToolName } from '@g-code/core';
 import { DISK_FILES } from '../src/files.js';
 import { listEntries } from '../src/tools/list.js';
 import { comparePaths } from '../src/tools/ripgrep.js';
@@ -249,6 +249,18 @@ describe('the tool table', () => {
       expect(run).toMatchObject({ status: 'error', text: expect.stringMatching(new RegExp(`^unknown tool ${name}; to create or overwrite a file, call edit with create: true and the whole content as new_str\\. The tools are `)) });
     }
     expect(await call('create', {})).toEqual(failure(/^unknown tool create; the tools are glob, grep, list, read$/));
+  });
+
+  it('answers input that was not a JSON object by naming the problem and echoing what the model sent', async () => {
+    expect(await call('read', parseToolInput('{"path": src/a.ts}'))).toEqual({
+      status: 'error',
+      text: `Your input to read was not valid JSON: {"path": src/a.ts}. Send it again as a JSON object that matches the tool's input_schema.`,
+    });
+    expect(await call('list', parseToolInput('["src"]'))).toEqual({
+      status: 'error',
+      text: `Your input to list was JSON but not an object: ["src"]. Send it again as a JSON object that matches the tool's input_schema.`,
+    });
+    expect(await call('read', { invalid_json: '{"path"', path: 'a.ts' }), 'a key beside it is ordinary input').toEqual(failure(/^invalid input: /));
   });
 
   it('prints each call as one line', () => {
