@@ -223,11 +223,11 @@ describe('gcode agent', () => {
       'git push origin main',
       'git reset --hard HEAD',
       'git stash -u',
-      'cat /etc/hosts',
+      'cat -v /etc/hosts',
       'curl https://example.com',
       'gcloud projects list',
       'psql -c "select 1"',
-      'cat .env',
+      'cat -v .env',
       'pkill -f gcode-e2e-no-such-process',
     ];
     const asked: string[] = [];
@@ -260,7 +260,7 @@ describe('gcode agent', () => {
       'pkill',
     ]);
     expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
-    const outside = results[denied.indexOf('cat /etc/hosts')]!;
+    const outside = results[denied.indexOf('cat -v /etc/hosts')]!;
     expect('output' in outside && outside.output, 'a path the user must allow invites no other tool (ISSUES.md P-06)').toContain('Do not reach that path another way');
     expect('output' in outside && outside.output).not.toContain('You *may* attempt');
     const vitest = results.at(-1)!;
@@ -369,7 +369,7 @@ describe('gcode agent --mode auto', () => {
   it('runs safe commands, lets the classifier judge the gray ones, blocks what it will not allow without asking, asks before what rules keep, and logs each decision', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
     const asked: string[] = [];
-    const commands = ['ls', 'node -e "console.log(41 + 1)"', 'rm -rf node_modules', 'node -e "console.log(7)"', 'rm -rf ~/old-project'];
+    const commands = ['ls -t', 'node -e "console.log(41 + 1)"', 'rm -rf node_modules', 'node -e "console.log(7)"', 'rm -rf ~/old-project'];
     const transport = fakeTransport([
       toolCall('Working.', commands.map(bash), usage),
       verdict('allow', 'prints a number'),
@@ -456,7 +456,7 @@ describe('gcode agent --mode plan', () => {
     const asked: string[] = [];
     const edit = use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' });
     const transport = fakeTransport([
-      toolCall('Looking.', [bash('ls'), bash('rm -rf build'), bash(`node -e "require('fs').writeFileSync('x', '1')"`), edit], usage),
+      toolCall('Looking.', [bash('ls -t'), bash('rm -rf build'), bash(`node -e "require('fs').writeFileSync('x', '1')"`), edit], usage),
       answer('1. Change a.ts. Risks: none.', usage),
     ]);
     const result = await runCli(['agent', '--workspace', workspace, '--mode', 'plan', 'Plan the change'], env, {
