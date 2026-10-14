@@ -64,6 +64,11 @@ export const isUntilWait = (command) => {
 };
 
 const SHELL_FOR_FILES = /^\s*(cat|head|tail|less|ls|find|grep|rg|sed\s+-n|awk)\b/;
+/** Geno's refusal of a bash line with a step a file tool does, which runs none of it (`fileStepRefusal` in shell-intent.ts). */
+const FILE_STEP_REFUSAL = /^Geno ran nothing: /;
+
+/** Whether a grep call's result showed lines of `file`, which the edit gate counts as seeing it. */
+const grepShowed = (call, file) => call.name === 'grep' && call.result?.status === 'ok' && outputOf(call).split('\n').some((line) => line.startsWith(`${file}:`) && /^\d+:/.test(line.slice(file.length + 1)));
 const SHELL_WRITES = /(^|[;&|]\s*)(echo|printf|cat)\b[^|]*>[^&]|\bsed\s+-i\b|\btee\b/;
 
 /** The checks every case runs. A case can drop one by id with `skipShared`. */
@@ -95,9 +100,10 @@ export const SHARED = [
   },
   {
     id: 'dedicated-file-tools',
-    what: 'reads, lists and searches with read/list/grep/glob, not cat/ls/find/grep in bash',
+    what: 'reads, lists and searches with read/list/grep/glob, not cat/ls/find/grep in bash that ran',
     test: (run) => {
-      const bad = bashCalls(run).filter((c) => String(c.input.command ?? '').split(/;|&&|\|\|/).some((part) => SHELL_FOR_FILES.test(part)));
+      const ran = bashCalls(run).filter((c) => !FILE_STEP_REFUSAL.test(outputOf(c)));
+      const bad = ran.filter((c) => String(c.input.command ?? '').split(/;|&&|\|\|/).some((part) => SHELL_FOR_FILES.test(part)));
       return verdict(bad.length === 0, bad.map((c) => c.input.command.slice(0, 80)).join(' | '));
     },
   },
@@ -111,11 +117,12 @@ export const SHARED = [
   },
   {
     id: 'read-before-edit',
-    what: 'reads a file before an in-place edit of it',
+    what: 'reads a file, or sees grep lines from it, before an in-place edit of it',
     test: (run) => {
       const edits = named(run, 'edit').filter((c) => c.input.create !== true);
       if (edits.length === 0) return na('no in-place edit');
-      const blind = edits.filter((e) => !run.calls.some((c) => c.seq < e.seq && (c.name === 'read' || (c.name === 'edit' && c.result?.status === 'ok')) && norm(pathOf(c)) === norm(pathOf(e))));
+      const seen = (c, file) => ((c.name === 'read' || (c.name === 'edit' && c.result?.status === 'ok')) && norm(pathOf(c)) === file) || grepShowed(c, file);
+      const blind = edits.filter((e) => !run.calls.some((c) => c.seq < e.seq && seen(c, norm(pathOf(e)))));
       return verdict(blind.length === 0, blind.map((c) => `${pathOf(c)} seq ${c.seq} (${c.result?.status})`).join('; '));
     },
   },
