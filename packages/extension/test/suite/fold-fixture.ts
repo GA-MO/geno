@@ -20,7 +20,7 @@ export const LONG: readonly Call[] = [
   { narration: 'Finding the callers of add.', name: 'grep', input: { pattern: 'add\\(' } },
   { narration: 'Listing the sources.', name: 'glob', input: { pattern: '*.ts' } },
   { narration: 'Reading double as well.', name: 'read', input: { path: 'c.ts' } },
-  { narration: 'Looking at the folder.', name: 'bash', input: { command: 'ls' } },
+  { narration: 'Looking at the folder.', name: 'bash', input: { command: 'ls -t' } },
   { narration: 'Swapping the operands.', name: 'edit', input: { path: 'a.ts', old_str: 'return a + b;', new_str: 'return b + a;' } },
   { narration: 'Making sure nothing else uses the greeting.', name: 'grep', input: { pattern: 'greeting' } },
   { narration: 'Reading the old helper.', name: 'read', input: { path: 'missing.ts' } },

@@ -29,7 +29,7 @@ function replyTo(body: { messages?: unknown[] }): Reply {
   if (last.includes('tool_result')) return answer('Done.', usage);
   if (last.includes('Edit b')) return toolCall('Reading b.', [{ id: 'tu_read_b', name: 'read', input: { path: 'b.ts' } }], usage);
   if (last.includes('Edit c')) return toolCall('Reading c.', [{ id: 'tu_read_c', name: 'read', input: { path: 'c.ts' } }], usage);
-  if (last.includes('List the parent')) return toolCall('Listing it.', [{ id: 'tu_parent', name: 'bash', input: { command: 'ls ..' } }], usage);
+  if (last.includes('List the parent')) return toolCall('Listing it.', [{ id: 'tu_parent', name: 'bash', input: { command: 'ls -t ..' } }], usage);
   if (last.includes('Say hello')) return answer('Hello from the fake model.', usage);
   return answer('Fine.', usage);
 }
@@ -273,7 +273,7 @@ describe('the web host', () => {
     await post(cookie, { type: 'ready' });
     await post(cookie, { type: 'send', text: 'List the parent folder', attachments: [] });
     const asked = await stream.until('a permission card', (e) => e.event === 'message' && e.data.type === 'permission', 45_000);
-    expect(asked.data).toMatchObject({ command: 'ls ..', reason: 'a path outside the workspace', toolId: 'tu_parent' });
+    expect(asked.data).toMatchObject({ command: 'ls -t ..', reason: 'a path outside the workspace', toolId: 'tu_parent' });
     const ran = (e: Event) => e.event === 'message' && e.data.type === 'tool' && e.data.id === 'tu_parent' && typeof e.data.output === 'string';
     expect(stream.seen.some(ran)).toBe(false);
     const allow = (asked.data.options as { optionId: string; kind: string }[]).find((o) => o.kind === 'allow_once')!;

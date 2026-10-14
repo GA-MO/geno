@@ -352,7 +352,7 @@ describe.each(WIRES)('PreToolUse on the %s wire', (wire: Wire) => {
   });
 
   it('a hook ask in a run nobody can answer refuses the call with the reason', async () => {
-    const use = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
+    const use = { id: 'tu_ls', name: 'bash', input: { command: 'ls -t' } };
     const run = await scripted(wire, [call('', [use]), say('Done.')]);
     const hook = await hookScript(run, 'ask', { stdout: decide('ask', { permissionDecisionReason: 'Listing needs a look.' }) });
     await userHooks(run, { PreToolUse: group(hook.command) });
@@ -462,7 +462,7 @@ describe.each(WIRES)('a PreToolUse hook and the permission checks on the %s wire
   it("T-PERM-05 a hook's allow answers a command's question but never beats a deny rule or the secret-path rule", async () => {
     const cloud = { id: 'tu_cloud', name: 'bash', input: { command: 'kubectl get pods' } };
     const ruled = { id: 'tu_publish', name: 'bash', input: { command: 'pnpm publish' } };
-    const secret = { id: 'tu_cat', name: 'bash', input: { command: 'cat .env' } };
+    const secret = { id: 'tu_cat', name: 'bash', input: { command: 'cat -v .env' } };
     const read = { id: 'tu_read', name: 'read', input: { path: '.env' } };
     const { run, asked } = await interactive(wire, [call('', [cloud, ruled, secret, read]), say('Done.')], always('allow'), {
       mode: 'ask',
@@ -471,7 +471,7 @@ describe.each(WIRES)('a PreToolUse hook and the permission checks on the %s wire
       deny: 'pnpm publish',
     });
     expect(asked.map((card) => [card.rule, card.command])).toEqual([
-      ['secret-path', 'cat .env'],
+      ['secret-path', 'cat -v .env'],
       ['secret-path', 'read .env'],
     ]);
     expect(resultOf(run, 'tu_cloud')!.text, 'the cloud CLI ran without a question').not.toMatch(/denied|rejected/);
@@ -479,14 +479,14 @@ describe.each(WIRES)('a PreToolUse hook and the permission checks on the %s wire
   });
 
   it('T-PERM-12 an allow never opens a path outside the workspace, nor the sandbox', async () => {
-    const outside = { id: 'tu_outside', name: 'bash', input: { command: 'cat ../outside.txt' } };
+    const outside = { id: 'tu_outside', name: 'bash', input: { command: 'cat -v ../outside.txt' } };
     const readOut = { id: 'tu_read_out', name: 'read', input: { path: '/etc/hosts' } };
     const escape = { id: 'tu_escape', name: 'bash', input: { command: `node -e "require('fs').writeFileSync(require('os').homedir() + '/escaped.txt', 'x')"` } };
     // The user's no to the outside path ends the turn, so it goes last.
     const { run, asked, logged } = await interactive(wire, [call('', [escape, readOut, outside]), say('Done.')], always('allow'), { mode: 'ask', answers: ['allow'] });
     expect(asked.map((card) => [card.rule, card.command]), 'the outside paths still ask').toEqual([
       ['path-outside-workspace', `read ${realpathSync('/etc/hosts')}`],
-      ['path-outside-workspace', 'cat ../outside.txt'],
+      ['path-outside-workspace', 'cat -v ../outside.txt'],
     ]);
     expect(logged('tu_read_out')).toMatchObject({ status: 'ok', approval: expect.objectContaining({ decidedBy: 'user' }) });
     expect(existsSync(path.join(run.env['HOME']!, 'escaped.txt')), 'the sandbox still holds the write').toBe(false);
@@ -560,7 +560,7 @@ describe.each(WIRES)('after-tool hooks on the %s wire', (wire: Wire) => {
   });
 
   it('T-HOOK-04 a command that exits non-zero fires PostToolUseFailure, not PostToolUse, with the error', async () => {
-    const failing = { id: 'tu_fail', name: 'bash', input: { command: 'cat definitely-missing.txt' } };
+    const failing = { id: 'tu_fail', name: 'bash', input: { command: 'cat -v definitely-missing.txt' } };
     const fine = { id: 'tu_fine', name: 'bash', input: { command: 'echo fine' } };
     const run = await scripted(wire, [call('', [failing, fine]), say('Done.')]);
     const post = await hookScript(run, 'post');
@@ -575,7 +575,7 @@ describe.each(WIRES)('after-tool hooks on the %s wire', (wire: Wire) => {
         ...common(result.stdout, 'PostToolUseFailure'),
         cwd: run.workspace,
         tool_name: 'Bash',
-        tool_input: { command: 'cat definitely-missing.txt' },
+        tool_input: { command: 'cat -v definitely-missing.txt' },
         tool_use_id: 'tu_fail',
         error: expect.stringMatching(/^Exit code 1\n.*definitely-missing\.txt/s),
         is_interrupt: false,
@@ -763,7 +763,7 @@ describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
 
   it("refuses with the hook's message, and never asks the hook about a deny rule's refusal or a call that needs no card", async () => {
     const publish = { id: 'tu_publish', name: 'bash', input: { command: 'pnpm publish' } };
-    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
+    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls -t' } };
     const run = await scripted(wire, [call('', [kubectl, publish, ls]), say('Done.')]);
     await permissionStore(homeOf(run.store), run.workspace).add({ effect: 'deny', pattern: ['pnpm', 'publish'] as unknown as CommandPattern });
     const hook = await hookScript(run, 'refuse', { stdout: answerCard({ behavior: 'deny', message: 'No cluster access from here.' }) });
@@ -787,7 +787,7 @@ describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
   });
 
   it("answers a PreToolUse hook's ask in a run nobody can answer, after PreToolUse, as Claude Code orders them", async () => {
-    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
+    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls -t' } };
     const run = await scripted(wire, [call('', [ls]), say('Done.')]);
     const order = path.join(run.env['HOME']!, 'order.txt');
     const pre = await hookScript(run, 'pre', { stdout: decide('ask', { permissionDecisionReason: 'Listing needs a look.' }), before: `echo pre >> '${order}'` });

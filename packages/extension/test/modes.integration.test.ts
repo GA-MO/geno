@@ -37,7 +37,7 @@ const replies: readonly Reply[] = [
   // Denied in Ask, which ends the turn with no answer after it.
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
   // A model that tries to edit in Plan: every mode offers edit, and Plan refuses the call.
-  toolCall('Looking around first.', [bash('ls'), { id: 'tu_edit_plan', name: 'edit', input: { path: 'a.ts', old_str: 'export const a', new_str: 'export const answer' } }], usage),
+  toolCall('Looking around first.', [bash('ls -t'), { id: 'tu_edit_plan', name: 'edit', input: { path: 'a.ts', old_str: 'export const a', new_str: 'export const answer' } }], usage),
   asModel(answer(PLAN, usage)),
   asModel(answer('Renamed it.', usage)),
 ];

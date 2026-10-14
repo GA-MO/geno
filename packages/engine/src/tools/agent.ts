@@ -17,7 +17,7 @@ import {
   commandStatusLine,
   cwdResetLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
-  fileToolsOf,
+  fileStepRefusal,
   formatDiagnostics,
   hashText,
   hookMayAnswer,
@@ -62,7 +62,6 @@ import {
   type CommandScope,
   type Denial,
   type EditorDiagnostic,
-  type FileToolNoter,
   type LaneBounds,
   type PathTool,
   type Scripts,
@@ -102,7 +101,7 @@ import {
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
-import { GLOB_CHARS } from './grep.js';
+import { GLOB_CHARS, grepExecutor } from './grep.js';
 import { editNotebook, NotebookError, type CellEdit, type CellEdited } from './notebook.js';
 import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
@@ -340,8 +339,6 @@ export type AgentToolEnv = {
   /** Stands in for the check command when the workspace has none and an editor is attached. */
   readonly diagnostics: Diagnostics | undefined;
   readonly rules: RuleAttacher;
-  /** Hands out the note that names a dedicated tool for a command that only read files; undefined gives none. */
-  readonly fileNotes?: FileToolNoter | undefined;
   /** The slash commands as discovered now, for the skill tool. */
   readonly commands: () => Promise<readonly SlashCommand[]>;
   /** What the skill tool adds after a skill's body, such as the tool mapping for a pstack skill. */
@@ -554,6 +551,24 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const stamp = stampOf(file, seen, disk);
       return stamp === undefined ? reply : { ...(typeof reply === 'string' ? { text: reply } : reply), file: stamp };
     },
+  };
+
+  /**
+   * Files the model saw lines of through grep: an edit may start from their text on disk now, as after a read. A path
+   * read could not read, or a credentials file, stays unseen.
+   */
+  const sawFiles = async (given: readonly string[], ctx: ToolContext): Promise<void> => {
+    await ctx.earlierCalls();
+    const reach: ToolContext = { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()] };
+    for (const one of given) {
+      const real = await resolveInside(reach, one).catch((error: unknown) => {
+        if (error instanceof ToolError) return undefined;
+        throw error;
+      });
+      if (real === undefined || isSecret(reach, real) || !(await stat(real)).isFile()) continue;
+      const text = await ctx.files.read(real);
+      if (text !== null) reads.set(real, baseOf(text, null));
+    }
   };
 
   const edit = editExecutor(reads, async (ctx) => {
@@ -772,6 +787,9 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         const launchFile = (await readLaunchConfigs(ctx.workspace)).configs[0]?.file;
         throw new ToolError(serverRefusal(server, { monitor: tools.wakes !== undefined, launchFile }));
       }
+      // Before the approval, so a line that runs nothing asks nobody.
+      const fileSteps = fileStepRefusal(command);
+      if (fileSteps !== undefined) throw new ToolError(fileSteps);
       const approval = await approveCommand(command, ctx, background !== undefined);
       if (background !== undefined) {
         const { text } = await startInBackground(background, command, description, ctx);
@@ -790,7 +808,6 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const output = `${neutralizeNoticeLines(result.output)}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
       const reset = changesDirectory(command) ? `${cwdResetLine(ctx.workspace)}\n` : '';
       const notes = [
-        ...(failure === undefined ? (tools.fileNotes?.take(fileToolsOf(command)) ?? []) : []),
         ...(result.lingering === undefined ? [] : [tools.background === undefined ? LINGERING : `${LINGERING} ${LINGERING_ADVICE}`]),
         ...(failure !== undefined && tools.background !== undefined && /\bkill\b/.test(command) && SIGNAL_REFUSED.test(result.output) ? [`${SIGNAL_NOTE}${killHint()}`] : []),
       ];
@@ -815,7 +832,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   const all: Readonly<Record<AgentToolName, Executor>> = {
     ...EXECUTORS,
     glob: withReach('glob', withPathRules(undefined, EXECUTORS.glob)),
-    grep: withReach('grep', withPathRules(undefined, EXECUTORS.grep)),
+    grep: withReach('grep', withPathRules(undefined, grepExecutor(sawFiles))),
     list: withReach('list', withPathRules(undefined, EXECUTORS.list)),
     read: withReach('read', withRuleAttachments(withPathRules('read', read), tools.rules)),
     edit: withWriteRoots(withPathRules('edit', edit)),
