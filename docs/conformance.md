@@ -332,7 +332,7 @@ P34 also covers rows that have no Claude Code conformance test:
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
 | T-ASM-03 | The first user message holds CLAUDE.md, the context (git status and more) and the prompt. The rest of the session's facts follow in a system message. | Adapted: the opening user message holds the loaded context, then the environment block (workspace, git or not, platform with the BSD `sed -i ''` note on macOS, OS version, shell, scratchpad, local date, model, the package manager, key scripts and versions from package.json, and a git snapshot that "will not update"), then the prompt. The system prompt holds no session fact and is the same in every workspace. A resumed session sends the same bytes. | pass (adapt, was fail) | `environment.conformance.test.ts`, both wires |
-| T-PERM-08 | A write in the scratchpad runs without a question. | The scratchpad is the session's own folder under the temp dir. The run uses it as the sandbox's temp dir and keeps it between turns, so a write there runs unasked in Ask mode. | pass (was fail) | `environment.conformance.test.ts`, both wires |
+| T-PERM-08 | A write in the scratchpad runs without a question. | The scratchpad is the session's own folder, `/tmp/gcode-<uid>/<first 8 hex of the session id>`, short enough for the unix sockets a project makes in $TMPDIR. The run uses it as the sandbox's temp dir and keeps it between turns, so a write there runs unasked in Ask mode. | pass (was fail) | `environment.conformance.test.ts`, both wires |
 
 P5 also covers rows that have no Claude Code conformance test:
 

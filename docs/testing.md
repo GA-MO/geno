@@ -88,6 +88,7 @@ The script reads `session.jsonl` and each `child-*.jsonl` of a Layer A run, or t
 `request-normal.ts` takes out the parts of a request that change from run to run. The key and the goldens below both use it:
 
 - Every `cache_control` key is dropped, since the breakpoint moves to the newest message on each call.
+- A session's scratchpad, `/tmp/gcode-<uid>/` and the start of the session id by either spelling of /tmp, becomes `<scratchpad>`.
 - Paths under the temp dir, either spelling of it on macOS, become `<tmp>`. The six random characters that `mkdtemp` adds after a dash become `XXXXXX`.
 - Uuids, such as session ids, become `<uuid-N>`, numbered by first appearance in the request, so one session named twice stays apart from two sessions.
 - ISO dates and times become `<date>`. The environment block's `Platform:` and `OS version:` values become `<platform>` and `<os-version>`. Commit hashes at the start of a git log line become `<commit>`.

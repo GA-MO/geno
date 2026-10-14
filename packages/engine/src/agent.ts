@@ -1,5 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -71,6 +71,7 @@ import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
+import { reopenScratchpad } from './environment.js';
 import { openMcpHub, type McpTools } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
@@ -210,8 +211,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const head = opened.log.events[0];
   // The scratchpad the session's environment names, which outlives the run; a log from before sessions had one gets a
   // temp dir for this run only.
-  const scratchpad = head?.kind === 'session-start' ? head.environment?.scratchpad : undefined;
-  if (scratchpad !== undefined) await mkdir(scratchpad, { recursive: true, mode: 0o700 });
+  const recorded = head?.kind === 'session-start' ? head.environment?.scratchpad : undefined;
+  const scratchpad = recorded !== undefined && (await reopenScratchpad(recorded)) ? recorded : undefined;
+  if (recorded !== undefined && scratchpad === undefined) io.err(`scratchpad: ${recorded} is no longer in a private folder of this user, so this run uses a temp dir of its own`);
   const tempDir = scratchpad ?? (await mkdtemp(path.join(tmpdir(), 'gcode-agent-')));
   const home = io.env['HOME'] || homedir();
   const lane = await laneAt(workspace, home);

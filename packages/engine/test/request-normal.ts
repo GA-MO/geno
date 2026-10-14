@@ -32,8 +32,14 @@ function tmpRoots(): RegExp {
   return new RegExp([...roots].sort((a, b) => b.length - a.length).map(escape).join('|'), 'g');
 }
 
-function normalizeText(text: string, tmp: RegExp, uuids: Map<string, string>): string {
-  let out = text.replace(tmp, '<tmp>').replace(PATH_TAIL, (tail) => tail.replace(MKDTEMP, 'XXXXXX'));
+/** A session's scratchpad (`scratchpadOf`), `/tmp/gcode-<uid>/` and the start of its session id, by either spelling of /tmp. */
+function scratchpads(): RegExp {
+  const roots = [...new Set([realpathSync('/tmp'), '/tmp'])].map((tmp) => escape(`${tmp}/gcode-${process.getuid?.()}/`));
+  return new RegExp(`(?:${roots.join('|')})[0-9a-f-]{8,36}`, 'g');
+}
+
+function normalizeText(text: string, roots: { readonly scratch: RegExp; readonly tmp: RegExp }, uuids: Map<string, string>): string {
+  let out = text.replace(roots.scratch, '<scratchpad>').replace(roots.tmp, '<tmp>').replace(PATH_TAIL, (tail) => tail.replace(MKDTEMP, 'XXXXXX'));
   for (const [pattern, to] of RULES) out = out.replace(pattern, to as string);
   // Numbered by first appearance, so a request that names one session twice stays apart from one naming two.
   return out.replace(UUID, (id) => uuids.get(id.toLowerCase()) ?? uuids.set(id.toLowerCase(), `<uuid-${uuids.size + 1}>`).get(id.toLowerCase())!);
@@ -41,14 +47,14 @@ function normalizeText(text: string, tmp: RegExp, uuids: Map<string, string>): s
 
 /**
  * `body` with the volatile parts replaced: every `cache_control` key dropped (the breakpoint moves to the newest
- * message on each call), temp-dir paths as `<tmp>` with mkdtemp suffixes as XXXXXX, uuids as `<uuid-N>`, and the rules
- * above. Tool-call ids stay: the script or the recording chose them, so they repeat on every run.
+ * message on each call), a session's scratchpad as `<scratchpad>`, temp-dir paths as `<tmp>` with mkdtemp suffixes as
+ * XXXXXX, uuids as `<uuid-N>`, and the rules above. Tool-call ids stay: the script or the recording chose them, so they repeat on every run.
  */
 export function normalizeRequest(body: unknown): unknown {
-  const tmp = tmpRoots();
+  const roots = { scratch: scratchpads(), tmp: tmpRoots() };
   const uuids = new Map<string, string>();
   const walk = (value: unknown): unknown => {
-    if (typeof value === 'string') return normalizeText(value, tmp, uuids);
+    if (typeof value === 'string') return normalizeText(value, roots, uuids);
     if (Array.isArray(value)) return value.map(walk);
     if (value === null || typeof value !== 'object') return value;
     return Object.fromEntries(Object.entries(value).flatMap(([key, v]) => (key === 'cache_control' ? [] : [[key, walk(v)]])));
