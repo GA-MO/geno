@@ -313,7 +313,7 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     case 'permission':
       return { deps: [step.block, quiet], build: () => permissionCard(step.block, ui, quiet) };
     case 'error':
-      return { deps: [step.block], build: () => errorBlock(step.block) };
+      return { deps: [step.block], build: () => errorBlock(step.block, ui) };
     case 'steer':
       return { deps: [step.block], build: () => steerStep(step.block) };
     case 'compact':

@@ -97,6 +97,8 @@ import {
   SEVERITIES,
   spillNotice,
   STALE_BASE_ERROR,
+  NO_CREDENTIALS_ERROR,
+  type NoCredentials,
   TOOL_CALL_META,
   TURN_USAGE_META,
   UNSAVED_BUFFERS_CAPABILITY,
@@ -309,7 +311,7 @@ import { freshAuto, type Approval, type Approver, type Diagnostics, type Permiss
 import { ToolError } from './tools/context.js';
 import type { Editor } from './tools/editor.js';
 import { readTerminalResponse, type TerminalReader } from './tools/terminal.js';
-import { EngineError } from './errors.js';
+import { EngineError, SessionUnreachable } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import { waitsLeft, waitUpdate } from './wait-hooks.js';
@@ -328,6 +330,24 @@ import { HookSessions } from './hooks.js';
 import { loadHookConfig } from './hook-config.js';
 
 const RESOURCE_NOT_FOUND = -32002;
+const INTERNAL_ERROR = -32603;
+
+/**
+ * What session/prompt answers when its turn throws, which also goes to the engine's log. The ACP SDK answers anything
+ * but a RequestError with a bare "Internal error" and keeps the reason in `data`, where no editor looks, so the reason
+ * is the message here. A session whose provider lacks its key gets an error of its own, which names the provider.
+ */
+export function promptFailure(sessionId: string, error: unknown, log: (line: string) => void): acp.RequestError {
+  if (error instanceof acp.RequestError) return error;
+  if (error instanceof SessionUnreachable) {
+    log(`session ${sessionId}: ${error.message}`);
+    const data: NoCredentials = { reason: NO_CREDENTIALS_ERROR.reason, provider: error.provider, model: error.model, field: error.field };
+    return new acp.RequestError(NO_CREDENTIALS_ERROR.code, error.message, data);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  log(`session ${sessionId}: the turn failed: ${error instanceof Error ? (error.stack ?? message) : message}`);
+  return new acp.RequestError(INTERNAL_ERROR, message, { details: message });
+}
 
 /** An external agent's question shows as the kind of call it asks about, so an edit's card reads as an edit. */
 const PERMISSION_KINDS: Readonly<Partial<Record<ApprovalRuleId, acp.ToolKind>>> = { 'external-read': 'read', 'external-write': 'edit', 'external-command': 'execute', 'external-other': 'other' };
@@ -2121,8 +2141,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { configOptions: effortConfigOptions(effort) };
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
-      if (params._meta?.[STEER_META] === true) return steer(params);
-      return prompt(params);
+      try {
+        return await (params._meta?.[STEER_META] === true ? steer(params) : prompt(params));
+      } catch (error) {
+        throw promptFailure(params.sessionId, error, (line) => io.err(line));
+      }
     })
     .onNotification(DRAFT_METHOD, draftNotice, ({ params }) => wakes.draft(params.sessionId, self(), params.typing))
     .onRequest(WAKE_CANCEL_METHOD, wakeCancelRequest, async ({ params }) => {

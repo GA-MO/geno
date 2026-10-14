@@ -33,6 +33,7 @@ import {
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { captureEnvironment, scratchpadOf } from './environment.js';
 import { gatewayFor, type Gateway } from './gateway.js';
+import { MissingCredential, SessionUnreachable } from './errors.js';
 import { homesOf, loadCommands, pluginLoader } from './commands.js';
 import { loadProjectContext } from './project-context.js';
 import { memoryStore } from './memory.js';
@@ -153,9 +154,17 @@ export async function startExternalSession(store: Store, io: Io, workspace: stri
   return newSession(store, io, workspace, isProviderName(named) ? named : DEFAULT_PROVIDER, backend.id, DEFAULT_EFFORT, backend);
 }
 
+function gatewayOf(session: Session, io: Io): Gateway {
+  try {
+    return gatewayFor(session.provider, io.env, io.fetch);
+  } catch (error) {
+    throw error instanceof MissingCredential ? new SessionUnreachable(session, error) : error;
+  }
+}
+
 export async function resumeSession(store: Store, io: Io, rawId: string): Promise<OpenSession> {
   const log = await openSessionLog(store, rawId, io);
-  const gateway = gatewayFor(log.session.provider, io.env, io.fetch);
+  const gateway = gatewayOf(log.session, io);
   await dropTornTail(log);
   return { log, gateway };
 }

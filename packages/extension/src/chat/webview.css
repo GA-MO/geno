@@ -1469,6 +1469,18 @@ button.file-chip:hover {
   margin-top: 2px;
 }
 
+.turn-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn-error-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .turn-limit {
   color: var(--warn);
 }

@@ -36,6 +36,8 @@ import {
   REWIND_METHOD,
   SELECTION_LINES_META,
   STALE_BASE_ERROR,
+  NO_CREDENTIALS_ERROR,
+  type NoCredentials,
   TOOL_CALL_META,
   TURN_USAGE_META,
   UNSAVED_BUFFERS_CAPABILITY,
@@ -51,7 +53,7 @@ import {
   type UnsavedBuffersResponse,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
-import { gcodeAgent } from '../src/serve.js';
+import { gcodeAgent, promptFailure } from '../src/serve.js';
 import { appendEvent } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, httpError, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
@@ -894,5 +896,41 @@ describe('gcode serve', () => {
     expect(readdirSync(store.trashDir).sort()).toEqual([id, `${id}.jsonl`]);
     expect(readdirSync(path.join(store.trashDir, id, 'attachments'))).toEqual(['image.png']);
     expect(existsSync(path.join(store.sessionsDir, id))).toBe(false);
+  });
+
+  it('answers a prompt to a session whose provider lost its key with an error naming the provider and model', async () => {
+    const { connect, env, stderr, transport } = await setup([answer('Hi.', usage)]);
+    const id = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'hi' }] });
+      return sessionId;
+    });
+    Reflect.deleteProperty(env, 'DASHSCOPE_API_KEY');
+    Object.assign(env, { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'sk-ant-fake' });
+
+    const refused = await connect((ctx) => ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text: 'again' }] }), id).catch((error: unknown) => error);
+
+    expect(refused).toMatchObject({
+      code: NO_CREDENTIALS_ERROR.code,
+      message: 'this session ran on Model Studio · qwen3.8-flash, and DASHSCOPE_API_KEY is not set; put your modelstudio API key in it',
+      data: { reason: NO_CREDENTIALS_ERROR.reason, provider: 'modelstudio', model: 'qwen3.8-flash', field: 'apiKey' } satisfies NoCredentials,
+    });
+    expect(stderr).toContainEqual(`session ${id}: this session ran on Model Studio · qwen3.8-flash, and DASHSCOPE_API_KEY is not set; put your modelstudio API key in it`);
+    expect(transport.requests).toHaveLength(1);
+  });
+});
+
+describe('promptFailure', () => {
+  it('gives an unexpected error its own message, not a bare Internal error, and logs it', () => {
+    const logged: string[] = [];
+    const failure = promptFailure('s1', new Error('the disk is full'), (line) => logged.push(line));
+    expect(failure).toMatchObject({ code: -32603, message: 'the disk is full', data: { details: 'the disk is full' } });
+    expect(logged).toEqual([expect.stringMatching(/^session s1: the turn failed: Error: the disk is full\n {4}at /)]);
+  });
+
+  it('passes a RequestError through unlogged', () => {
+    const logged: string[] = [];
+    const refused = acp.RequestError.invalidParams({ sessionId: 's1' }, 'the prompt has no text');
+    expect(promptFailure('s1', refused, (line) => logged.push(line))).toBe(refused);
+    expect(logged).toEqual([]);
   });
 });

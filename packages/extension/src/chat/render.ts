@@ -751,10 +751,14 @@ function limitText({ words, value, shown }: Limit, message: string): string {
 const sentence = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /** How a turn's error reads: a limit it reached as a warning, anything else as the error it is. */
-export function errorBlock(block: ErrorBlock): HTMLElement {
+export function errorBlock(block: ErrorBlock, ui: Ui): HTMLElement {
   const limit = block.error === undefined ? undefined : LIMITS[block.error];
   if (limit !== undefined) return h('div', { class: 'turn-error turn-limit', role: 'alert' }, icon('warning'), h('span', {}, limitText(limit, block.message)));
-  return h('div', { class: 'turn-error', role: 'alert' }, icon('error'), h('span', {}, sentence(block.message)));
+  const fixes = (block.fixes ?? []).map((fix, i) =>
+    h('button', { class: i === 0 ? 'button small' : 'button secondary small', 'data-focus': `fix:${block.id}:${fix.fix}`, onclick: () => ui.post({ type: 'error-fix', fix }) }, fix.label),
+  );
+  const text = h('span', {}, sentence(block.message));
+  return h('div', { class: 'turn-error', role: 'alert' }, icon('error'), fixes.length === 0 ? text : h('div', { class: 'turn-error-body' }, text, h('div', { class: 'turn-error-fixes' }, ...fixes)));
 }
 
 /** Assistant text, revealed up to `shown` characters, with a caret while more is coming. */
