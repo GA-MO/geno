@@ -149,7 +149,7 @@ export function pipelinesOf(steps: readonly Step[]): Step[][] {
   return pipelines;
 }
 
-/** The tools that read, list and search files, which a command line can stand in for. */
+/** The tools that read, list and search files, which a command line can stand in for. Only a read step is refused. */
 export type FileTool = 'read' | 'list' | 'glob' | 'grep';
 
 /** How a program's options read: single-letter flags it may combine, and options that take the next word as a value. */
@@ -216,8 +216,9 @@ function grepsFiles(args: readonly string[]): boolean {
 }
 
 /**
- * The commands a dedicated tool does as well, by program: Claude Code's Bash description names the same ones. Each
- * entry says which tool, given the arguments, or undefined when the arguments ask for more than that tool does.
+ * The commands a dedicated tool does as well, by program. Each entry says which tool, given the arguments, or
+ * undefined when the arguments ask for more than that tool does. A list, glob or grep step runs, but it looks and
+ * changes nothing, so a read after it with && is still a read step.
  */
 const FILE_COMMANDS: Readonly<Record<string, (args: readonly string[]) => FileTool | undefined>> = {
   cat: (args) => (plainFiles(operandsOf(args, { flags: 'n' })) ? 'read' : undefined),
@@ -244,8 +245,12 @@ const QUIET = new Set(['2>/dev/null', '2>&1']);
 /** A pipeline's text as written, with its redirections. */
 const pipelineText = (pipeline: readonly Step[]): string => pipeline.map((step) => [step.text, ...step.redirects].join(' ')).join(' | ');
 
-/** A pipeline of a command line that a dedicated tool does as well, as written. */
-export type FileStep = { readonly text: string; readonly tool: FileTool };
+/**
+ * A pipeline of a command line that only reads files, which the read tool does as well, as written. A list, glob or
+ * grep step runs in bash: it reads nothing Geno tracks, so only a read is refused, for the edit gate's base, file
+ * tracking and hidden-character escapes.
+ */
+export type FileStep = { readonly text: string; readonly tool: 'read' };
 
 /** The tool a pipeline stands in for: a command from FILE_COMMANDS cut only by head, tail or sort, writing no file and not in the background. */
 function fileToolOf([head, ...rest]: readonly Step[]): FileTool | undefined {
@@ -255,32 +260,46 @@ function fileToolOf([head, ...rest]: readonly Step[]): FileTool | undefined {
   return shaped ? FILE_COMMANDS[head.commands[0]!.program]?.(head.commands[0]!.args) : undefined;
 }
 
+/** The words that open a loop or a conditional, as the first word of the step, and the words that close one. */
+const OPENERS = new Set(['for', 'select', 'case', 'while', 'until', 'if']);
+const CLOSERS = new Set(['done', 'fi', 'esac']);
+
 /**
- * The dedicated tool each pipeline stands in for, if any. A file step that runs only once a program before it
- * succeeded, as the ls in `npm run build && ls dist`, checks what the program did, which no dedicated tool called in the
- * same turn can do, so it is not one.
+ * Whether each pipeline is a read step. A read that runs only once a program before it succeeded, as the cat in
+ * `npm run gen && cat out.ts`, checks what the program did, which no read called in the same turn can do, so it is
+ * not one. A loop or a conditional counts as that program only when something in it is one, so the cat in
+ * `for f in *.ts; do wc -l $f; done && cat a.ts` is still a read step.
  */
-function pipelineTools(pipelines: readonly Step[][]): (FileTool | undefined)[] {
+function pipelineTools(pipelines: readonly Step[][]): ('read' | undefined)[] {
   let afterProgram = false;
+  // Whether each loop or conditional open at this point has run a program, innermost last.
+  const blocks: boolean[] = [];
   return pipelines.map((pipeline, i) => {
     if (pipelines[i - 1]?.at(-1)!.then !== '&&') afterProgram = false;
     const own = fileToolOf(pipeline);
-    const tool = afterProgram ? undefined : own;
-    if (own === undefined && !isLabel(pipeline) && !onlyLooks(pipeline)) afterProgram = true;
+    const word = /^(?:(?:do|then|else)\s+)*(\w+)/.exec(pipeline[0]!.text)?.[1] ?? '';
+    if (OPENERS.has(word)) blocks.push(false);
+    // A closer with no opener in the line counts as a program, as it did before the line said what it closes.
+    const program = CLOSERS.has(word) ? (blocks.pop() ?? true) : own === undefined && !isLabel(pipeline) && !onlyLooks(pipeline);
+    const tool = own === 'read' && !afterProgram ? own : undefined;
+    if (program) {
+      blocks.fill(true);
+      afterProgram = true;
+    }
     return tool;
   });
 }
 
-/** Programs that only look and change nothing, so a file step after them checks no effect. */
-const LOOKERS = new Set(['wc', 'file', 'stat', 'du', 'tree', 'which']);
+/** Programs that only look and change nothing, so a read after them checks no effect, and the shell's own loop words. */
+const LOOKERS = new Set(['wc', 'file', 'stat', 'du', 'tree', 'which', 'test', '[', '[[', 'true', 'false', 'read', 'for', 'select', 'case']);
 const GIT_LOOKS = new Set(['status', 'log', 'diff', 'show', 'ls-files', 'branch']);
 
 const onlyLooks = (pipeline: readonly Step[]): boolean =>
   pipeline.every(({ commands }) => commands.every(({ program, args }) => LOOKERS.has(program) || (program === 'git' && GIT_LOOKS.has(args[0] ?? ''))));
 
 /**
- * The pipelines of a command line that a dedicated tool does as well, wherever they sit in the line, such as the cat
- * in `cat a.ts; npm test`. A pipeline led by any other program is not one, even one that pipes a file into it.
+ * The pipelines of a command line that only read files, wherever they sit in the line, such as the cat in
+ * `cat a.ts; npm test`. A pipeline led by any other program is not one, even one that pipes a file into it.
  */
 export function fileStepsOf(command: string): FileStep[] {
   const pipelines = pipelinesIn(command);
@@ -362,8 +381,8 @@ const isLabel = (pipeline: readonly Step[]): boolean =>
   pipeline.length === 1 && pipeline[0]!.commands.length === 1 && LABELS.has(pipeline[0]!.commands[0]!.program) && pipeline[0]!.redirects.every((r) => QUIET.has(r));
 
 /**
- * The refusal of a command line with a file step or a write step in it, of which Geno runs nothing: it names each
- * step's tool, and the rest of the line to run alone. Undefined for a line with neither. Unlike a file step, a write
+ * The refusal of a command line with a read step or a write step in it, of which Geno runs nothing: it names each
+ * step's tool, and the rest of the line to run alone. Undefined for a line with neither. Unlike a read step, a write
  * step after `&&` is refused as well: writing literal text checks nothing the program before it did.
  */
 export function fileStepRefusal(command: string, workspace: string): string | undefined {
@@ -386,7 +405,7 @@ export function fileStepRefusal(command: string, workspace: string): string | un
     return i === kept.length - 1 ? pipelineText(pipeline) : `${pipelineText(pipeline)}${then === ';' ? ';' : ` ${then}`}`;
   });
   const names = [...new Set(jobs.map(({ tool }) => tool))];
-  // Reads, lists and searches run beside each other; edits wait their turn.
+  // Reads run beside each other; edits wait their turn.
   const together = !names.includes('edit');
   const then =
     rest.length === 0

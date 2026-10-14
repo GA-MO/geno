@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileStepRefusal, fileStepsOf, stepsOf, writeStepsOf, type FileStep, type WriteStep } from '../../packages/core/src/shell-intent.js';
 
 type ShellFacts = {
-  /** The pipelines read, list, glob or grep does, which Geno refuses. */
+  /** The pipelines that only read files, which read does and Geno refuses. */
   readonly fileSteps: readonly FileStep[];
   /** The pipelines that only write literal text into workspace files, which Geno refuses as edit's job. */
   readonly writeSteps: readonly WriteStep[];

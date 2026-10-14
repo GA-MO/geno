@@ -44,7 +44,7 @@ export const outputOf = (call) => (call.result === undefined ? '' : (call.result
 export const bashCalls = (run) => run.calls.filter((c) => c.name === 'bash');
 
 /**
- * Geno's refusals of a bash line before it runs any of it: a step a file tool does (`fileStepRefusal` in
+ * Geno's refusals of a bash line before it runs any of it: a read or text-write step (`fileStepRefusal` in
  * shell-intent.ts), a server start (`serverRefusal`, there) and a leading sleep (`sleepRefusal` in tools.ts).
  */
 const PRE_RUN_REFUSAL = /^(Geno ran nothing: |Blocked: )/;
@@ -128,7 +128,7 @@ export const SHARED = [
   },
   {
     id: 'dedicated-file-tools',
-    what: 'reads, lists and searches with read/list/grep/glob, not cat/ls/find/grep in bash that ran',
+    what: 'reads files with read, not cat/head/tail/less/more/sed -n in bash that ran; grep, find and ls in bash are fine',
     test: (run, ctx) => {
       const facts = shellFacts(run, ctx);
       const bad = bashRan(run).flatMap((c) => facts(c).fileSteps.map(({ text, tool }) => `seq ${c.seq}: ${text.slice(0, 80)} (${tool})`));
