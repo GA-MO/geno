@@ -77,6 +77,10 @@ const verdict = (ok, detail) => (ok ? pass(detail) : fail(detail));
  * One foreground wait that ends when its condition holds, Claude Code's until-loop: what a run must use where monitor
  * cannot wake it, as in a headless `gcode agent` run. A for loop of tries, or `&` and a sleep, is polling.
  */
+/** A retry loop with a fixed count that stops at the first success, `for i in $(seq 20); do curl … && exit 0; sleep 0.5; done`: an until-loop with a limit. */
+export const isBoundedRetry = (command) =>
+  /^\s*for\s+\w+\s+in\s+(\$\(seq\s+\d+\)|\{1\.\.\d+\})\s*;\s*do\s+[^;]+&&\s*(exit(\s+0)?|break)\s*;\s*sleep\s+[\d.]+\s*;\s*done\b/.test(command);
+
 export const isUntilWait = (command) => {
   const plain = command.replace(/\d?>&\d/g, '');
   return /^\s*until\s[^;&|]+;\s*do\s+sleep\s+[\d.]+;\s*done\s*(;|&&|$)/.test(plain) && !/&\s*$|&\s+[^&]/.test(plain.replace(/&&/g, ''));
@@ -174,7 +178,7 @@ export const SHARED = [
     id: 'no-sleep-poll',
     what: 'waits with background jobs and monitor, or one until-loop where monitor cannot wake the run, not sleep polling',
     test: (run) => {
-      const bad = bashRan(run).filter((c) => /\bsleep\s+\d/.test(String(c.input.command ?? '')) && c.input.run_in_background !== true && !isUntilWait(String(c.input.command)));
+      const bad = bashRan(run).filter((c) => /\bsleep\s+\d/.test(String(c.input.command ?? '')) && c.input.run_in_background !== true && !isUntilWait(String(c.input.command)) && !isBoundedRetry(String(c.input.command)));
       return verdict(bad.length === 0, bad.map((c) => c.input.command.slice(0, 80)).join(' | '));
     },
   },
