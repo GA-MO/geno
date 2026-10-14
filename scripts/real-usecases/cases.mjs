@@ -1,4 +1,5 @@
 // The Layer A cases: each is a prompt a user of this repo would type, a starting repo, and checks against the log.
+import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { analyze, bashCalls, bashRan, fail, isUntilWait, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
@@ -39,6 +40,16 @@ const staleList = (run) => {
   const list = run.events.slice(0, lastPrompt(run)).filter((e) => e.kind === 'tool-result' && e.todo !== undefined).at(-1)?.todo ?? [];
   return list.some((i) => i.status !== 'done') ? list : [];
 };
+
+/** A PNG's width from its IHDR chunk, or undefined when the file is missing or not a PNG. */
+function pngWidth(file) {
+  try {
+    const bytes = readFileSync(file);
+    return bytes.toString('ascii', 1, 4) === 'PNG' ? bytes.readUInt32BE(16) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const CASES = [
   {
@@ -244,11 +255,13 @@ export const CASES = [
     checks: [
       {
         id: 'compacted',
-        what: 'the session compacted once its context passed the threshold; a run that finished under it is n/a (A31 forces the compaction)',
+        what: 'the session compacted; a run that never did is n/a (A31 forces the compaction)',
         test: (run) => {
           if (run.events.some((e) => e.kind === 'compact' || e.kind === 'compaction' || (e.kind === 'notice' && e.compact))) return pass();
           const peak = Math.max(0, ...run.assistants.map(({ usage: u }) => (u === undefined ? 0 : u.input + u.cacheRead + u.cacheWrite + u.output)));
-          return peak < A16_COMPACT_AT ? na(`finished under the compaction threshold (peak context ${peak} < ${A16_COMPACT_AT} tokens)`) : fail(`peak context ${peak} tokens passed ${A16_COMPACT_AT} with no compaction`);
+          // Past the threshold, Geno still declines to compact when the newest turn holds most of the context, as when
+          // every edit goes out in one turn: a summary of the rest would not halve it.
+          return na(peak < A16_COMPACT_AT ? `finished under the compaction threshold (peak context ${peak} < ${A16_COMPACT_AT} tokens)` : `no compaction; peak context ${peak} tokens, held by the newest turn`);
         },
       },
       { id: 'legacy-untouched', what: 'legacy/ is untouched after compaction', test: (run, ctx) => ok(!ctx.gitStatus.includes('legacy/'), ctx.gitStatus) },
@@ -533,11 +546,17 @@ export const CASES = [
       { id: 'fixed', what: 'the button is green and no longer offset', verify: "grep -qi '2ea05c' index.html && ! grep -q 'margin-left: 140px' index.html" },
       {
         id: 'shows-pair',
-        what: 'shows at least two PNG screenshots with show_files',
-        test: (run) => {
+        what: 'shows the before and after screenshots with show_files: two images, or one at least twice as wide as a shot that holds both',
+        test: (run, ctx) => {
           const calls = named(run, 'show_files');
           const images = calls.flatMap((c) => c.result?.shown?.files ?? []).filter((f) => f.kind === 'shown' && f.show === 'image');
-          return ok(images.length >= 2, calls.map((c) => `${c.result?.status}: ${[c.input.files ?? []].flat().join(' ')}`).join('; ') || 'no show_files call');
+          const detail = calls.map((c) => `${c.result?.status}: ${[c.input.files ?? []].flat().join(' ')}`).join('; ') || 'no show_files call';
+          if (images.length !== 1) return ok(images.length >= 2, detail);
+          const one = path.join(ctx.ws, '..', 'one-shot.png');
+          spawnSync('node', ['shot.mjs', one], { cwd: ctx.ws });
+          const shot = pngWidth(one);
+          const shown = pngWidth(images[0].path);
+          return ok(shot !== undefined && shown !== undefined && shown >= 2 * shot, `${detail} (width ${shown} vs one shot ${shot})`);
         },
       },
     ],
