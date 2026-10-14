@@ -145,7 +145,7 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     const read = use('read', { path: 'a.ts' });
     const overwrite = use('edit', { path: 'a.ts', create: true, new_str: 'export const a = 3;\n' });
     const readB = use('read', { path: 'b.ts' });
-    const change = use('bash', { command: "echo '// changed' >> b.ts" });
+    const change = use('bash', { command: `node -e "require('fs').appendFileSync('b.ts', '// changed\\n')"` });
     const stale = use('edit', { path: 'b.ts', create: true, new_str: 'export const b = 3;\n' });
     const { result, file } = await session(wire, { 'a.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 1;\n' }, () => [[unread], [read], [overwrite], [readB], [change], [stale]]);
     expect(result(unread)).toMatchObject({ error: true, text: expect.stringMatching(/read a\.ts before editing it/) });
@@ -159,7 +159,7 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     const files = { 'src/config.ts': 'export const config = {\n\tretries: 3,\n};\n', 'src/other.ts': 'export const other = 1;\n', 'src/blind.ts': 'export const blind = 1;\n' };
     const grep = use('grep', { pattern: 'retries|other', path: 'src' });
     const edit = use('edit', { path: 'src/config.ts', old_str: 'retries: 3', new_str: 'retries: 5' });
-    const change = use('bash', { command: "echo '// changed' >> src/other.ts" });
+    const change = use('bash', { command: `node -e "require('fs').appendFileSync('src/other.ts', '// changed\\n')"` });
     const stale = use('edit', { path: 'src/other.ts', old_str: 'other = 1', new_str: 'other = 2' });
     const blind = use('edit', { path: 'src/blind.ts', old_str: 'blind = 1', new_str: 'blind = 2' });
     const { result, file } = await session(wire, files, () => [[grep], [edit], [change], [stale], [blind]]);
@@ -190,6 +190,19 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     });
     expect(existsSync(path.join(workspace, 'made.txt')), 'nothing in the line ran').toBe(false);
     expect(result(piped)).toMatchObject({ error: false, text: expect.stringMatching(/^\s*1\n\[exit code 0\]$/) });
+  });
+
+  it('a line that writes text into a workspace file is refused with nothing in it run, and a scratch file in $TMPDIR is written', async () => {
+    const written = use('bash', { command: "mkdir -p test && cat > test/levels.test.js <<'EOF'\nexport const levels = 3;\nEOF" });
+    const scratch = use('bash', { command: `printf '%s\\n' ok > "$TMPDIR/x.txt" && node -e "process.stdout.write(require('fs').readFileSync(process.env.TMPDIR + '/x.txt', 'utf8'))"` });
+    const { result, workspace } = await session(wire, A_TS, () => [[written], [scratch]]);
+    expect(result(written)).toEqual({
+      id: written.id,
+      error: true,
+      text: "Geno ran nothing: `cat >test/levels.test.js <<'EOF'` is the edit tool's job (create: true with the whole content). Run `mkdir -p test` alone in bash, and call edit.",
+    });
+    expect(existsSync(path.join(workspace, 'test')), 'nothing in the line ran').toBe(false);
+    expect(result(scratch)).toMatchObject({ error: false, text: 'ok\n[exit code 0]' });
   });
 
   it('a server started with & or in the foreground is refused unrun, with the run_in_background call to make instead', async () => {

@@ -788,7 +788,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         throw new ToolError(serverRefusal(server, { monitor: tools.wakes !== undefined, launchFile }));
       }
       // Before the approval, so a line that runs nothing asks nobody.
-      const fileSteps = fileStepRefusal(command);
+      const fileSteps = fileStepRefusal(command, ctx.workspace);
       if (fileSteps !== undefined) throw new ToolError(fileSteps);
       const approval = await approveCommand(command, ctx, background !== undefined);
       if (background !== undefined) {

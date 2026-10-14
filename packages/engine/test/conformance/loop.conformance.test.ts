@@ -58,7 +58,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
   it('T-LOOP-04 a tool call cut off at max_tokens does not run, gets an error result, and the turn goes on', async () => {
     // The cut lands in the long description, after a whole command: on the Anthropic wire the SDK's partial parse keeps the command and drops the rest.
     const description = 'Record that the command ran, in a description long enough that the output limit cuts it short';
-    const cut = use('bash', { command: 'echo ran >> ran.txt', description });
+    const cut = use('bash', { command: 'pwd >> ran.txt', description });
     const { workspace, cli, seen } = await scripted(wire, [call('Recording.', [read('a.ts'), cut], { cutOff: true }), say('Retried smaller.')]);
 
     const result = await cli(agent(workspace, 'Record a run'));
@@ -72,7 +72,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
   });
 
   it('A/A-10 a call the user stopped never runs again, and the next prompt sees it was stopped', async () => {
-    const stopped = bash('echo run >> runs.txt; sleep 5');
+    const stopped = bash('pwd >> runs.txt; sleep 5');
     const { workspace, cli, seen } = await scripted(wire, [call('Running it.', [stopped]), say('I will leave it.')]);
     const runs = path.join(workspace, 'runs.txt');
     let interrupt: AbortController | undefined;
@@ -85,7 +85,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
     const second = await cli(resume(sessionIdOf(first.stdout), "don't run that"));
 
     expect(second.code).toBe(0);
-    expect(readFileSync(runs, 'utf8'), 'the stopped command ran once').toBe('run\n');
+    expect(readFileSync(runs, 'utf8'), 'the stopped command ran once').toBe(`${workspace}\n`);
     const next = seen()[1]!;
     expect(next.results).toEqual([{ id: stopped.id, error: true, text: expect.stringMatching(/interrupted by (the )?user/i) }]);
     expect(next.text).toContain("don't run that");
@@ -93,7 +93,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
 
   it('A/A-10 in the editor a Stop keeps what finished, answers the rest as stopped, and the next prompt runs none of it', async () => {
     const finished = read('a.ts');
-    const stopped = bash('echo run >> runs.txt; sleep 5');
+    const stopped = bash('pwd >> runs.txt; sleep 5');
     const queued = read('b.ts');
     const { workspace, store, io, seen, events } = await scripted(wire, [call('Working.', [finished, stopped, queued]), say('Left as it is.')], {
       'a.ts': 'export const a = 1;\n',
@@ -120,7 +120,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
       return sessionId;
     });
 
-    expect(readFileSync(runs, 'utf8'), 'the stopped command ran once').toBe('run\n');
+    expect(readFileSync(runs, 'utf8'), 'the stopped command ran once').toBe(`${workspace}\n`);
     const next = seen()[1]!;
     expect(next.results).toEqual([
       { id: finished.id, error: false, text: expect.stringContaining('export const a = 1;') },
