@@ -95,7 +95,7 @@ export const MODE_NOTICES: Readonly<Record<SessionMode, string>> = {
 Also write the steps with the todo tool, all pending, since that same list is the one you tick off once the user starts building.
 Do not ask to switch modes; the user starts building when the plan looks right.`,
   ask: `${GENO_NOTE} The user switched this session to Ask mode. You can change code as the system prompt describes; a command outside the safe list asks the user before it runs.`,
-  auto: `${GENO_NOTE} The user switched this session to Auto mode. You can change code as the system prompt describes. A command outside the safe list goes to a classifier instead of the user, and ask_user is refused: when something is ambiguous, choose the reading that best fits the codebase and say which you chose.`,
+  auto: `${GENO_NOTE} The user switched this session to Auto mode. You can change code as the system prompt describes. A command outside the safe list goes to a classifier, which asks the user only when it is unsure, and ask_user is refused: when something is ambiguous, choose the reading that best fits the codebase and say which you chose.`,
 };
 
 /** What the model has been told: the session's opening, then each notice, in the events it reads now. */

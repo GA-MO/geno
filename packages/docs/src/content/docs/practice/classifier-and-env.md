@@ -113,8 +113,8 @@ scenario:
       lane: policy
       at: settle
       do: >-
-        `CLASSIFIER_OUTCOMES` แปลง deny เป็น `refuse` แล้ว `refusalOf` คืน `ToolDenied` ซึ่งไม่จบ turn
-      ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
+        `settle` คืนคำปฏิเสธของ classifier แล้ว `refusalOf` คืน `ToolDenied` ซึ่งไม่จบ turn
+      ref: packages/engine/src/tools/agent.ts#settle
       emits: [tool-result]
 
     - use: model-call

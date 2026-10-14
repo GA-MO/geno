@@ -378,7 +378,7 @@ describe('gcode agent --mode auto', () => {
     expect(ran.stdout).toContain(`cost=$${(models + classifier).toFixed(6)}`);
   });
 
-  it('runs safe commands, lets the classifier judge the gray ones, blocks what it will not allow without asking, asks before what rules keep, and logs each decision', async () => {
+  it('runs safe commands, lets the classifier judge the gray ones, asks the user what it is unsure of and what rules keep, and logs each decision', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
     const asked: string[] = [];
     const commands = ['ls -t', 'node -e "console.log(41 + 1)"', 'rm -rf node_modules', 'node -e "console.log(7)"', 'rm -rf ~/old-project'];
@@ -393,7 +393,7 @@ describe('gcode agent --mode auto', () => {
       fetch: transport.fetch,
       confirm: (question) => {
         asked.push(question);
-        return false;
+        return question.includes('console.log(7)');
       },
     });
     expect(result.code).toBe(0);
@@ -405,7 +405,10 @@ describe('gcode agent --mode auto', () => {
       expect.stringContaining('console.log(7)'),
     ]);
     expect(userText(classified[0]!)).toContain('Print the answer');
-    expect(asked).toEqual(['Allow `rm -rf ~/old-project`? It uses rm -rf of the workspace, its .git or a path outside it.']);
+    expect(asked).toEqual([
+      'Allow `node -e console.log(7)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.',
+      'Allow `rm -rf ~/old-project`? It uses rm -rf of the workspace, its .git or a path outside it.',
+    ]);
     expect(existsSync(path.join(workspace, 'node_modules/pkg/index.js'))).toBe(true);
     expect(result.stdout).toContain('auto: the classifier allowed it: prints a number');
     expect(result.stdout).toContain('auto: the classifier denied it: the request did not ask to delete dependencies');
@@ -413,11 +416,10 @@ describe('gcode agent --mode auto', () => {
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(ofKind(log.events, 'mode').map((e) => e.mode)).toEqual(['auto']);
     const results = ofKind(log.events, 'tool-result');
-    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied', 'rejected']);
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'ok', 'rejected']);
     expect('output' in results[1]! && results[1].output).toContain('42');
     expect('output' in results[2]! && results[2].output).toContain('the request did not ask to delete dependencies');
-    expect('output' in results[3]! && results[3].output).toContain('Auto mode blocked `node -e console.log(7)` without asking the user, because the safety classifier would not allow it: unclear why this is needed');
-    expect('output' in results[3]! && results[3].output).toContain('say in your answer what you need the user to allow');
+    expect('output' in results[3]! && results[3].output).toContain('7');
     expect(results.map((r) => r.approval)).toEqual([
       undefined,
       expect.objectContaining({
@@ -428,7 +430,7 @@ describe('gcode agent --mode auto', () => {
         classifier: expect.objectContaining({ verdict: 'allow', reason: 'prints a number', model: 'qwen3.8-flash', costUsd: expect.any(Number), latencyMs: expect.any(Number) }),
       }),
       expect.objectContaining({ mode: 'auto', rule: 'rm-rf-in-workspace', decidedBy: 'classifier', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'deny' }) }),
-      expect.objectContaining({ mode: 'auto', rule: 'unlisted', decidedBy: 'classifier', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'ask' }) }),
+      expect.objectContaining({ mode: 'auto', rule: 'unlisted', decidedBy: 'user', verdict: 'allow', classifier: expect.objectContaining({ verdict: 'ask' }) }),
       { mode: 'auto', rule: 'rm-rf-outside-workspace', reason: 'rm -rf of the workspace, its .git or a path outside it', command: 'rm -rf ~/old-project', decidedBy: 'user', verdict: 'deny' },
     ]);
   });

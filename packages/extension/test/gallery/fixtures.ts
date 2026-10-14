@@ -1033,7 +1033,7 @@ export const FIXTURES: readonly Fixture[] = [
           'bash',
           'execute',
           'git push --force',
-          'denied: Auto mode blocked `git push --force` without asking the user, because the safety classifier would not allow it: a force push rewrites the shared branch. Do not retry it. Find another way, or say in your answer what you need the user to allow.',
+          'denied: `git push --force` was refused by the safety classifier: a force push rewrites the shared branch. Do not retry it; find another way.',
           { by: 'auto', reason: 'A force push rewrites the shared branch.' },
           { description: 'Force push' },
         ),

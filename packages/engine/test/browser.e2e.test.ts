@@ -229,14 +229,14 @@ describe('the built-in browser', () => {
 
   it('sends another host to the classifier in Auto, and opens nothing and asks nobody when it will not allow it', async () => {
     const open = { id: 'tu_evil', name: 'mcp__browser__new_page', input: { url: 'http://localhost@evil.example/' } };
-    const verdict = toolCall('', [{ id: 'tu_v', name: CLASSIFIER_TOOL.name, input: { verdict: 'ask', reason: 'the request names no site' } }], usage);
+    const verdict = toolCall('', [{ id: 'tu_v', name: CLASSIFIER_TOOL.name, input: { verdict: 'deny', reason: 'the request names no site' } }], usage);
     const { transport, permissions, connect, marker } = await setup([toolCall('Opening.', [open], usage), verdict, answer('Blocked.', usage)]);
 
     await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open it' }] }));
 
     expect(permissions).toEqual([]);
     expect(JSON.stringify(transport.requests[1]!.body.messages)).toContain('opening a page on another host (rule browser-remote-url)');
-    expect(textOf(toolResults(transport.requests[2]!.body)[0]!)).toContain('Auto mode blocked `open http://localhost@evil.example/ (host evil.example)` without asking the user');
+    expect(textOf(toolResults(transport.requests[2]!.body)[0]!)).toContain('`open http://localhost@evil.example/ (host evil.example)` was refused by the safety classifier: the request names no site');
     expect(chromes(marker), 'a blocked navigation never starts Chrome').toEqual([]);
   }, 120_000);
 

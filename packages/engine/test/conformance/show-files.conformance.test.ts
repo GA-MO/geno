@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { type Denial, type SessionMode, type ToolResultEvent } from '@g-code/core';
 import { runAgent } from '../../src/agent.js';
 import { startSession } from '../../src/chat.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
 import { twoColorPng } from '../../../core/test/png.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
 import { call, say, scripted, WIRES, type Wire } from './scripted.js';
@@ -43,7 +43,6 @@ async function run(wire: Wire, mode: SessionMode | 'non-interactive', turns: (sp
           classify: async () => {
             throw new Error('no classifier in these tests');
           },
-          auto: freshAuto(),
         };
   const result = await runAgent(io, store, opened, 'Show me the page before and after.', { limits: { maxTurns: 6, maxCostUsd: 1 }, check: undefined, checkAfterEdit: false, approval });
   const results = new Map(seen().flatMap((request) => request.results.map((r) => [r.id, r] as const)));

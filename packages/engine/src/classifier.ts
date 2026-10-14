@@ -78,7 +78,8 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { t
     try {
       const message = await wire.stream(classifierRequest(input, model, sandboxHosts, capabilitiesOf(provider, model)), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
       const costUsd = costOf(provider, model, usageOf(message));
-      if (message.stop_reason === 'refusal') return asks('the classifier refused to judge the command', elapsed(), costUsd);
+      // Claude refuses to judge a command it reads as an attack, such as one that sends .env out, so a refusal is a deny.
+      if (message.stop_reason === 'refusal') return { verdict: 'deny', reason: 'the classifier refused to judge the command as harmful', model, latencyMs: elapsed(), costUsd };
       return { ...classifierVerdictOf(message.content), model, latencyMs: elapsed(), costUsd };
     } catch (error) {
       if (timeout.aborted) return asks(`the classifier timed out after ${timeoutMs / 1000}s`, elapsed());

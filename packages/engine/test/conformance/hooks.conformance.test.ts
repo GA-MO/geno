@@ -10,7 +10,7 @@ import { HookSessions } from '../../src/hooks.js';
 import { permissionStore } from '../../src/permissions.js';
 import { gcodeAgent } from '../../src/serve.js';
 import { homeOf } from '../../src/store.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
 import { call, report, say, scripted, sessionIdOf, WIRES, type Turn, type Wire } from './scripted.js';
 
 type Run = Awaited<ReturnType<typeof scripted>>;
@@ -447,7 +447,6 @@ async function interactive(wire: Wire, script: readonly Turn[], hooks: (run: Run
     classify: async () => {
       throw new Error('a hook allow or ask never reaches the classifier here');
     },
-    auto: freshAuto(),
   };
   const opened = await startSession(run.store, run.io, { workspace: run.workspace, provider: undefined, model: undefined, effort: undefined });
   const { events } = await runAgent(run.io, run.store, opened, 'Go.', { limits: { maxTurns: 6, maxCostUsd: 1 }, check: undefined, checkAfterEdit: false, approval, hooks: new HookSessions() });

@@ -9,7 +9,7 @@ import { runAgent } from '../src/agent.js';
 import { startSession } from '../src/chat.js';
 import { commandClassifier } from '../src/classifier.js';
 import type { Io } from '../src/command.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import { guardedResolve, type Resolve } from '../src/tools/web.js';
 import { permissionStore } from '../src/permissions.js';
 import { homeOf, openStore } from '../src/store.js';
@@ -121,7 +121,6 @@ async function run(replies: readonly Reply[], { mode, answers = [], search, rule
             return pending.shift() ?? 'reject';
           },
           classify: commandClassifier(env, transport.fetch),
-          auto: freshAuto(),
         };
   const store = openStore(env);
   for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);

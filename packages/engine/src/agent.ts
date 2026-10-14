@@ -82,7 +82,7 @@ import { sessionIndex } from './session-index.js';
 import type { Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import type { ToolContext } from './tools/context.js';
-import { agentExecutors, freshAuto, modeOf, withPermissions, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, modeOf, withPermissions, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
@@ -493,7 +493,7 @@ export const agent: Command = async (args, { io, store }) => {
   const mode = sessionModeOf(log.events);
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
-    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch), auto: freshAuto() };
+    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
   const appendSystemPrompt = values['append-system-prompt'];
   if (appendSystemPrompt?.trim() === '') throw new UsageError('--append-system-prompt needs text');
   // The command line runs the user's own hooks and no workspace's: no editor vouches that the user trusts the folder.
