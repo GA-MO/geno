@@ -236,7 +236,7 @@ describe('background commands in the engine process', () => {
 });
 
 describe("a command's TMPDIR in a run", () => {
-  it("is the session's scratchpad, in the foreground and the background, so show_files shows what the model wrote there unasked", async () => {
+  it("is the session's scratchpad, in the foreground and the background, so show_files and read reach what the model wrote there unasked", async () => {
     const { workspace, env, store } = await setup();
     const where = use('bash', { command: 'echo "$TMPDIR" && echo shot > "$TMPDIR/before.png"' });
     const later = background('echo bg > "$TMPDIR/bg.txt"');
@@ -248,12 +248,14 @@ describe("a command's TMPDIR in a run", () => {
     ];
     const transport = fakeTransport(replies);
     let shown: FakeToolUse | undefined;
+    let readBack: FakeToolUse | undefined;
     // The model learns the path from what the first command printed, as one that ran `echo "$TMPDIR"` would.
     const fetch: typeof globalThis.fetch = async (input, init) => {
       if (transport.requests.length === 3) {
         const tmp = resultOf(transport.requests[1]!.body as Body, where.id).split('\n')[0]!;
         shown = use('show_files', { files: [path.join(tmp, 'before.png'), path.join(tmp, 'bg.txt')] });
-        replies.push(toolCall('Showing them.', [shown], usage), answer('Done.', usage));
+        readBack = use('read', { path: path.join(tmp, 'bg.txt') });
+        replies.push(toolCall('Showing them.', [shown, readBack], usage), answer('Done.', usage));
       }
       return transport.fetch(input, init);
     };
@@ -269,5 +271,8 @@ describe("a command's TMPDIR in a run", () => {
     expect(showed).not.toMatch(/denied|outside the workspace/);
     expect(showed).toContain('before.png');
     expect(showed).toContain('bg.txt');
+    const read = resultOf(bodies[4]!, readBack!.id);
+    expect(read).not.toMatch(/denied|outside the workspace/);
+    expect(read).toContain('bg');
   }, 30_000);
 });
