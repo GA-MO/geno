@@ -4,12 +4,11 @@ import https from 'node:https';
 import type { LookupFunction } from 'node:net';
 import type { Readable } from 'node:stream';
 import zlib from 'node:zlib';
-import type { MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { Message, MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
 import { z } from 'zod';
 import {
   changesHost,
   classifierInputOf,
-  costOf,
   classifierChoiceOf,
   CLASSIFIER_ENV,
   decodeEntities,
@@ -21,9 +20,15 @@ import {
   pageWindowOf,
   readerRequest,
   redirectTargetOf,
+  searchCallCostOf,
+  searchLabelOf,
   searchQueryOf,
   searchResultText,
+  searchSummaryOf,
   SEARCH_PROVIDER_SPECS,
+  SERVER_SEARCH,
+  serverSearchOf,
+  serverSearchRequest,
   specOf,
   stripHidden,
   hostnameOf,
@@ -32,12 +37,12 @@ import {
   WEB_LIMITS,
   type ApprovalRecord,
   type FetchedPage,
+  type HelperSpend,
   type ProviderName,
   type Reachable,
   type SearchConfig,
   type SearchDomains,
   type SearchHit,
-  type TokenUsage,
   type WebAction,
   type WebTarget,
   type WebTool,
@@ -53,9 +58,6 @@ type Address = { readonly address: string; readonly family: number };
 /** Where a host name points. The default refuses a name of another host that points at a private address. */
 export type Resolve = (hostname: string) => Promise<readonly Address[]>;
 
-/** One helper call, for whoever counts what the tool spent. */
-export type ReadRun = { readonly model: string; readonly usage: TokenUsage; readonly costUsd: number | null; readonly latencyMs: number };
-
 export type WebDeps = {
   readonly approval: Approval;
   readonly env: Env;
@@ -67,7 +69,6 @@ export type WebDeps = {
   /** For the search provider's API. */
   readonly searchFetch?: typeof globalThis.fetch | undefined;
   readonly resolve?: Resolve | undefined;
-  readonly onRead?: ((run: ReadRun) => void) | undefined;
 };
 
 /**
@@ -236,33 +237,38 @@ export function readerChoices(env: Env, session: WebDeps['session']): Choice[] {
   return choices;
 }
 
-type Read = (request: (choice: Choice) => MessageStreamParams, signal: AbortSignal) => Promise<string>;
+/** A helper's answer, and what it spent, which the tool's result carries into the turn's spend. */
+type Helped = { readonly message: Message; readonly helper: HelperSpend };
 
-function reader(deps: WebDeps): Read {
-  return async (request, signal) => {
-    let lastProblem = '';
-    for (const choice of readerChoices(deps.env, deps.session)) {
-      let wire;
-      try {
-        wire = wireFor(choice.provider, deps.env, deps.modelFetch);
-      } catch (error) {
-        lastProblem = messagesOf(error).join(': ');
-        continue;
-      }
-      const started = performance.now();
-      try {
-        const message = await wire.stream(request(choice), { signal, onEvent: () => {} });
-        const usage = usageOf(message);
-        deps.onRead?.({ model: choice.model, usage, costUsd: costOf(choice.provider, choice.model, usage), latencyMs: Math.round(performance.now() - started) });
-        return message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
-      } catch (error) {
-        if (signal.aborted) throw error;
-        throw new ToolError(`the helper model ${choice.model} could not read the page: ${wire.redact(messagesOf(error).join(': '))}`);
-      }
+/**
+ * One helper call, on the first of `choices` whose credentials are set. `doing` names its work in an error, as in
+ * "read the page". Server-side searches bill apart from tokens, so the spend counts them.
+ */
+async function helperCall(deps: WebDeps, choices: readonly Choice[], request: (choice: Choice) => MessageStreamParams, doing: string, signal: AbortSignal): Promise<Helped> {
+  let lastProblem = '';
+  for (const choice of choices) {
+    let wire;
+    try {
+      wire = wireFor(choice.provider, deps.env, deps.modelFetch);
+    } catch (error) {
+      lastProblem = messagesOf(error).join(': ');
+      continue;
     }
-    throw new ToolError(`no model is set up to read the page: ${lastProblem}`);
-  };
+    try {
+      const message = await wire.stream(request(choice), { signal, onEvent: () => {} });
+      const usage = usageOf(message);
+      const searches = message.usage.server_tool_use?.web_search_requests ?? 0;
+      const costUsd = searchCallCostOf(choice.provider, choice.model, usage, searches);
+      return { message, helper: { model: choice.model, usage, costUsd, ...(searches > 0 ? { searches } : {}) } };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new ToolError(`the helper model ${choice.model} could not ${doing}: ${wire.redact(messagesOf(error).join(': '))}`);
+    }
+  }
+  throw new ToolError(`no model is set up to ${doing}: ${lastProblem}`);
 }
+
+const answerOf = (message: Message): string => message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
 
 const fetchInput = z.strictObject({ url: z.string().min(1), question: z.string().trim().min(1), offset: z.int().min(0).optional() });
 const domains = z
@@ -293,12 +299,11 @@ function deadline(signal: AbortSignal): { readonly signal: AbortSignal; readonly
 }
 
 /**
- * web_fetch, and web_search when a search key is set. Each fetch hop to a new host goes through the web rules and,
- * for a question, the classifier or the user; a refused hop ends the call.
+ * web_fetch, and web_search when there is a search (`searchConfigOf`). Each fetch hop to a new host, and each search,
+ * goes through the web rules and, for a question, the classifier or the user; a refused hop ends the call.
  */
 export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> {
   const resolve = deps.resolve ?? guardedResolve();
-  const read = reader(deps);
 
   const judge = async (action: WebAction, args: Record<string, unknown>, ctx: ToolContext, tool: WebTool): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(deps.approval);
@@ -357,26 +362,35 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       const page = pageOf(final.url, response);
       const window = pageWindowOf(page.markdown, offset);
       if (window === undefined) throw new ToolError(`${final.url} has ${page.markdown.length} characters of text, so offset ${offset} is past its end`);
-      const answer = await read((choice) => readerRequest(page, window, question, choice), ctx.signal);
-      const text = fetchAnswerText({ page, window, answer, redirects });
-      const approval = records.at(-1);
-      return approval === undefined ? text : { text, approval };
+      const { message, helper } = await helperCall(deps, readerChoices(deps.env, deps.session), (choice) => readerRequest(page, window, question, choice), 'read the page', ctx.signal);
+      return { text: fetchAnswerText({ page, window, answer: answerOf(message), redirects }), approval: records.at(-1), helper };
     },
   });
 
   const { search } = deps;
   if (search === undefined) return { web_fetch };
-  const spec = SEARCH_PROVIDER_SPECS[search.provider];
+  const label = searchLabelOf(search);
   const web_search = executor({
     input: searchInput,
     describe: (input) => `web_search ${searchQueryOf(input.query, filterOf(input))}`,
     async run(input, ctx) {
       const filter = filterOf(input);
-      const query = searchQueryOf(input.query, filter);
-      const approval = await judge({ kind: 'search', query, provider: spec.label }, { query }, ctx, 'web_search');
-      const hits = await braveSearch(query, search.key, deps.searchFetch ?? globalThis.fetch, ctx.signal);
-      const text = searchResultText(query, spec.label, keptHits(hits, filter, (await ctx.permissions?.list()) ?? []));
-      return approval === undefined ? text : { text, approval };
+      // The query as the user is asked about it; Brave also searches it as written, its filter in site: operators.
+      const asked = searchQueryOf(input.query, filter);
+      const approval = await judge({ kind: 'search', query: asked, provider: label }, { query: asked }, ctx, 'web_search');
+      const rules = (await ctx.permissions?.list()) ?? [];
+      if (search.kind === 'key') {
+        const hits = await braveSearch(asked, search.key, deps.searchFetch ?? globalThis.fetch, ctx.signal);
+        return { text: searchResultText(asked, label, keptHits(hits, filter, rules)), approval };
+      }
+      // The helper runs on a model of a provider whose API searches, and the API takes the filter itself.
+      const choices = readerChoices(deps.env, deps.session).filter((choice) => SERVER_SEARCH[choice.provider] !== undefined);
+      const request = (choice: Choice) => serverSearchRequest(input.query, filter, SERVER_SEARCH[choice.provider]!, choice);
+      const { message, helper } = await helperCall(deps, choices, request, 'search the web', ctx.signal);
+      const found = serverSearchOf(message);
+      if (found.kind === 'failed') return { text: found.why, status: 'error', approval, helper };
+      const kept = keptHits(found.hits, filter, rules);
+      return { text: searchResultText(input.query, label, kept, searchSummaryOf(found.parts, kept)), approval, helper };
     },
   });
   return { web_fetch, web_search };

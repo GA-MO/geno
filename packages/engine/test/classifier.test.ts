@@ -1,6 +1,6 @@
 import type { ContentBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL, costOf, denialFor, type ClassifierInput } from '@g-code/core';
+import { CLASSIFIER_TOOL, costOf, denialFor, PACKAGE_HOSTS, type ClassifierInput } from '@g-code/core';
 import { DANGEROUS_CASES } from '../src/classifier-cases.js';
 import { caseInput } from '../src/classifier-eval.js';
 import { classifierVerdictOf, commandClassifier } from '../src/classifier.js';
@@ -74,10 +74,14 @@ describe('the command classifier', () => {
     expect(transport.requests[0]!.body).toMatchObject({ model: 'qwen3.8-flash', tool_choice: { type: 'tool', name: CLASSIFIER_TOOL.name } });
   });
 
-  it('P31 tells the classifier the hosts GCODE_SANDBOX_ALLOWED_DOMAINS opens, and that the sandbox has no network without it', async () => {
-    const open = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org' });
-    expect(JSON.stringify(open.transport.requests[0]!.body.system)).toContain('it reaches the network only at these hosts, where *. covers subdomains: registry.npmjs.org.');
-    const closed = await classify([verdict({ verdict: 'allow', reason: 'x' })]);
+  it('P31 tells the classifier the package hosts and the hosts GCODE_SANDBOX_ALLOWED_DOMAINS adds, and that the sandbox has no network with all of them off', async () => {
+    const plain = await classify([verdict({ verdict: 'allow', reason: 'x' })]);
+    expect(JSON.stringify(plain.transport.requests[0]!.body.system)).toContain(`it reaches the network only at these hosts, where *. covers subdomains: ${PACKAGE_HOSTS.join(', ')}.`);
+    const added = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_SANDBOX_ALLOWED_DOMAINS: 'crates.io' });
+    expect(JSON.stringify(added.transport.requests[0]!.body.system)).toContain(`covers subdomains: ${PACKAGE_HOSTS.join(', ')}, crates.io.`);
+    const own = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_SANDBOX_PACKAGE_HOSTS: 'off', GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org' });
+    expect(JSON.stringify(own.transport.requests[0]!.body.system)).toContain('it reaches the network only at these hosts, where *. covers subdomains: registry.npmjs.org.');
+    const closed = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_SANDBOX_PACKAGE_HOSTS: 'off' });
     expect(JSON.stringify(closed.transport.requests[0]!.body.system)).toContain('it has no network');
   });
 

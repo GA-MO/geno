@@ -54,6 +54,15 @@ export function costAt(rates: Rates | undefined, usage: TokenUsage): number | nu
 
 export const costOf = (provider: ProviderName, model: string, usage: TokenUsage): number | null => costAt(ratesOf(provider, model), usage);
 
+/** Anthropic's server-side web search, per search, on top of the tokens its results add: $10 per 1,000 searches. */
+export const WEB_SEARCH_USD = 0.01;
+
+/** A call's tokens and the server-side searches it ran. Null when its tokens have no price. */
+export function searchCallCostOf(provider: ProviderName, model: string, usage: TokenUsage, searches: number): number | null {
+  const tokens = costOf(provider, model, usage);
+  return tokens === null ? null : tokens + searches * WEB_SEARCH_USD;
+}
+
 /**
  * The model Geno's built-in dollar caps were sized on, and its mean model call: 1,209 calls of 143 archived runs of
  * docs/results/real-usecases (the 34 Claude Sonnet 5.5 runs' 144 calls have the same shape, each bucket within 15%).

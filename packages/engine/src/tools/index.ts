@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
+import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type HelperSpend, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
 import { ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -17,6 +17,7 @@ export type ToolRun = {
   readonly text: string;
   readonly change?: FileChange | undefined;
   readonly approval?: ApprovalRecord | undefined;
+  readonly helper?: HelperSpend | undefined;
   readonly images?: readonly ImageAttachment[] | undefined;
   readonly widget?: WidgetRef | undefined;
   readonly editorAction?: EditorAction | undefined;
