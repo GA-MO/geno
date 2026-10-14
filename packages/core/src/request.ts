@@ -2,7 +2,7 @@ import type { CacheControlEphemeral, MessageParam, MessageStreamParams, Tool } f
 import { NO_ATTACHMENTS, type StoredAttachments } from './attachments.js';
 import { contextTokens } from './compaction.js';
 import { textTokens } from './context-window.js';
-import { capabilitiesOf, type CacheTtl, type ModelCapabilities } from './model-capabilities.js';
+import { capabilitiesOf, thinkingOffField, type CacheTtl, type ModelCapabilities } from './model-capabilities.js';
 import { GENO_NOTES_PROMPT } from './fence.js';
 import { replayMessages, type Session, type TurnEvent } from './session.js';
 
@@ -73,8 +73,9 @@ function maxTokensFor({ window, maxOutput }: ModelCapabilities, inputTokens: num
 /**
  * Tools precede the system prompt in the cached prefix, so the system block's breakpoint caches them too. Every
  * breakpoint has the model's TTL, since an entry may not outlive one before it. `forced` names the one tool the model
- * must call, with thinking off, which a forced tool requires. `toolsOff` keeps the tools offered, so the cached prefix
- * holds, but lets the model call none: the last call a run's limits allow must answer, since no tool would run after it.
+ * must call, with thinking off, which a forced tool requires; a model that refuses a forced tool gets it offered with
+ * `auto` and its thinking as usual. `toolsOff` keeps the tools offered, so the cached prefix holds, but lets the model
+ * call none: the last call a run's limits allow must answer, since no tool would run after it.
  */
 export function buildRequest(
   session: Session,
@@ -90,12 +91,13 @@ export function buildRequest(
   // A measured call already counted the system prompt and the tools.
   const measured = events.some((e) => e.kind === 'assistant' || e.kind === 'compact');
   const inputTokens = contextTokens(events) + (measured ? 0 : textTokens(system) + textTokens(JSON.stringify(tools)));
+  const forcing = forced !== undefined && capabilities.forcesTool;
   return {
     model: session.model,
     max_tokens: maxTokensFor(capabilities, inputTokens),
-    ...(forced !== undefined ? { thinking: { type: 'disabled' } } : capabilities.thinking === 'adaptive' ? { thinking: { type: 'adaptive', display: 'omitted' } } : {}),
+    ...(forcing ? thinkingOffField(capabilities.thinkingOff) : capabilities.thinking === 'adaptive' ? { thinking: { type: 'adaptive', display: 'omitted' } } : {}),
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
-    ...(forced !== undefined ? { tool_choice: { type: 'tool', name: forced } } : toolsOff === true && tools.length > 0 ? { tool_choice: { type: 'none' } } : {}),
+    ...(forcing ? { tool_choice: { type: 'tool', name: forced } } : toolsOff === true && tools.length > 0 ? { tool_choice: { type: 'none' } } : {}),
     system: [{ type: 'text', text: system, cache_control: control }],
     messages: withNewestUserBreakpoint(replayMessages(events, stored), control),
     ...(capabilities.effort ? { output_config: { effort: session.effort } } : {}),

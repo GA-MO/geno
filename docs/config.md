@@ -55,7 +55,7 @@ Every settings file has the same schema. `engine/src/settings.ts` reads it.
 | `hooks` | every file | Commands that run at session events. See [hooks.md](hooks.md). |
 | `enabledPlugins` | every file | `"name@marketplace": false` turns off a Claude Code plugin's hooks. |
 | `check` | Geno's files | The command the `check` tool runs, such as `"pnpm typecheck"`. |
-| `agentTool` | Geno's files | The approval modes whose model may start subagents itself, such as `["ask", "auto"]`. |
+| `agentTool` | Geno's files | The approval modes whose model may start subagents itself, such as `["ask", "auto"]`. Without it, a Claude model gets `["plan", "ask", "auto"]` and qwen gets none: Claude starts subagents well, and qwen3.8-flash never did in the P25 eval (docs/results/p25-agent-default.md). In Plan mode a child cannot edit. `[]` turns the tool off. |
 | `appendSystemPrompt` | Geno's files | Text that ends the system prompt of every run. |
 | `arena` | Geno's files | The Arena's default `variety`, its `models`, or a list of `variants`. |
 | `laneSetup` | the project's Geno files | Commands that set up each new lane, which you approve once per repository. |
@@ -73,6 +73,24 @@ Geno merges the files as Claude Code merges its scopes:
 - **`enabledPlugins` and Geno's own keys.** The highest file that sets a value wins: a project-local file over a project-shared one over yours, and in one scope Geno's over `.agents` over `.claude`.
 
 Settings under Permissions lists the rules from the settings files read-only, each with its file, below the rules you can remove. An allow that waits for a trusted workspace is not listed.
+
+## Cost caps
+
+Geno's built-in dollar caps are sized for `qwen3.8-flash` and scaled to the model that runs. Each default is what it allows on `qwen3.8-flash`, times what one typical call costs on the model over what it costs on `qwen3.8-flash`. The typical call is the mean of 1,209 archived calls (`REFERENCE_CALL` in `core/src/cost.ts`): about 10,900 cache-read tokens, 1,000 cache-written tokens and 350 output tokens. A cap therefore buys about the same number of model calls on every model.
+
+| Default cap | qwen3.8-flash | Claude Sonnet 5.5 | Claude Opus 5.5 |
+|---|---|---|---|
+| A turn (`gcode agent`, `ask`, `serve`, the editor panel) | $0.40 | $1.964 | $3.49 |
+| `explore` child | $0.02 | $0.098 | $0.174 |
+| `plan` and `review` child, and a definition with no cap | $0.05 | $0.245 | $0.436 |
+| `worker` child | $0.20 | $0.982 | $1.745 |
+| A scheduled run | $0.05 | $0.245 | $0.436 |
+| The Arena's review | $0.05 | $0.245 | $0.436 |
+| A workflow run's total | $0.50 | $2.455 | $4.362 |
+
+The factors are 4.91 for Claude Sonnet 5.5 and 8.725 for Claude Opus 5.5, on Anthropic's list prices. A cap you set stays as you set it: `--max-cost`, a schedule's `max_cost_usd`, an agent definition's `maxCost`, a workflow file's `maxCostUsd`, and the `agent` tool's `max_cost_usd`. The upper bounds on what you may set, such as a schedule's $1, do not scale.
+
+A model with no price, such as Claude on Bedrock or Vertex, keeps the `qwen3.8-flash` dollars. Geno cannot see what its calls cost, so it counts them as free, and the turn cap is what stops the run.
 
 ## Move from .gcode.json
 

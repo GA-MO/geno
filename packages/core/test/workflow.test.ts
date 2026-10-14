@@ -47,6 +47,7 @@ import {
   type WorkflowSpec,
 } from '../src/index.js';
 
+const FLASH = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const;
 const origin = { name: 'review-fix-verify', source: 'workspace' as const, path: '.g-code/workflows/review-fix-verify.json' };
 
 function spec(raw: unknown, name = origin.name): WorkflowSpec {
@@ -111,7 +112,9 @@ describe('parseWorkflow', () => {
 
   it('defaults the total cap and names unnamed steps after their role', () => {
     const parsed = spec({ description: 'Two reviews.', steps: [{ role: 'review', prompt: 'a' }, { role: 'review', prompt: 'b' }] });
-    expect(parsed.maxCostUsd).toBe(0.5);
+    expect(parsed.maxCostUsd).toEqual({ referenceUsd: 0.5 });
+    expect(startWorkflow(parsed, '', FLASH).capUsd).toBe(0.5);
+    expect(startWorkflow(parsed, '', { provider: 'anthropic', model: 'claude-sonnet-5-5' }).capUsd).toBe(2.455);
     expect(parsed.steps.map((node) => node.id)).toEqual(['review', 'review-2']);
   });
 
@@ -179,8 +182,7 @@ describe('workflowRefusal', () => {
 });
 
 describe('workflowPreview', () => {
-  const rates = (model: string) => PRICES.modelstudio[model];
-  const session = { model: 'qwen3.8-flash', rates };
+  const session = FLASH;
   const flash = PRICES.modelstudio['qwen3.8-flash']!;
   const call = (ESTIMATE_CALL.input * flash.input + ESTIMATE_CALL.output * flash.output) / 1e6;
 
@@ -240,7 +242,7 @@ describe('workflowPreview', () => {
 
 describe('a run', () => {
   it('runs review, fix, check and verify in order, passing each report on', () => {
-    const run = startWorkflow(spec(REVIEW_FIX_VERIFY), 'the login form');
+    const run = startWorkflow(spec(REVIEW_FIX_VERIFY), 'the login form', FLASH);
     const { run: end, rounds } = drive(run, (call) => {
       if (call.kind === 'check') return { kind: 'check', passed: true, text: 'check `pnpm test` passed' };
       if (call.task.startsWith('Review the uncommitted')) return done(json({ findings: ['a.ts:3 null check', 'b.ts:9 typo'] }));
@@ -273,7 +275,7 @@ describe('a run', () => {
         { id: 'sum', role: 'plan', prompt: 'Sum up:\n{{parallel}}\nAnd tests alone: {{tests}}' },
       ],
     };
-    const { run, rounds } = drive(startWorkflow(spec(raw), ''), (call) => done(call.kind === 'agent' ? `on ${call.task.split('\n')[0]}` : ''));
+    const { run, rounds } = drive(startWorkflow(spec(raw), '', FLASH), (call) => done(call.kind === 'agent' ? `on ${call.task.split('\n')[0]}` : ''));
     expect(rounds.map((round) => round.length)).toEqual([3, 1]);
     const sum = rounds[1]![0]!;
     expect(sum.kind === 'agent' && sum.task).toBe('Sum up:\nsecurity:\non security\n\ntests:\non tests\n\nnaming:\non naming\nAnd tests alone: on tests');
@@ -289,7 +291,7 @@ describe('a run', () => {
         { id: 'end', role: 'plan', prompt: '{{each}}' },
       ],
     };
-    const { run, rounds } = drive(startWorkflow(spec(raw), ''), (call) => {
+    const { run, rounds } = drive(startWorkflow(spec(raw), '', FLASH), (call) => {
       if (call.kind !== 'agent') throw new Error('no check');
       if (call.task.startsWith('list')) return done(json({ files: ['a.ts', 'b.ts', 'c.ts'] }));
       return done(`seen ${call.task}`);
@@ -305,12 +307,12 @@ describe('a run', () => {
 
   it('skips a pipeline whose list is empty', () => {
     const raw = { description: 'x', steps: [{ id: 'find', role: 'explore', prompt: 'list', schema: { files: 'string[]' } }, { pipeline: { items: 'find.files', stages: [{ role: 'review', prompt: '{{item}}' }] } }, { role: 'plan', prompt: 'end' }] };
-    const { rounds } = drive(startWorkflow(spec(raw), ''), (call) => done(call.kind === 'agent' && call.task.startsWith('list') ? json({ files: [] }) : 'ok'));
+    const { rounds } = drive(startWorkflow(spec(raw), '', FLASH), (call) => done(call.kind === 'agent' && call.task.startsWith('list') ? json({ files: [] }) : 'ok'));
     expect(rounds.length).toBe(2);
   });
 
   it('stops at a step that hits its cost cap, with a report of what ran and what did not', () => {
-    const { run, rounds } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), (call) =>
+    const { run, rounds } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), (call) =>
       call.kind === 'agent' && call.role === 'worker' ? ended({ kind: 'capped', cap: 'cost' }, 0.15) : done(json({ findings: ['x'] }), 0.02),
     );
     expect(rounds.length).toBe(2);
@@ -326,7 +328,7 @@ describe('a run', () => {
 
   it('stops before a round whose caps the total cap no longer covers', () => {
     const raw = { ...REVIEW_FIX_VERIFY, maxCostUsd: 0.18 };
-    const { run, rounds } = drive(startWorkflow(spec(raw), ''), () => done(json({ findings: ['x'] }), 0.04));
+    const { run, rounds } = drive(startWorkflow(spec(raw), '', FLASH), () => done(json({ findings: ['x'] }), 0.04));
     expect(rounds.length).toBe(1);
     expect(run.stop).toEqual({ kind: 'total-cap', before: 'fix', needUsd: 0.15, leftUsd: 0.14 });
     expect(workflowReport(run)).toContain('stopped before fix: its caps need $0.15 and the total cap has $0.14 left');
@@ -334,13 +336,13 @@ describe('a run', () => {
 
   it('starts a round the total cap covers exactly', () => {
     const raw = { description: 'x', maxCostUsd: 0.1, steps: [{ role: 'review', prompt: 'a' }, { role: 'review', prompt: 'b' }] };
-    const { run } = drive(startWorkflow(spec(raw), ''), () => done('ok', 0.05));
+    const { run } = drive(startWorkflow(spec(raw), '', FLASH), () => done('ok', 0.05));
     expect(run.status).toBe('done');
   });
 
   it('waits for the rest of a round before it stops at a failed branch', () => {
     const raw = { description: 'x', steps: [{ parallel: [{ id: 'a', role: 'review', prompt: 'a' }, { id: 'b', role: 'review', prompt: 'b' }] }, { role: 'plan', prompt: 'end' }] };
-    let run = nextRound(startWorkflow(spec(raw), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(raw), '', FLASH), BUILTIN_AGENTS).run;
     run = settleUnit(run, 1, ended({ kind: 'failed', reason: 'model error' }));
     expect(run.status).toBe('running');
     expect(nextRound(run, BUILTIN_AGENTS).calls).toEqual([]);
@@ -350,25 +352,25 @@ describe('a run', () => {
   });
 
   it('fails a step whose report lacks its schema block', () => {
-    const { run } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), () => done('No JSON here.'));
+    const { run } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), () => done('No JSON here.'));
     expect(run.stop).toEqual({ kind: 'step-failed', unit: 'review', reason: 'its report has no JSON block with findings (string[])' });
   });
 
   it('stops at a failed check, and at a workspace with no check', () => {
     const answer = (passed: boolean | undefined) => (call: UnitCall) => (call.kind === 'check' ? ({ kind: 'check', passed, text: '' } as const) : done(json({ findings: ['x'] })));
-    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), answer(false)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the check failed' });
-    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), answer(undefined)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the workspace has no check command (set "check" in .g-code/settings.json)' });
+    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), answer(false)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the check failed' });
+    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), answer(undefined)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the workspace has no check command (set "check" in .g-code/settings.json)' });
   });
 
   it('stops at a field gate whose value differs', () => {
-    const { run } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), (call) =>
+    const { run } = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), (call) =>
       call.kind === 'check' ? { kind: 'check', passed: true, text: '' } : done(call.task.startsWith('Check that') ? json({ pass: false }) : json({ findings: [] })),
     );
     expect(run.stop).toEqual({ kind: 'gate', unit: 'gate-2', why: 'verify.pass is false, not true' });
   });
 
   it('cancels: running units end cancelled and nothing more starts', () => {
-    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), BUILTIN_AGENTS).run;
     run = cancelWorkflow(run);
     expect(run.status).toBe('cancelled');
     expect(run.units.map((unit) => unit.status)).toEqual(['cancelled']);
@@ -378,7 +380,7 @@ describe('a run', () => {
   });
 
   it('settles a unit once', () => {
-    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), BUILTIN_AGENTS).run;
     run = settleUnit(run, 1, done(json({ findings: [] }), 0.01));
     const again = settleUnit(run, 1, done(json({ findings: [] }), 0.5));
     expect(again).toBe(run);
@@ -386,8 +388,8 @@ describe('a run', () => {
 
   it('is deterministic: the same reports give the same calls, ids and tasks', () => {
     const answer = (call: UnitCall): UnitOutcome => (call.kind === 'check' ? { kind: 'check', passed: true, text: '' } : done(call.task.startsWith('Check') ? json({ pass: true }) : json({ findings: ['x'] })));
-    const first = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'same'), answer);
-    const second = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'same'), answer);
+    const first = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'same', FLASH), answer);
+    const second = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'same', FLASH), answer);
     const turns = (rounds: UnitCall[][]) => rounds.map((round) => workflowTurn(round, 'm'));
     expect(turns(second.rounds)).toEqual(turns(first.rounds));
     expect(second.run).toEqual(first.run);
@@ -413,7 +415,7 @@ describe('the log', () => {
 
   it('reads each unit from its result and its child end, and a cancelled child from its end alone', () => {
     const raw = { description: 'x', steps: [{ parallel: [{ id: 'a', role: 'review', prompt: 'a' }, { id: 'b', role: 'review', prompt: 'b' }] }, { gate: 'check' }] };
-    const run = nextRound(startWorkflow(spec(raw), ''), BUILTIN_AGENTS).run;
+    const run = nextRound(startWorkflow(spec(raw), '', FLASH), BUILTIN_AGENTS).run;
     const child = asSessionId('c-a');
     const events: TurnEvent[] = [
       { kind: 'child-end', seq: 3, at: '', child, toolUseId: unitToolId(1), end: { kind: 'done' }, turns: 2, costUsd: 0.004, summary: '' },
@@ -430,7 +432,7 @@ describe('the log', () => {
 
   it('reads a check result by its headline', () => {
     const raw = { description: 'x', steps: [{ role: 'review', prompt: 'a' }, { gate: 'check' }] };
-    let run = nextRound(startWorkflow(spec(raw), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(raw), '', FLASH), BUILTIN_AGENTS).run;
     run = settleUnit(run, 1, done('ok'));
     run = nextRound(run, BUILTIN_AGENTS).run;
     const passed = absorbOutcomes(run, [{ kind: 'tool-result', seq: 9, at: '', toolUseId: unitToolId(2), name: 'check', status: 'ok', output: 'check `pnpm test` passed\nok' }]);
@@ -440,7 +442,7 @@ describe('the log', () => {
   });
 
   it('closes with the report as a text turn', () => {
-    const { run } = drive(startWorkflow(spec({ description: 'x', steps: [{ role: 'review', prompt: 'a' }] }), ''), () => done('Looks fine.'));
+    const { run } = drive(startWorkflow(spec({ description: 'x', steps: [{ role: 'review', prompt: 'a' }] }), '', FLASH), () => done('Looks fine.'));
     const turn = closingTurn(run, 'm');
     expect(turn.stopReason).toBe('end_turn');
     expect(turn.content).toEqual([{ type: 'text', text: workflowReport(run), citations: null }]);
@@ -490,7 +492,7 @@ describe('resume', () => {
   });
 
   it('journals each agent call that ended done, with its child and its report, and no failed one', () => {
-    const { run } = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
+    const { run } = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH), undefined, failingThree);
     expect(run.stop).toMatchObject({ kind: 'step-failed', unit: 'three' });
     const journal = journalOf(run);
     expect(journal.map((entry) => [entry.step, entry.child, entry.result])).toEqual([
@@ -501,8 +503,8 @@ describe('resume', () => {
   });
 
   it('replays steps 1 and 2 with no call once step 3 failed, and runs step 3', () => {
-    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
-    const { run, live } = resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH), undefined, failingThree);
+    const { run, live } = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH, 'run-1'), journalOf(first.run), passing);
     expect(tasksOf(live)).toEqual(['judge']);
     expect(run.status).toBe('done');
     expect(run.units.map((unit) => [unit.label, unit.status, unit.costUsd, unit.turns, unit.sessionId])).toEqual([
@@ -517,23 +519,23 @@ describe('resume', () => {
   });
 
   it('runs a step whose prompt changed, and every step after it, though their keys match', () => {
-    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, passing);
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH), undefined, passing);
     expect(first.run.status).toBe('done');
-    const { live } = resumeDrive(startWorkflow(spec(changed(1, 'look two again')), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    const { live } = resumeDrive(startWorkflow(spec(changed(1, 'look two again')), 'a.ts', FLASH, 'run-1'), journalOf(first.run), passing);
     expect(tasksOf(live)).toEqual(['look two again', 'judge']);
-    const input = resumeDrive(startWorkflow(spec(THREE), 'b.ts', 'run-1'), journalOf(first.run), passing);
+    const input = resumeDrive(startWorkflow(spec(THREE), 'b.ts', FLASH, 'run-1'), journalOf(first.run), passing);
     expect(tasksOf(input.live), 'another input changes the first prompt').toEqual(['look one at b.ts', 'look two', 'judge']);
   });
 
   it('converges: resuming twice, or resuming the resumed run, replays the same, and a run that finished replays whole', () => {
-    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
-    const again = () => resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH), undefined, failingThree);
+    const again = () => resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH, 'run-1'), journalOf(first.run), passing);
     const [a, b] = [again(), again()];
     expect(b.live).toEqual(a.live);
     expect(b.run).toEqual(a.run);
     const resumedJournal = journalOf(a.run);
     expect(resumedJournal.map((entry) => entry.step), 'the resumed run journals its replays too').toEqual(['one', 'two', 'three']);
-    const whole = resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), resumedJournal, () => {
+    const whole = resumeDrive(startWorkflow(spec(THREE), 'a.ts', FLASH, 'run-1'), resumedJournal, () => {
       throw new Error('no call runs');
     });
     expect(whole.live).toEqual([]);
@@ -542,24 +544,24 @@ describe('resume', () => {
 
   it('runs a check while it replays, and replays the steps after a check that passes', () => {
     const answer = (call: UnitCall): UnitOutcome => (call.kind === 'check' ? { kind: 'check', passed: true, text: '' } : done(call.task.startsWith('Check') ? json({ pass: true }) : json({ findings: ['x'] })));
-    const first = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth'), answer);
-    const { run, live } = resumeDrive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth', 'run-1'), journalOf(first.run), answer);
+    const first = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth', FLASH), answer);
+    const { run, live } = resumeDrive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth', FLASH, 'run-1'), journalOf(first.run), answer);
     expect(tasksOf(live)).toEqual(['check']);
     expect(run.units.map((unit) => unit.status)).toEqual(['replayed', 'replayed', 'passed', 'replayed']);
-    expect(replayedBeforeLive(spec(REVIEW_FIX_VERIFY), 'auth', BUILTIN_AGENTS, startReplay('run-1', journalOf(first.run))), 'the preview counts up to the first call that runs').toEqual(['review', 'fix']);
+    expect(replayedBeforeLive(spec(REVIEW_FIX_VERIFY), 'auth', FLASH, BUILTIN_AGENTS, startReplay('run-1', journalOf(first.run))), 'the preview counts up to the first call that runs').toEqual(['review', 'fix']);
   });
 
   it('never replays a step in a lane', () => {
     const laned = { ...THREE, steps: THREE.steps.map((s, i) => (i === 0 ? { ...s, role: 'worker', lane: 'fix' } : s)) };
-    const first = resumeDrive(startWorkflow(spec(laned), 'a.ts'), undefined, passing);
+    const first = resumeDrive(startWorkflow(spec(laned), 'a.ts', FLASH), undefined, passing);
     expect(journalOf(first.run).map((entry) => entry.step)).toEqual(['two', 'three']);
-    const { live } = resumeDrive(startWorkflow(spec(laned), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    const { live } = resumeDrive(startWorkflow(spec(laned), 'a.ts', FLASH, 'run-1'), journalOf(first.run), passing);
     expect(tasksOf(live)).toEqual(['look one at a.ts', 'look two', 'judge']);
   });
 
   it('counts empty results and points at the session to read for a failed or empty step', () => {
     const raw = { description: 'x', steps: [{ parallel: [{ id: 'a', role: 'explore', prompt: 'a' }, { id: 'b', role: 'explore', prompt: 'b' }, { id: 'c', role: 'explore', prompt: 'c' }] }] };
-    let run = nextRound(startWorkflow(spec(raw), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(raw), '', FLASH), BUILTIN_AGENTS).run;
     run = settleUnit(run, 1, done('  ', 0.01, 2, 'child-a'));
     run = settleUnit(run, 2, { kind: 'agent', end: { kind: 'failed', reason: 'model error' }, report: '', costUsd: 0.01, turns: 1, sessionId: 'child-b' });
     run = settleUnit(run, 3, done('found it', 0.01, 2, 'child-c'));
@@ -583,14 +585,14 @@ describe('resume', () => {
       ok: false,
       problem: "resume needs the session id of the run to resume, which that run's report and its Tasks row name: /workflow <name> --resume <run>",
     });
-    const preview = workflowPreview(spec(THREE), 'a.ts', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] });
+    const preview = workflowPreview(spec(THREE), 'a.ts', BUILTIN_AGENTS, FLASH);
     expect(previewQuestion({ ...preview, resume: { run: 'run-1', replays: ['one', 'two'] } })).toMatch(/^Resume workflow review-fix-verify from run run-1: 3 steps, 2 replayed with no model call, about \$0\.\d+, at most \$0\.09 \(cap \$0\.50\)\?$/);
   });
 });
 
 describe('progress', () => {
   it('says which step runs and what it spent', () => {
-    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), BUILTIN_AGENTS).run;
+    let run = nextRound(startWorkflow(spec(REVIEW_FIX_VERIFY), '', FLASH), BUILTIN_AGENTS).run;
     expect(progressLine(workflowProgress(run))).toBe('Step 1 of 5: review · $0.00 of $0.40');
     run = settleUnit(run, 1, done(json({ findings: [] }), 0.012));
     run = nextRound(run, BUILTIN_AGENTS).run;
@@ -665,7 +667,7 @@ describe('the example workflows in docs/workflows', () => {
     const parsed = parseWorkflow(JSON.parse(readFileSync(path.join(dir, file), 'utf8')), { name: file.slice(0, -5), source: 'workspace', path: `docs/workflows/${file}` });
     if (!parsed.ok) throw new Error(parsed.problem);
     expect(workflowRefusal(parsed.value, BUILTIN_AGENTS, 'ask')).toBeUndefined();
-    expect(workflowPreview(parsed.value, '', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] }).stopsBefore).toBeUndefined();
+    expect(workflowPreview(parsed.value, '', BUILTIN_AGENTS, FLASH).stopsBefore).toBeUndefined();
   });
 
   it('ships both examples', () => {

@@ -53,3 +53,32 @@ export function costAt(rates: Rates | undefined, usage: TokenUsage): number | nu
 }
 
 export const costOf = (provider: ProviderName, model: string, usage: TokenUsage): number | null => costAt(ratesOf(provider, model), usage);
+
+/**
+ * The model Geno's built-in dollar caps were sized on, and its mean model call: 1,209 calls of 143 archived runs of
+ * docs/results/real-usecases (the 34 Claude Sonnet 5.5 runs' 144 calls have the same shape, each bucket within 15%).
+ */
+export const REFERENCE_MODEL = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const satisfies { readonly provider: ProviderName; readonly model: string };
+export const REFERENCE_CALL: TokenUsage = { input: 6, cacheRead: 10_854, cacheWrite: 1_024, output: 346 };
+
+/**
+ * A built-in default dollar cap, written as what it allows on the reference model. `capUsd` scales it to the model
+ * that runs, so a cap buys the same number of typical calls on every model. A plain number is a cap a user set, and
+ * holds as given.
+ */
+export type DefaultUsd = { readonly referenceUsd: number };
+export type UsdCap = number | DefaultUsd;
+export const defaultUsd = (referenceUsd: number): DefaultUsd => ({ referenceUsd });
+
+/**
+ * What one typical call costs on this model over what it costs on the reference model. A model with no price keeps
+ * the reference dollars: its calls cost unknown, which a budget counts as free, so its turn cap is what stops it.
+ */
+export function priceFactor(provider: ProviderName, model: string): number {
+  const here = costAt(ratesOf(provider, model), REFERENCE_CALL);
+  return here === null ? 1 : here / costAt(ratesOf(REFERENCE_MODEL.provider, REFERENCE_MODEL.model), REFERENCE_CALL)!;
+}
+
+/** A cap in dollars on this model, to a tenth of a cent. */
+export const capUsd = (cap: UsdCap, provider: ProviderName, model: string): number =>
+  typeof cap === 'number' ? cap : Math.round(cap.referenceUsd * priceFactor(provider, model) * 1000) / 1000;

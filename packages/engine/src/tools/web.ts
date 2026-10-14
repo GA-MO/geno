@@ -238,7 +238,7 @@ export function readerChoices(env: Env, session: WebDeps['session']): Choice[] {
   return choices;
 }
 
-type Read = (request: (model: string) => MessageStreamParams, signal: AbortSignal) => Promise<string>;
+type Read = (request: (choice: Choice) => MessageStreamParams, signal: AbortSignal) => Promise<string>;
 
 function reader(deps: WebDeps): Read {
   return async (request, signal) => {
@@ -253,7 +253,7 @@ function reader(deps: WebDeps): Read {
       }
       const started = performance.now();
       try {
-        const message = await wire.stream(request(choice.model), { signal, onEvent: () => {} });
+        const message = await wire.stream(request(choice), { signal, onEvent: () => {} });
         const usage = usageOf(message);
         deps.onRead?.({ model: choice.model, usage, costUsd: costOf(choice.provider, choice.model, usage), latencyMs: Math.round(performance.now() - started) });
         return message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
@@ -359,7 +359,7 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       const page = pageOf(final.url, response);
       const window = pageWindowOf(page.markdown, offset);
       if (window === undefined) throw new ToolError(`${final.url} has ${page.markdown.length} characters of text, so offset ${offset} is past its end`);
-      const answer = await read((model) => readerRequest(page, window, question, model), ctx.signal);
+      const answer = await read((choice) => readerRequest(page, window, question, choice), ctx.signal);
       const text = fetchAnswerText({ page, window, answer, redirects });
       const approval = records.at(-1);
       return approval === undefined ? text : { text, approval };

@@ -96,7 +96,8 @@ const task = z.strictObject({
   prompt: z.string().min(1),
   when,
   edits: z.boolean(),
-  budget: z.strictObject({ maxCostUsd: z.number().positive(), maxTurns: z.number().int().positive() }),
+  // A cost the user set, or the default, kept unscaled so each run scales it to its own model.
+  budget: z.strictObject({ maxCostUsd: z.union([z.number().positive(), z.strictObject({ referenceUsd: z.number().positive() })]), maxTurns: z.number().int().positive() }),
   paused: z.boolean(),
   createdAt: z.number(),
   createdBy: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('user') }), z.strictObject({ kind: z.literal('model'), sessionId: z.string() })]),

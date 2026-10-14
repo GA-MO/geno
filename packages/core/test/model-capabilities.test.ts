@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capabilitiesOf, MODEL_CAPABILITIES, PAGE_MAX_CHARS, PRICES, PROVIDERS, PROVIDER_SPECS, UNKNOWN_MODEL, type ProviderName } from '../src/index.js';
+import { agentToolModes, capabilitiesOf, thinkingOffField, MODEL_CAPABILITIES, PAGE_MAX_CHARS, PRICES, PROVIDERS, PROVIDER_SPECS, UNKNOWN_MODEL, type ProviderName } from '../src/index.js';
 
 const rows = PROVIDERS.flatMap((provider) => Object.entries(MODEL_CAPABILITIES[provider]).map(([model, caps]) => ({ provider, model, caps })));
 
@@ -50,6 +50,34 @@ describe('the model capability table', () => {
     expect(capabilitiesOf('anthropic', 'claude-opus-5-5').thinking).toBe('adaptive');
     expect(capabilitiesOf('anthropic', 'claude-haiku-4-5').thinking).toBe('omit');
     expect(capabilitiesOf('modelstudio', 'qwen3.8-flash').thinking).toBe('omit');
+  });
+
+  it('turns thinking off in the shape each Claude model takes: between_tools on Sonnet 5.5, not at all on Opus 5.5', () => {
+    expect(capabilitiesOf('anthropic', 'claude-sonnet-5-5').thinkingOff).toBe('between_tools');
+    expect(capabilitiesOf('bedrock', 'anthropic.claude-sonnet-5-5').thinkingOff).toBe('between_tools');
+    expect(capabilitiesOf('openrouter', 'anthropic/claude-sonnet-5.5').thinkingOff).toBe('between_tools');
+    expect(capabilitiesOf('anthropic', 'claude-opus-5-5').thinkingOff).toBe('omit');
+    expect(capabilitiesOf('anthropic', 'claude-haiku-4-5').thinkingOff).toBe('disabled');
+    expect(capabilitiesOf('modelstudio', 'qwen3.8-flash').thinkingOff).toBe('disabled');
+    expect(UNKNOWN_MODEL.thinkingOff).toBe('disabled');
+    expect(thinkingOffField('between_tools')).toEqual({ thinking: { type: 'between_tools' } });
+    expect(thinkingOffField('omit')).toEqual({});
+  });
+
+  it('forces a tool and sends a temperature only where the model takes them: not on Claude Opus or Sonnet 5.5', () => {
+    for (const { provider, model, caps } of rows) {
+      const claude55 = /claude-(opus|sonnet)-5[.-]5$/.test(model);
+      expect(caps.forcesTool, `${provider} ${model}`).toBe(!claude55);
+      expect(caps.temperature, `${provider} ${model}`).toBe(!claude55);
+    }
+  });
+
+  it('turns the agent tool on by default for Claude, in Plan, Ask and Auto, and leaves it off for qwen', () => {
+    for (const { provider, model, caps } of rows) expect(caps.subagents, `${provider} ${model}`).toBe(model.includes('claude'));
+    expect(agentToolModes('anthropic', 'claude-sonnet-5-5')).toEqual(['plan', 'ask', 'auto']);
+    expect(agentToolModes('vertex', 'claude-opus-5-5')).toEqual(['plan', 'ask', 'auto']);
+    expect(agentToolModes('modelstudio', 'qwen3.8-flash')).toEqual([]);
+    expect(agentToolModes('openai', 'gpt-x')).toEqual([]);
   });
 
   it('sends effort to every model that takes it, and never to Haiku 4.5', () => {

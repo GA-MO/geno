@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
+  capUsd,
   DEFAULT_SCHEDULE_BUDGET,
   describeWhen,
   endRun,
@@ -371,6 +372,12 @@ describe('schedule_task input', () => {
       ok: true,
       value: { action: 'create', draft: { title: 'Check the deploy of main', prompt: 'Check the deploy of main', when: { kind: 'at', at: now + HOUR }, edits: false, budget: DEFAULT_SCHEDULE_BUDGET } },
     });
+  });
+
+  it("keeps the default cost unscaled, for each run to scale to its own model, and a cost the user sets as given", () => {
+    expect(DEFAULT_SCHEDULE_BUDGET.maxCostUsd).toEqual({ referenceUsd: 0.05 });
+    expect(capUsd(DEFAULT_SCHEDULE_BUDGET.maxCostUsd, 'anthropic', 'claude-sonnet-5-5')).toBe(0.245);
+    expect(parse({ action: 'create', prompt: 'x', when: 'in 1h', max_cost_usd: 0.3 })).toMatchObject({ ok: true, value: { draft: { budget: { maxCostUsd: 0.3 } } } });
   });
 
   it('updates only the budget limit it names', () => {

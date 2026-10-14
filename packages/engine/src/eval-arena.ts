@@ -12,6 +12,7 @@ import {
   type DoneReason,
   type EvalTask,
   type LaneEnd,
+  capUsd,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { arenaPreview, arenaVariants, REVIEW_LIMITS, startArena, type ArenaDeps } from './arena.js';
@@ -229,7 +230,7 @@ export const evalArenaCommand: Command = async (args, ctx) => {
   for (const [i, task] of tasks.entries()) {
     const spent = results.reduce((sum, r) => sum + r.costUsd, 0);
     // Each task may spend n lanes at their cap plus the review's; past what is left, the run stops.
-    const cap = Math.min(perLane, (maxCost - spent - REVIEW_LIMITS.maxCostUsd) / n);
+    const cap = Math.min(perLane, (maxCost - spent - capUsd(REVIEW_LIMITS.maxCostUsd, provider, values.model)) / n);
     if (cap < 0.005) {
       io.err(`budget: stopped at an estimated $${spent.toFixed(4)} before task ${i + 1} of ${tasks.length}, past --max-cost ${maxCost}`);
       stopped = true;

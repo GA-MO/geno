@@ -55,6 +55,8 @@ import {
   workflowToolDefinitions,
   subagentModelsOf,
   claudeDirOf,
+  defaultUsd,
+  agentToolModes,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -67,7 +69,7 @@ import { addedDirectories, settingDirectories, workingDirectories } from './dire
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { pstackMap, writeGenoTools } from './geno-tools.js';
-import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
+import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, limitsOn, type LimitsSpec, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
@@ -103,7 +105,8 @@ import { ghCli, githubRemote } from './gh.js';
 import { HookSessions } from './hooks.js';
 
 export type AgentOptions = {
-  readonly limits: Limits;
+  /** A default cost cap scales to the session's model. */
+  readonly limits: LimitsSpec;
   /** From --check; undefined falls back to the `check` setting. */
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
@@ -207,6 +210,7 @@ function modeFlag(raw: string | undefined): SessionMode | undefined {
 
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
   const { session } = opened.log;
+  const limits = limitsOn(options.limits, session);
   const workspace = await workspaceDir(io.cwd, session.workspace);
   const head = opened.log.events[0];
   // The scratchpad the session's environment names, which outlives the run; a log from before sessions had one gets a
@@ -331,8 +335,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
-    // `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
-    const agentTool = options.agentTool ?? settings.geno.agentTool?.value.includes(startMode) === true;
+    // `agentTool` lists the modes whose model may start subagents itself, by default those the model's capabilities give;
+    // `@` mentions work in every mode.
+    const agentTool = options.agentTool ?? (settings.geno.agentTool?.value ?? agentToolModes(session.provider, session.model)).includes(startMode);
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     // The session's temp dir is its own: the environment text offers it for scratch files, and bash's TMPDIR is it.
     const readRoots = [tempDir, ...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
@@ -352,7 +357,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       store,
       parent: opened,
       agents: scan.agents,
-      limits: options.limits,
+      limits,
       approval: options.approval,
       allowWriters: options.allowWorker === true,
       files: options.surface?.files ?? DISK_FILES,
@@ -433,7 +438,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
             toolHooks: hooks.toolHooks(session.id, options.approval),
             stop: hooks.stopHook(session.id),
           };
-    result = await drive(io, store, started, prompt, options.limits, hooked, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
+    result = await drive(io, store, started, prompt, limits, hooked, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
     return result;
   } finally {
     steers.release(session.id, inbox);
@@ -453,15 +458,21 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   }
 }
 
+/**
+ * A turn's cost cap without --max-cost: $0.40 at qwen3.8-flash prices, scaled to the session's model, so a turn buys as
+ * many typical calls on Claude as on flash, children included.
+ */
+export const DEFAULT_TURN_USD = defaultUsd(0.4);
+
 /** The per-run limit flags of every command that runs the agent. */
 export const LIMIT_FLAGS = {
   'max-turns': { type: 'string', default: '40' },
-  'max-cost': { type: 'string', default: '0.40' },
+  'max-cost': { type: 'string' },
 } as const;
 
-export const limitsOf = (values: { readonly 'max-turns': string; readonly 'max-cost': string }): Limits => ({
+export const limitsOf = (values: { readonly 'max-turns': string; readonly 'max-cost'?: string | undefined }): LimitsSpec => ({
   maxTurns: positiveNumber('max-turns', values['max-turns'], true),
-  maxCostUsd: positiveNumber('max-cost', values['max-cost'], false),
+  maxCostUsd: values['max-cost'] === undefined ? DEFAULT_TURN_USD : positiveNumber('max-cost', values['max-cost'], false),
 });
 
 export const agent: Command = async (args, { io, store }) => {
