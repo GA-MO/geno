@@ -1,6 +1,6 @@
 // The Layer A cases: each is a prompt a user of this repo would type, a starting repo, and checks against the log.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { analyze, bashCalls, bashRan, fail, isUntilWait, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
 
@@ -40,6 +40,13 @@ const staleList = (run) => {
   const list = run.events.slice(0, lastPrompt(run)).filter((e) => e.kind === 'tool-result' && e.todo !== undefined).at(-1)?.todo ?? [];
   return list.some((i) => i.status !== 'done') ? list : [];
 };
+
+/** Every session log of a run's own HOME, the main session's and each subagent's. */
+function sessionLogs(ctx) {
+  const dir = path.join(ctx.home, '.gcode', 'sessions');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => f.endsWith('.jsonl')).map((f) => ({ file: f, events: readFileSync(path.join(dir, f), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) }));
+}
 
 /** A PNG's width from its IHDR chunk, or undefined when the file is missing or not a PNG. */
 function pngWidth(file) {
@@ -559,6 +566,41 @@ export const CASES = [
           return ok(shot !== undefined && shown !== undefined && shown >= 2 * shot, `${detail} (width ${shown} vs one shot ${shot})`);
         },
       },
+    ],
+  },
+  {
+    id: 'A36-subagent-review',
+    area: 'subagents',
+    lang: 'th',
+    fixture: 'game',
+    mode: 'auto',
+    prompt: 'แบ่ง agent สองตัวช่วยตรวจโค้ดหาบั๊กหรือจุดเสี่ยง ตัวหนึ่งดู src/logic อีกตัวดู src/scenes ห้ามแก้โค้ด แล้วสรุปผลรวมให้ฟัง',
+    checks: [
+      noEdits,
+      { id: 'spawned', what: 'starts two or more subagents with the agent tool', test: (run) => ok(named(run, 'agent').filter((c) => c.result?.status === 'ok').length >= 2, named(run, 'agent').map((c) => c.result?.status).join(',') || 'no agent call') },
+      { id: 'children-clean', what: 'every subagent session ends without an error event', test: (run, ctx) => {
+        const children = sessionLogs(ctx).filter((s) => s.events[0]?.session?.id !== run.events[0]?.session?.id);
+        if (children.length === 0) return fail('no subagent session');
+        const bad = children.flatMap((s) => s.events.filter((e) => e.kind === 'error').map((e) => `${s.file.slice(0, 8)} ${e.error}: ${String(e.message).slice(0, 120)}`));
+        return ok(bad.length === 0, bad.join(' | ') || `${children.length} clean`);
+      } },
+      { id: 'answers-in-thai', what: 'the summary is in Thai', test: (run) => ok(thaiShare(run.finalText) > 0.3, `thai share ${thaiShare(run.finalText).toFixed(2)}`) },
+    ],
+  },
+  {
+    id: 'A37-auto-thai-server',
+    area: 'modes',
+    lang: 'th',
+    fixture: 'game',
+    mode: 'auto',
+    prompt: 'รันเซิร์ฟเวอร์ของเกม (npm run dev) แล้วเช็ก http://localhost:5173/health ให้หน่อยว่าตอบอะไร เสร็จแล้วปิดเซิร์ฟเวอร์ด้วย',
+    checks: [
+      { id: 'no-denies', what: 'Auto runs the user\'s own server and request without a denial', test: (run) => {
+        const denied = run.calls.filter((c) => ['denied', 'rejected'].includes(c.result?.status));
+        return ok(denied.length === 0, denied.map((c) => `${c.name} ${String(c.input.command ?? '').slice(0, 60)}: ${c.result?.approval?.classifier?.reason ?? c.result?.approval?.reason ?? ''}`.slice(0, 200)).join(' | '));
+      } },
+      { id: 'health-answered', what: 'reports the JSON the server returned', test: (run) => ok(/coin-dash|"status"\s*:\s*"ok"|status.{0,4}ok/i.test(run.finalText), run.finalText.slice(0, 160)) },
+      { id: 'answers-in-thai', what: 'answers in Thai', test: (run) => ok(thaiShare(run.finalText) > 0.3, `thai share ${thaiShare(run.finalText).toFixed(2)}`) },
     ],
   },
 ];
