@@ -1,6 +1,8 @@
 // Reads one session log into the facts the checks need, and holds the checks every case shares.
 import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { REPO } from './env.mjs';
 
 /** A skill's own folder, which its text tells the model to read from. */
 const PLUGIN_SKILLS = path.join(homedir(), '.claude/plugins/');
@@ -28,6 +30,8 @@ export function analyze(events) {
     texts,
     assistants,
     finalText,
+    /** The workspace the run worked in, as its log names it: absolute paths in its commands point there. */
+    workspace: events[0]?.session?.workspace,
     lastStop: last?.stopReason,
     allText: texts.map((t) => t.text).join('\n'),
     errors: events.filter((e) => e.kind === 'error'),
@@ -76,41 +80,24 @@ export const isUntilWait = (command) => {
   return /^\s*until\s[^;&|]+;\s*do\s+sleep\s+[\d.]+;\s*done\s*(;|&&|$)/.test(plain) && !/&\s*$|&\s+[^&]/.test(plain.replace(/&&/g, ''));
 };
 
-const SHELL_FOR_FILES = /^\s*(cat|head|tail|less|ls|find|grep|rg|sed\s+-n|awk)\b/;
 /**
- * cat, head or tail writing a file, with an output redirect or a heredoc, as in `cat > "$TMPDIR/gen.mjs" <<'EOF'`.
- * A stderr redirect such as `2>/dev/null` leaves it a read.
+ * What Geno's shell rules say about each bash command of the run (scripts/real-usecases/shell-facts.ts): its file
+ * steps, its write steps into the workspace, the workspace files a sed -i or perl -i edits, and Geno's refusal. Asked
+ * once per run and kept on it, so the checks judge a line as the engine does.
  */
-const SHELL_WRITE_STEP = /^\s*(cat|head|tail)\b([^|]*(?<![\d&])>(?!&)|.*<<)/;
-
-/** `command` with each heredoc's body left out, so the lines of a script it writes are not read as commands. */
-const withoutHeredocs = (command) => command.replace(/<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g, '<<$2$3');
-
-const unquoted = (match) => match.slice(1).find((group) => group !== undefined);
-/**
- * The files a shell line writes: each output redirect's, tee's and sed -i's, without /dev/null and fd duplications. A
- * variable the line sets, as in `D="$scratch/head"; cat > "$D/x.js"`, is filled in; $TMPDIR and the rest stay as written.
- */
-function writeTargets(command) {
-  const vars = new Map([...command.matchAll(/(?:^|[\s;&|])([A-Za-z_]\w*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|]*))/g)].map((m) => [m[1], m[2] ?? m[3] ?? m[4]]));
-  const expand = (target) => target.replace(/\$\{?([A-Za-z_]\w*)\}?/g, (all, name) => vars.get(name) ?? all);
-  const redirects = [...command.matchAll(/>>?\s*(?!&)(?:"([^"]+)"|'([^']+)'|([^\s;&|)]+))/g)].map(unquoted);
-  const tees = [...command.matchAll(/\btee\s+(?:-a\s+)?(?:"([^"]+)"|'([^']+)'|([^\s;&|)]+))/g)].map(unquoted);
-  // sed -i's file is its last word once the line's own redirects are left out.
-  const seds = command.split(/;|&&|\|\||\|/).flatMap((part) => (/\bsed\s+-i\b/.test(part) ? [part.replace(/\d*>>?\s*\S+/g, '').trim().split(/\s+/).at(-1).replace(/^["']|["']$/g, '')] : []));
-  return [...redirects, ...tees, ...seds].map(expand).filter((target) => target !== '/dev/null');
+function shellFacts(run, ctx) {
+  if (run.shellFacts === undefined) {
+    const commands = bashCalls(run).map((c) => String(c.input.command ?? ''));
+    const workspace = run.workspace ?? ctx.ws;
+    const facts = spawnSync(path.join(REPO, 'node_modules/.bin/tsx'), [path.join(REPO, 'scripts/real-usecases/shell-facts.ts'), workspace], { input: JSON.stringify(commands), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (facts.status !== 0) throw new Error(`shell-facts failed: ${facts.stderr.slice(0, 400)}`);
+    run.shellFacts = new Map(JSON.parse(facts.stdout).map((fact, i) => [commands[i], fact]));
+  }
+  return (call) => run.shellFacts.get(String(call.input.command ?? ''));
 }
-
-/** A temp place Geno's environment text tells the model to put scratch scripts: $TMPDIR, /tmp or the session scratchpad. */
-const TEMP = /^(\$\{?TMPDIR\}?(\/|$)|\/tmp\/|\/private\/tmp\/|\/var\/folders\/|\/private\/var\/folders\/)/;
-const isTemp = (target, scratchpad) => TEMP.test(target) || (scratchpad !== undefined && target.startsWith(scratchpad));
 
 /** Whether a grep call's result showed lines of `file`, which the edit gate counts as seeing it. */
 const grepShowed = (call, file) => call.name === 'grep' && call.result?.status === 'ok' && outputOf(call).split('\n').some((line) => line.startsWith(`${file}:`) && /^\d+:/.test(line.slice(file.length + 1)));
-const SHELL_WRITES = /(^|[;&|]\s*)(echo|printf|cat)\b[^|]*>[^&]|\bsed\s+-i\b|\btee\b/;
-/** The workspace files a shell write of SHELL_WRITES changes: its targets outside the temp places. */
-const workspaceWrites = (command, scratchpad) => (SHELL_WRITES.test(command) ? writeTargets(command).filter((target) => !isTemp(target, scratchpad)) : []);
-
 /** The checks every case runs. A case can drop one by id with `skipShared`. */
 export const SHARED = [
   {
@@ -142,9 +129,9 @@ export const SHARED = [
   {
     id: 'dedicated-file-tools',
     what: 'reads, lists and searches with read/list/grep/glob, not cat/ls/find/grep in bash that ran',
-    test: (run) => {
-      const reads = (part) => SHELL_FOR_FILES.test(part) && !SHELL_WRITE_STEP.test(part);
-      const bad = bashRan(run).flatMap((c) => withoutHeredocs(String(c.input.command ?? '')).split(/;|&&|\|\||\n/).filter(reads).map((part) => `seq ${c.seq}: ${part.trim().slice(0, 80)}`));
+    test: (run, ctx) => {
+      const facts = shellFacts(run, ctx);
+      const bad = bashRan(run).flatMap((c) => facts(c).fileSteps.map(({ text, tool }) => `seq ${c.seq}: ${text.slice(0, 80)} (${tool})`));
       return verdict(bad.length === 0, bad.join(' | '));
     },
   },
@@ -152,7 +139,11 @@ export const SHARED = [
     id: 'edits-with-edit',
     what: 'writes workspace files with edit, not echo/cat redirection, sed -i or tee; a scratch script in $TMPDIR or the scratchpad is fine',
     test: (run, ctx) => {
-      const bad = bashRan(run).flatMap((c) => workspaceWrites(withoutHeredocs(String(c.input.command ?? '')), ctx.scratchpad).map((target) => `seq ${c.seq}: ${target}`));
+      const facts = shellFacts(run, ctx);
+      const bad = bashRan(run).flatMap((c) => {
+        const { writeSteps, inPlaceEdits } = facts(c);
+        return [...writeSteps.flatMap((step) => step.files), ...inPlaceEdits].map((file) => `seq ${c.seq}: ${file}`);
+      });
       return verdict(bad.length === 0, bad.join(' | '));
     },
   },
