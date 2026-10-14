@@ -234,3 +234,40 @@ describe('background commands in the engine process', () => {
     second.close();
   }, 30_000);
 });
+
+describe("a command's TMPDIR in a run", () => {
+  it("is the session's scratchpad, in the foreground and the background, so show_files shows what the model wrote there unasked", async () => {
+    const { workspace, env, store } = await setup();
+    const where = use('bash', { command: 'echo "$TMPDIR" && echo shot > "$TMPDIR/before.png"' });
+    const later = background('echo bg > "$TMPDIR/bg.txt"');
+    const settle = use('bash', { command: 'sleep 1' });
+    const replies = [
+      toolCall('Where is the temp dir?', [where, loadTools('show_files')], usage),
+      toolCall('In the background.', [later], usage),
+      toolCall('Waiting for it.', [settle], usage),
+    ];
+    const transport = fakeTransport(replies);
+    let shown: FakeToolUse | undefined;
+    // The model learns the path from what the first command printed, as one that ran `echo "$TMPDIR"` would.
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (transport.requests.length === 3) {
+        const tmp = resultOf(transport.requests[1]!.body as Body, where.id).split('\n')[0]!;
+        shown = use('show_files', { files: [path.join(tmp, 'before.png'), path.join(tmp, 'bg.txt')] });
+        replies.push(toolCall('Showing them.', [shown], usage), answer('Done.', usage));
+      }
+      return transport.fetch(input, init);
+    };
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Use the temp dir'], env, { fetch });
+    expect(result.code).toBe(0);
+    const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
+    const head = (await readSessionLog(sessionFile(store, asSessionId(id)))).events[0]!;
+    const scratchpad = head.kind === 'session-start' ? head.environment?.scratchpad : undefined;
+    expect(scratchpad).toMatch(/gcode-sessions/);
+    const bodies = transport.requests.map((r) => r.body as Body);
+    expect(resultOf(bodies[1]!, where.id).split('\n')[0]).toBe(scratchpad);
+    const showed = resultOf(bodies[4]!, shown!.id);
+    expect(showed).not.toMatch(/denied|outside the workspace/);
+    expect(showed).toContain('before.png');
+    expect(showed).toContain('bg.txt');
+  }, 30_000);
+});
