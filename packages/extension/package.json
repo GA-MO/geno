@@ -430,7 +430,13 @@
           },
           "default": [],
           "scope": "machine",
-          "markdownDescription": "Hosts the commands Geno runs may reach from the sandbox, such as `registry.npmjs.org` or `*.githubusercontent.com`. Empty, the default, keeps the sandbox off the network. The list applies to every workspace, since the sandbox keeps one per engine, and a change restarts the engine. Web fetches and the browser follow the workspace's `WebFetch(domain:...)` and `Browser(domain:...)` rules instead."
+          "markdownDescription": "More hosts the commands Geno runs may reach from the sandbox, such as `crates.io` or `*.example.com`. They add to the package hosts that `#gcode.sandbox.packageHosts#` opens. The list applies to every workspace, since the sandbox keeps one per engine, and a change restarts the engine. Web fetches and the browser follow the workspace's `WebFetch(domain:...)` and `Browser(domain:...)` rules instead."
+        },
+        "gcode.sandbox.packageHosts": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "Let the commands Geno runs reach the npm, Yarn and PyPI registries and GitHub (`registry.npmjs.org`, `registry.yarnpkg.com`, `pypi.org`, `files.pythonhosted.org`, `github.com`, `codeload.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, `raw.githubusercontent.com`), so `npm install`, `pnpm add`, `yarn add`, `pip install` and `git clone` work. An install still asks in Ask mode and goes to the classifier in Auto. Off, the sandbox reaches only localhost and the hosts in `#gcode.sandbox.allowedDomains#`. A change restarts the engine."
         },
         "gcode.additionalDirectories": {
           "type": "array",

@@ -92,9 +92,13 @@ The factors are 4.91 for Claude Sonnet 5.5 and 8.725 for Claude Opus 5.5, on Ant
 
 A model with no price, such as Claude on Bedrock or Vertex, keeps the `qwen3.8-flash` dollars. Geno cannot see what its calls cost, so it counts them as free, and the turn cap is what stops the run.
 
-## Web search
+## Web search and the sandbox's network
 
-`web_search` searches with Brave when you store a Brave Search key in Settings under Providers. Without a key, it uses the web search of Anthropic's API when the chat provider is `anthropic` or `vertex`, with no other key: a helper call on that provider runs one search and returns the results with a short summary that cites them. Anthropic bills $10 per 1,000 searches on top of the helper's tokens, and the turn's spend counts both. Bedrock has no web search, and other providers without a key offer none.
+These are editor settings, not settings-file keys.
+
+- **Web search.** `web_search` searches with Brave when you store a Brave Search key in Settings under Providers. Without a key, it uses the web search of Anthropic's API when the chat provider is `anthropic` or `vertex`, with no other key: a helper call on that provider runs one search and returns the results with a short summary that cites them. Anthropic bills $10 per 1,000 searches on top of the helper's tokens, and the turn's spend counts both. Bedrock has no web search, and other providers without a key offer none.
+- **Package hosts.** `gcode.sandbox.packageHosts`, on by default, lets commands reach the npm, Yarn and PyPI registries and GitHub, so `npm install`, `pnpm add`, `yarn add`, `pip install` and `git clone` work in the sandbox. Package caches go to the session's temp folder. An install still asks in Ask mode and goes to the classifier in Auto. Set it to `false` to close those hosts.
+- **More hosts.** `gcode.sandbox.allowedDomains` adds hosts to the package hosts; it never removes them. To allow only your own list, turn `gcode.sandbox.packageHosts` off and list the hosts here. On the command line, `GCODE_SANDBOX_PACKAGE_HOSTS=off` and `GCODE_SANDBOX_ALLOWED_DOMAINS` do the same.
 
 ## Move from .gcode.json
 

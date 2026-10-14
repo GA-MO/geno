@@ -4,7 +4,7 @@ description: ผู้ใช้อนุญาตคำสั่งแล้ว 
 scenario:
   surface: vscode
   given:
-    - เปิด Geno ในโหมด Ask ไม่ได้ตั้ง `gcode.sandbox.allowedDomains` (ค่าเริ่มต้นคือไม่อนุญาตโฮสต์ใดเลย)
+    - เปิด Geno ในโหมด Ask ไม่ได้ตั้ง `gcode.sandbox.allowedDomains` (ค่าเริ่มต้นอนุญาตเฉพาะโฮสต์แพ็กเกจ คือ registry ของ npm, Yarn, PyPI และ GitHub)
     - model ขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow บนการ์ดแล้ว
   trigger: >-
     `settle` คืนบันทึกว่าผู้ใช้อนุญาต และคำสั่งกำลังจะรัน
@@ -33,13 +33,13 @@ scenario:
         title: "Geno ห่อคำสั่งด้วย sandbox"
         text: >-
           คำสั่งเขียนได้เฉพาะใน workspace กับโฟลเดอร์ชั่วคราว อ่านที่เก็บกุญแจใน home อย่าง `~/.ssh` ไม่ได้
-          และออกเน็ตได้เฉพาะเครื่องตัวเองกับโฮสต์ที่คุณอนุญาตไว้ ซึ่งตอนนี้ไม่มีเลย
+          และออกเน็ตได้เฉพาะเครื่องตัวเอง โฮสต์แพ็กเกจ และโฮสต์ที่คุณเพิ่มไว้ ซึ่งตอนนี้ไม่มี
         from: engine
         to: machine
       do: >-
         `sandbox.run` ห่อคำสั่งด้วย `SandboxManager.wrapWithSandbox` พร้อมกฎไฟล์ของคำสั่งนี้: เขียนได้เฉพาะ workspace
         กับโฟลเดอร์ชั่วคราว อ่านไม่ได้ในที่เก็บกุญแจของ home (`~/.ssh` และที่คล้ายกัน) และ path ที่กฎ deny ของ workspace ระบุ
-        ส่วนเครือข่ายผ่าน proxy ของ sandbox ที่ปล่อยเฉพาะ loopback กับโฮสต์ใน `GCODE_SANDBOX_ALLOWED_DOMAINS`
+        ส่วนเครือข่ายผ่าน proxy ของ sandbox ที่ปล่อยเฉพาะ loopback โฮสต์แพ็กเกจ (`PACKAGE_HOSTS` เว้นแต่ `GCODE_SANDBOX_PACKAGE_HOSTS=off`) และโฮสต์ใน `GCODE_SANDBOX_ALLOWED_DOMAINS`
       ref: packages/engine/src/sandbox.ts#sandboxPolicy
 
     - id: touch
@@ -168,7 +168,8 @@ scenario:
 | --- | --- | --- |
 | เขียนนอก workspace และโฟลเดอร์ชั่วคราว | ปฏิเสธ | ไม่มี (lane ได้ที่เขียนเพิ่มเฉพาะส่วนของ git ที่ใช้ร่วมกัน) |
 | อ่านที่เก็บกุญแจใน home | ปฏิเสธ | กฎ deny path เพิ่มที่ห้ามอ่านได้ ลดไม่ได้ |
-| ต่อโฮสต์ภายนอก | ปฏิเสธ | `gcode.sandbox.allowedDomains` (เช่น `registry.npmjs.org`) |
+| ต่อโฮสต์แพ็กเกจ (npm, Yarn, PyPI, GitHub) | อนุญาต | ปิดได้ที่ `gcode.sandbox.packageHosts` |
+| ต่อโฮสต์ภายนอกอื่น | ปฏิเสธ | `gcode.sandbox.allowedDomains` (เช่น `crates.io`) |
 | ต่อ `localhost` | อนุญาต | ไม่ต้องตั้ง |
 
 สิ่งที่ควรสังเกต

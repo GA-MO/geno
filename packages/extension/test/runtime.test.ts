@@ -188,6 +188,13 @@ describe('the sandbox network setting', () => {
     expect(sandboxEnvOf(settingsOf({ 'sandbox.allowedDomains': ['registry.npmjs.org', ' *.github.com ', 3, ''] }))).toEqual({ GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org,*.github.com' });
     expect(sandboxEnvOf(settingsOf({}, { 'sandbox.allowedDomains': ['evil.example'] }))).toEqual({});
   });
+
+  it('closes the package hosts only when the user turns gcode.sandbox.packageHosts off, never from a workspace value', () => {
+    expect(sandboxEnvOf(settingsOf({ 'sandbox.packageHosts': true }))).toEqual({});
+    expect(sandboxEnvOf(settingsOf({ 'sandbox.packageHosts': false }))).toEqual({ GCODE_SANDBOX_PACKAGE_HOSTS: 'off' });
+    expect(sandboxEnvOf(settingsOf({ 'sandbox.packageHosts': false, 'sandbox.allowedDomains': ['crates.io'] }))).toEqual({ GCODE_SANDBOX_PACKAGE_HOSTS: 'off', GCODE_SANDBOX_ALLOWED_DOMAINS: 'crates.io' });
+    expect(sandboxEnvOf(settingsOf({}, { 'sandbox.packageHosts': false }))).toEqual({});
+  });
 });
 
 describe('the limit resume setting', () => {

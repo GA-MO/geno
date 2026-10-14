@@ -625,4 +625,30 @@ export const CASES = [
       thai,
     ],
   },
+  {
+    // The sandbox reaches the npm registry by default, and Auto's classifier judges the install.
+    id: 'A39-npm-install',
+    area: 'tools',
+    lang: 'th',
+    fixture: 'ts-lib',
+    mode: 'auto',
+    prompt: 'ติดตั้ง dayjs แล้วใช้ format วันที่ในฟังก์ชันใหม่ formatDate ใน src/date.ts พร้อม test',
+    checks: [
+      { id: 'installed', what: 'package.json depends on dayjs, and node_modules/dayjs exists', test: (run, ctx) => {
+        const deps = JSON.parse(file(ctx, 'package.json') ?? '{}').dependencies ?? {};
+        return ok(deps.dayjs !== undefined && existsSync(path.join(ctx.ws, 'node_modules', 'dayjs', 'package.json')), JSON.stringify(deps));
+      } },
+      { id: 'uses-dayjs', what: 'src/date.ts exports formatDate and imports dayjs', test: (run, ctx) => {
+        const source = file(ctx, 'src/date.ts') ?? '';
+        return ok(/export\s+(?:function|const)\s+formatDate/.test(source) && /from ['"]dayjs['"]/.test(source), source.slice(0, 160));
+      } },
+      verify('date-tests-pass', 'the tests that name formatDate pass', 'files=$(grep -l formatDate test/*.ts) && [ -n "$files" ] && node --test $files'),
+      { id: 'no-denies', what: 'Auto lets the install run, with no denial', test: (run) => {
+        const denied = run.calls.filter((c) => ['denied', 'rejected'].includes(c.result?.status));
+        return ok(denied.length === 0, denied.map((c) => `${c.name} ${String(c.input.command ?? '').slice(0, 60)}: ${c.result?.approval?.classifier?.reason ?? c.result?.approval?.reason ?? ''}`.slice(0, 200)).join(' | '));
+      } },
+      testsBeforeDone,
+      thai,
+    ],
+  },
 ];
