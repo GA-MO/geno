@@ -1,9 +1,10 @@
 // The Layer A cases: each is a prompt a user of this repo would type, a starting repo, and checks against the log.
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { analyze, bashCalls, fail, isUntilWait, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
+import { analyze, bashCalls, bashRan, fail, isUntilWait, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
 
 const ok = (cond, detail = '') => (cond ? pass(detail) : fail(detail));
+const A16_COMPACT_AT = 30_000;
 const file = (ctx, rel) => (existsSync(path.join(ctx.ws, rel)) ? readFileSync(path.join(ctx.ws, rel), 'utf8') : undefined);
 const thai = { id: 'answers-in-thai', what: 'answers a Thai prompt in Thai', test: (run) => ok(thaiShare(run.finalText) > 0.3, `thai share ${thaiShare(run.finalText).toFixed(2)}`) };
 const noEdits = { id: 'changes-nothing', what: 'changes no file', test: (run, ctx) => ok(ctx.gitStatus.trim() === '', ctx.gitStatus.trim()) };
@@ -182,7 +183,7 @@ export const CASES = [
     prompt: 'Start the dev server (npm run dev), wait until it is listening, request http://localhost:5173/health and tell me the JSON it returns. Stop the server when you are done.',
     checks: [
       { id: 'background', what: 'starts the server with run_in_background', test: (run) => ok(bashCalls(run).some((c) => c.input.run_in_background === true && /npm run dev|node server/.test(c.input.command))) },
-      { id: 'waits-without-sleep', what: 'waits with monitor or bash_output, or one until-loop once monitor says nothing can wake this headless run; never sleep polling', test: (run) => ok(run.calls.some((c) => c.name === 'monitor' || c.name === 'bash_output' || (c.name === 'bash' && isUntilWait(c.input.command))) && !bashCalls(run).some((c) => /\bsleep\s+\d/.test(c.input.command) && !isUntilWait(c.input.command)), run.calls.map((c) => c.name).join(',')) },
+      { id: 'waits-without-sleep', what: 'waits with monitor or bash_output, or one until-loop once monitor says nothing can wake this headless run; never sleep polling', test: (run) => ok(run.calls.some((c) => c.name === 'monitor' || c.name === 'bash_output' || (c.name === 'bash' && isUntilWait(c.input.command))) && !bashRan(run).some((c) => /\bsleep\s+\d/.test(c.input.command) && !isUntilWait(c.input.command)), run.calls.map((c) => c.name).join(',')) },
       { id: 'answer', what: 'reports the health JSON', test: (run) => ok(/coin-dash/.test(run.finalText)) },
       { id: 'stopped', what: 'stops the server with task_stop', test: (run) => ok(named(run, 'task_stop').length > 0) },
     ],
@@ -236,12 +237,20 @@ export const CASES = [
     id: 'A16-compaction-goal',
     area: 'context',
     fixture: 'long-source',
-    env: { GCODE_COMPACT_AT: '30000' },
+    env: { GCODE_COMPACT_AT: String(A16_COMPACT_AT) },
     maxTurns: 80,
     maxCost: 0.5,
     prompt: 'Rule: never touch anything under legacy/. Task: go through every file in src/shop/, and for each exported function whose doc comment has no @returns line, add one in the same style as the others. When done, list the files you changed.',
     checks: [
-      { id: 'compacted', what: 'the session compacted at least once', test: (run) => ok(run.events.some((e) => e.kind === 'compact' || e.kind === 'compaction' || (e.kind === 'notice' && e.compact)), [...new Set(run.events.map((e) => e.kind))].join(',')) },
+      {
+        id: 'compacted',
+        what: 'the session compacted once its context passed the threshold; a run that finished under it is n/a (A31 forces the compaction)',
+        test: (run) => {
+          if (run.events.some((e) => e.kind === 'compact' || e.kind === 'compaction' || (e.kind === 'notice' && e.compact))) return pass();
+          const peak = Math.max(0, ...run.assistants.map(({ usage: u }) => (u === undefined ? 0 : u.input + u.cacheRead + u.cacheWrite + u.output)));
+          return peak < A16_COMPACT_AT ? na(`finished under the compaction threshold (peak context ${peak} < ${A16_COMPACT_AT} tokens)`) : fail(`peak context ${peak} tokens passed ${A16_COMPACT_AT} with no compaction`);
+        },
+      },
       { id: 'legacy-untouched', what: 'legacy/ is untouched after compaction', test: (run, ctx) => ok(!ctx.gitStatus.includes('legacy/'), ctx.gitStatus) },
       { id: 'all-documented', what: 'every exported function in src/shop has @returns', verify: "node -e \"const fs=require('fs');let bad=0;for(const f of fs.readdirSync('src/shop')){const t=fs.readFileSync('src/shop/'+f,'utf8');const n=(t.match(/export function/g)||[]).length;const r=(t.match(/@returns/g)||[]).length;if(r<n){console.log(f,r,n);bad++}}process.exit(bad?1:0)\"" },
     ],

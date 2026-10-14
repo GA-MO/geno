@@ -1,6 +1,6 @@
 ---
 title: "Model โหลด tool ที่เลื่อนไว้ด้วย tool_search"
-description: tool นอกชุดหลักส่งให้ model แค่ชื่อ model ต้องเรียก tool_search ก่อนใช้ ถ้าเรียกเลยจะถูกปฏิเสธพร้อมคำบอกให้โหลดก่อน
+description: tool นอกชุดหลักส่งให้ model แค่ชื่อ model ควรเรียก tool_search ก่อนใช้ ถ้าเรียกเลยด้วย input ที่ตรง schema Geno โหลดให้แล้วรันเลย ถ้า input ไม่ตรงจะไม่รัน และตอบด้วยนิยามของ tool
 scenario:
   surface: vscode
   given:
@@ -31,7 +31,7 @@ scenario:
         options:
           - id: direct
             label: เรียก monitor เลย
-            then: search
+            then: decide
             steps:
               - lane: loop
                 at: drive
@@ -49,33 +49,22 @@ scenario:
               - lane: tool
                 at: executor
                 beat:
-                  title: "Geno ปฏิเสธเพราะยังไม่ได้โหลด"
+                  title: "Geno โหลดให้แล้วรัน"
                   text: >-
-                    Geno อ่านบันทึกแล้วไม่พบว่าเคยโหลด `monitor` จึงไม่รัน ผลเป็น error ที่บอกให้เรียก `tool_search` ก่อน
+                    Geno อ่านบันทึกแล้วไม่พบว่าเคยโหลด `monitor` แต่ input ตรง schema จึงโหลดให้แล้วรันเลย ผลขึ้นต้นด้วยนิยามเต็มของ
+                    `monitor` แบบที่ `tool_search` แสดง ตามด้วยผลของ call ถ้า input ไม่ตรง schema Geno ไม่รัน
+                    และตอบเป็น error ที่มีนิยามเต็มกับสิ่งที่ผิด
                   from: engine
                   to: model
-                  sees: { kind: step, label: monitor, status: failed }
-                runs: 0
+                  sees: { kind: step, label: monitor, status: running }
                 do: >-
                   executor ของ `monitor` ถูกห่อด้วย `gate` ซึ่งอ่าน log ด้วย `loadedTools` แล้วไม่พบว่าเคยโหลด
-                  จึงโยน `ToolError` จาก `unloadedCallError` ("monitor is a deferred tool and is not loaded yet. Call tool_search with select: [\"monitor\"] first, ...")
-                  `monitor` ไม่ได้ทำงาน
-                ref: packages/core/src/deferred-tools.ts#unloadedCallError
-                emits: [ToolError]
+                  จึงตรวจ input ด้วย schema ของ executor ถ้าผ่าน `gate` รัน `monitor` ผ่านการขออนุญาตเดิม
+                  ใส่นิยามไว้หน้าผลด้วย `autoLoadedText` และติด `loaded: ["monitor"]` ไปกับ `tool-result` เหมือนผลของ `tool_search`
+                  ถ้าไม่ผ่าน `gate` โยน `ToolError` จาก `unloadedInputError` และ `monitor` ไม่ได้ทำงาน
+                ref: packages/core/src/deferred-tools.ts#autoLoadedText
+                emits: [loaded]
               - use: tool-result-returns
-              - lane: loop
-                at: step
-                beat:
-                  title: "Geno เรียก model ต่อ"
-                  text: >-
-                    turn ไม่หยุด Geno เรียก model อีกรอบ model ได้อ่านว่าต้องโหลดก่อน
-                  from: engine
-                  to: model
-                do: >-
-                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านว่าต้องโหลดก่อน
-                ref: packages/core/src/loop.ts#loopStep
-                emits: [call-model]
-                phase: calling-model
           - id: search-first
             label: โหลดด้วย tool_search ก่อน
             then: search
@@ -173,7 +162,7 @@ scenario:
       do: >-
         model เรียก `monitor` ด้วย input ตาม schema ที่เพิ่งได้อ่าน คราวนี้ `gate` ปล่อยผ่าน
         และแปลงค่าที่ model เขียนเป็นข้อความ เช่น `"2"` หรือ `"False"` ให้เป็นชนิดตาม schema ก่อนส่งต่อ
-      ref: "packages/engine/src/tools/tool-search.ts#\"const typed = (raw: unknown) => coerceToSchema(roster.deferred.get(name)!.definition.input_schema, raw);\""
+      ref: "packages/engine/src/tools/tool-search.ts#\"const typed = (raw: unknown) => coerceToSchema(definition.input_schema, raw);\""
       emits: [tool_use]
       end: { turn: continues, reason: run-tools }
 ---

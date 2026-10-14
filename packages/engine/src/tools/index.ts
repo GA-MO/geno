@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
+import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
 import { ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -58,6 +58,8 @@ function unknownTool(name: string, executors: Executors): string {
 
 async function runExecutor(use: ToolUseBlock, ctx: ToolContext, executors: Executors): Promise<ToolRun> {
   if (!Object.hasOwn(executors, use.name)) return { status: 'error', text: unknownTool(use.name, executors) };
+  const malformed = invalidInputError(use.name, use.input);
+  if (malformed !== undefined) return { status: 'error', text: malformed };
   try {
     const reply = await executors[use.name]!.run(use.input, ctx);
     return typeof reply === 'string' ? { status: 'ok', text: reply } : { status: 'ok', ...reply };

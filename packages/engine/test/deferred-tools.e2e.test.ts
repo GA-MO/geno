@@ -39,7 +39,7 @@ type Body = { tools: { name: string; description?: string }[]; system: { text: s
 const resultIn = (body: Body, id: string) => body.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content)).find((b) => b.type === 'tool_result' && b.tool_use_id === id);
 
 describe('deferred tools through gcode serve', () => {
-  it('refuses an unloaded MCP tool, loads it with tool_search, calls it, and calls it again after a reload, with the same tool and system bytes on every call, and types a stringly number', async () => {
+  it('runs an unloaded MCP tool and loads it, loads it again with tool_search, calls it, and calls it again after a reload, with the same tool and system bytes on every call, and types a stringly number', async () => {
     const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-deferred-')));
     const env = {
       GCODE_HOME: await mkdtemp(path.join(tmpdir(), 'gcode-home-')),
@@ -101,10 +101,11 @@ describe('deferred tools through gcode serve', () => {
       expect(body.system, 'and so is the system prompt').toEqual(bodies[0]!.system);
     }
 
-    expect(resultIn(bodies[1]!, early.id)).toMatchObject({
-      is_error: true,
-      content: `${ECHO} is a deferred tool and is not loaded yet. Call tool_search with select: ["${ECHO}"] first, then call ${ECHO} with the input its schema asks for.`,
-    });
+    const early1 = resultIn(bodies[1]!, early.id)!;
+    expect(early1.is_error, 'an MCP tool called before its load runs, past its approval').toBeUndefined();
+    expect(early1.content).toMatch(new RegExp(`^You called ${ECHO} before loading it with tool_search\\. Geno loaded it for this call`));
+    expect(early1.content).toContain(`\n{"name":"${ECHO}","description":`);
+    expect(early1.content!.endsWith("The call's result:\necho: too soon")).toBe(true);
     const loaded = resultIn(bodies[2]!, load.id)!;
     expect(loaded.is_error).toBeUndefined();
     expect(loaded.content).toContain(`"name":"${ECHO}"`);
@@ -116,7 +117,7 @@ describe('deferred tools through gcode serve', () => {
     const { events } = await readSessionLog(sessionFile(store, asSessionId(sessionId)));
     const results = events.filter((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result');
     expect(results.map((e) => [e.name, e.status, e.loaded])).toEqual([
-      [ECHO, 'error', undefined],
+      [ECHO, 'ok', [ECHO]],
       [TOOL_SEARCH_TOOL, 'ok', [ECHO]],
       [ECHO, 'ok', undefined],
       [ECHO, 'ok', undefined],
