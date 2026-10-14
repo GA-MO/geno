@@ -214,47 +214,53 @@ const SHAPERS = new Set(['head', 'tail', 'sort']);
 
 const QUIET = new Set(['2>/dev/null', '2>&1']);
 
-/**
- * The dedicated tools a command line stands in for, when all it does is read, list or search files: each step a
- * command from FILE_COMMANDS or a label, cut only by head, tail or sort. Empty for a line that needs the shell, such as
- * one that runs a program, pipes into one, writes a file or runs in the background.
- */
-export function fileToolsOf(command: string): FileTool[] {
-  const steps = stepsOf(command);
-  if (steps === undefined || steps.some((step) => step.grouped || step.then === '&' || step.redirects.some((r) => !QUIET.has(r)))) return [];
-  const tools = new Set<FileTool>();
-  for (const [head, ...rest] of pipelinesOf(steps)) {
-    if (head!.commands.length !== 1 || head!.commands[0]!.prefix.length > 0) return [];
-    const { program, args } = head!.commands[0]!;
-    const tool = FILE_COMMANDS[program]?.(args);
-    if (tool === undefined && !LABELS.has(program)) return [];
-    if (tool !== undefined) tools.add(tool);
-    const shaped = rest.every(({ commands }) => commands.length === 1 && SHAPERS.has(commands[0]!.program) && operandsOf(commands[0]!.args, { flags: 'nr', valued: ['-n'], count: true })?.length === 0);
-    if (!shaped) return [];
-  }
-  return [...tools];
+/** A pipeline's text as written, with its redirections. */
+const pipelineText = (pipeline: readonly Step[]): string => pipeline.map((step) => [step.text, ...step.redirects].join(' ')).join(' | ');
+
+/** A pipeline of a command line that a dedicated tool does as well, as written. */
+export type FileStep = { readonly text: string; readonly tool: FileTool };
+
+/** The tool a pipeline stands in for: a command from FILE_COMMANDS cut only by head, tail or sort, writing no file and not in the background. */
+function fileToolOf([head, ...rest]: readonly Step[]): FileTool | undefined {
+  if (head === undefined || [head, ...rest].some((step) => step.grouped || step.redirects.some((r) => !QUIET.has(r)))) return undefined;
+  if ((rest.at(-1) ?? head).then === '&' || head.commands.length !== 1 || head.commands[0]!.prefix.length > 0) return undefined;
+  const shaped = rest.every(({ commands }) => commands.length === 1 && SHAPERS.has(commands[0]!.program) && operandsOf(commands[0]!.args, { flags: 'nr', valued: ['-n'], count: true })?.length === 0);
+  return shaped ? FILE_COMMANDS[head.commands[0]!.program]?.(head.commands[0]!.args) : undefined;
 }
 
-/** The line a bash result gains the first time in a session that its command did only what `tool` does. */
-export const FILE_TOOL_NOTES: Readonly<Record<FileTool, string>> = {
-  read: '[Geno] Next time, read files with the read tool, not cat, head, tail or sed -n: it numbers the lines, pages a long file, and shows the user each step.',
-  list: '[Geno] Next time, list a folder with the list tool, not ls.',
-  glob: '[Geno] Next time, find files by name with the glob tool, not find.',
-  grep: '[Geno] Next time, search file contents with the grep tool, not grep -r or rg.',
-};
+/**
+ * The pipelines of a command line that a dedicated tool does as well, wherever they sit in the line, such as the cat
+ * in `cat a.ts; npm test`. A pipeline led by any other program is not one, even one that pipes a file into it.
+ */
+export function fileStepsOf(command: string): FileStep[] {
+  return pipelinesOf(stepsOf(command) ?? []).flatMap((pipeline) => {
+    const tool = fileToolOf(pipeline);
+    return tool === undefined ? [] : [{ text: pipelineText(pipeline), tool }];
+  });
+}
 
-export type FileToolNoter = { take(tools: readonly FileTool[]): string[] };
+const listed = (items: readonly string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
-/** Hands out each FILE_TOOL_NOTES line once a session; a line already in `earlier`, the session's tool results, is not repeated. */
-export function fileToolNoter(earlier: readonly string[]): FileToolNoter {
-  const given = new Set((Object.keys(FILE_TOOL_NOTES) as FileTool[]).filter((tool) => earlier.some((text) => text.includes(FILE_TOOL_NOTES[tool]))));
-  return {
-    take(tools) {
-      const fresh = tools.filter((tool) => !given.has(tool));
-      for (const tool of fresh) given.add(tool);
-      return fresh.map((tool) => FILE_TOOL_NOTES[tool]);
-    },
-  };
+const isLabel = (pipeline: readonly Step[]): boolean => pipeline.length === 1 && pipeline[0]!.commands.length === 1 && LABELS.has(pipeline[0]!.commands[0]!.program);
+
+/**
+ * The refusal of a command line with a file step in it, of which Geno runs nothing: it names each step's tool, and the
+ * rest of the line to run alone. Undefined for a line with none.
+ */
+export function fileStepRefusal(command: string): string | undefined {
+  const steps = fileStepsOf(command);
+  if (steps.length === 0) return undefined;
+  // Labels stay beside a program, as a cd before it, and go when nothing else is left.
+  const others = pipelinesOf(stepsOf(command)!).filter((pipeline) => fileToolOf(pipeline) === undefined);
+  const kept = others.every(isLabel) ? [] : others;
+  const rest = kept.map((pipeline, i) => {
+    const then = pipeline.at(-1)!.then;
+    return i === kept.length - 1 ? pipelineText(pipeline) : `${pipelineText(pipeline)}${then === ';' ? ';' : ` ${then}`}`;
+  });
+  const jobs = listed(steps.map(({ text, tool }) => `\`${text}\` is the ${tool} tool's job`));
+  const tools = listed([...new Set(steps.map((step) => step.tool))]);
+  const then = rest.length === 0 ? `Call ${tools} instead; calls in one turn run at the same time.` : `Run \`${rest.join(' ')}\` alone in bash, and call ${tools} in the same turn; they run at the same time.`;
+  return `Geno ran nothing: ${jobs}. ${then}`;
 }
 
 /** A package.json's scripts, by name. */

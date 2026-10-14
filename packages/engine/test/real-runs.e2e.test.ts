@@ -137,14 +137,16 @@ describe('real-model runs, replayed through the engine', () => {
     expect(diff).toBe('');
   });
 
-  it('B01: in Ask, looks before it deletes, asks once for rm -rf build, and the folder is gone after the allow', async () => {
+  it('B01: each of its bash lines has an ls, find or cat step, so Geno refuses every one unrun and nothing asks before rm -rf build', async () => {
     const { calls, questions, workspace } = await replay('B01-ask-allow');
-    expect(calls.map((c) => c.name)).toEqual(['bash', 'bash', 'bash', 'bash']);
-    expect(questions).toHaveLength(1);
-    expect(questions[0]).toContain('rm -rf build');
-    const asked = calls.findIndex((c) => String(c.input['command']).includes('rm -rf build'));
-    expect(asked, 'two looks come before the delete').toBe(2);
-    expect(existsSync(path.join(workspace, 'build'))).toBe(false);
-    expect(existsSync(path.join(workspace, 'dist')), 'nothing else is deleted').toBe(true);
+    expect(calls.map((c) => [c.name, c.status])).toEqual([
+      ['bash', 'error'],
+      ['bash', 'error'],
+      ['bash', 'error'],
+      ['bash', 'error'],
+    ]);
+    expect(questions).toEqual([]);
+    expect(existsSync(path.join(workspace, 'build')), 'rm -rf build && ls -d build did not run').toBe(true);
+    expect(existsSync(path.join(workspace, 'dist'))).toBe(true);
   });
 });

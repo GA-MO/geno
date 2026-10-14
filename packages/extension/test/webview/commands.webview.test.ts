@@ -8,8 +8,8 @@ const THEMES = ['dark', 'light', 'high-contrast'] as const;
 
 /** What the sandbox prints for each command of the fixture, before the engine's status line. */
 const OUTPUTS: Readonly<Record<string, string>> = {
-  ls: 'a.ts\nbuild\nnotes',
-  'cat notes/many.txt': MANY_LINES.join('\n'),
+  'ls -t': 'a.ts\nbuild\nnotes',
+  'cat -v notes/many.txt': MANY_LINES.join('\n'),
   [LONG_COMMAND]: '-rw-r--r--  1 user  staff  20 Oct  7 12:00 ./a.ts',
   pwd: '/workspace',
 };

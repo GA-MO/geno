@@ -42,7 +42,7 @@ describe.each(WIRES)('permissions on the %s wire', (wire) => {
     const started = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Get ready.']);
     const scratchpad = scratchpadOf(await run.log(started.stdout));
     const note = path.join(scratchpad, 'note.txt');
-    run.more(call('', [{ id: 'tu_note', name: 'bash', input: { command: `printf noted > '${note}' && cat '${note}'` } }]), say('Noted.'));
+    run.more(call('', [{ id: 'tu_note', name: 'bash', input: { command: `printf noted > '${note}' && cat -v '${note}'` } }]), say('Noted.'));
 
     const questions: string[] = [];
     const asked = await run.cli(['agent', '--session', sessionIdOf(started.stdout), '--mode', 'ask', 'Write a note in the scratchpad.'], {
