@@ -11,7 +11,7 @@ import {
   specOf,
   type ProviderName,
 } from '@g-code/core';
-import { EngineError } from './errors.js';
+import { EngineError, MissingCredential } from './errors.js';
 import { wireLogFetch } from './wire-log.js';
 import { openaiWire } from './wire-openai.js';
 import { probeHost, redactor, type Wire, type WireConfig } from './wire-shape.js';
@@ -19,7 +19,7 @@ import { probeHost, redactor, type Wire, type WireConfig } from './wire-shape.js
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
- * The provider's values from `env`. Throws an EngineError naming the first required variable that is not set. With
+ * The provider's values from `env`. Throws a MissingCredential naming the first required variable that is not set. With
  * GCODE_WIRE_LOG set, every request goes to that file as well (`wire-log.ts`).
  */
 export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof globalThis.fetch): WireConfig {
@@ -27,7 +27,7 @@ export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof glob
   const values = providerValues(spec, env);
   const missing = missingField(spec, values);
   if (missing !== undefined) {
-    throw new EngineError(`${missing.env} is not set; put ${missing.id === 'apiKey' ? `your ${provider} API key` : missing.hint} in it`);
+    throw new MissingCredential(provider, missing.id, `${missing.env} is not set; put ${missing.id === 'apiKey' ? `your ${provider} API key` : missing.hint} in it`);
   }
   const config: WireConfig = { spec, values, baseUrl: baseUrlOf(spec, values), fetch };
   const log = env['GCODE_WIRE_LOG'];

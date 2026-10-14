@@ -4,6 +4,7 @@ import type { ApprovalSubject } from './approval.js';
 import type { ExternalBackendId } from './backends.js';
 import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
+import type { FieldId, ProviderName } from './providers.js';
 import type { CheckpointRef, HunkId, ReviewHunk } from './review.js';
 import type { ForkOrigin, RewindChoice } from './rewind.js';
 import type { SessionSpend } from './spend.js';
@@ -55,6 +56,13 @@ export type PermissionInput = { readonly command: string; readonly line?: string
 
 /** The JSON-RPC error a client answers fs/write_text_file with when the file no longer holds that text. */
 export const STALE_BASE_ERROR = { code: -32010, reason: 'stale-base' } as const;
+
+/**
+ * The JSON-RPC error the engine answers session/prompt with when the session's provider lacks a value it needs, such
+ * as its API key. A session keeps its provider and model, so it cannot run until that value is set; `data` names them.
+ */
+export const NO_CREDENTIALS_ERROR = { code: -32012, reason: 'no-credentials' } as const;
+export type NoCredentials = { readonly reason: typeof NO_CREDENTIALS_ERROR.reason; readonly provider: ProviderName; readonly model: string; readonly field: FieldId };
 
 export const SEVERITIES = ['error', 'warning', 'information', 'hint'] as const;
 export type Severity = (typeof SEVERITIES)[number];
