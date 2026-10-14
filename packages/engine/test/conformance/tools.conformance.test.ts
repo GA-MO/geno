@@ -155,6 +155,22 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     expect(await file('b.ts')).toBe("export const b = 1;\n// changed\n");
   });
 
+  it('grep lines from a file let an edit of it through, until the file changes on disk; a file no tool showed stays refused', async () => {
+    const files = { 'src/config.ts': 'export const config = {\n\tretries: 3,\n};\n', 'src/other.ts': 'export const other = 1;\n', 'src/blind.ts': 'export const blind = 1;\n' };
+    const grep = use('grep', { pattern: 'retries|other', path: 'src' });
+    const edit = use('edit', { path: 'src/config.ts', old_str: 'retries: 3', new_str: 'retries: 5' });
+    const change = use('bash', { command: "echo '// changed' >> src/other.ts" });
+    const stale = use('edit', { path: 'src/other.ts', old_str: 'other = 1', new_str: 'other = 2' });
+    const blind = use('edit', { path: 'src/blind.ts', old_str: 'blind = 1', new_str: 'blind = 2' });
+    const { result, file } = await session(wire, files, () => [[grep], [edit], [change], [stale], [blind]]);
+    expect(result(grep).text).toBe('src/config.ts:2:\tretries: 3,\nsrc/other.ts:1:export const other = 1;');
+    expect(result(edit).error).toBe(false);
+    expect(await file('src/config.ts')).toBe('export const config = {\n\tretries: 5,\n};\n');
+    expect(result(stale)).toMatchObject({ error: true, text: expect.stringMatching(/src\/other\.ts changed since it was last read/) });
+    expect(result(blind)).toMatchObject({ error: true, text: expect.stringMatching(/read src\/blind\.ts before editing it/) });
+    expect(await file('src/blind.ts')).toBe('export const blind = 1;\n');
+  });
+
   it('T-TOOL-06b a command that changes directory ends with the reset line, and the next command starts at the workspace root', async () => {
     const into = use('bash', { command: 'cd sub && pwd' });
     const after = use('bash', { command: 'pwd' });
