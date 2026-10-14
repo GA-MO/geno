@@ -275,7 +275,12 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const cat = call('bash', { command: `cat -v ${path.join(dir, 'notes.md')}` });
     const catting = await scripted(wire, [{ calls: [cat] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
     expect(catting.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', verdict: 'ask' })]);
-    expect(asking.sent() + listing.sent() + catting.sent()).not.toContain(NOTE);
+
+    const grepping = await scripted(wire, [{ calls: [call('bash', { command: `grep -rn design ${dir}` })] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(grepping.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', verdict: 'ask', command: `grep -rn design ${dir}` })]);
+    const listingBash = await scripted(wire, [{ calls: [call('bash', { command: `ls ${dir}` })] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(listingBash.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', verdict: 'ask', command: `ls ${dir}` })]);
+    expect(asking.sent() + listing.sent() + catting.sent() + grepping.sent() + listingBash.sent()).not.toContain(NOTE);
   });
 
   it('T-PERM-04 a read outside is refused naming the readable directories when nobody can answer, and the text never reaches the model', async () => {

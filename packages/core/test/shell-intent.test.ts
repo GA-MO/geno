@@ -44,17 +44,18 @@ describe('fileStepsOf', () => {
     ['head -n 20 src/a.ts', [read('head -n 20 src/a.ts')]],
     ['tail -n +40 src/a.ts | head -20', [read('tail -n +40 src/a.ts | head -20')]],
     ["sed -n '1,40p' src/config.ts", [read("sed -n '1,40p' src/config.ts")]],
-    ['ls', [{ text: 'ls', tool: 'list' }]],
-    ['ls -R . | head -50', [{ text: 'ls -R . | head -50', tool: 'list' }]],
-    ['find . -name "*.ts" -not -path "*/node_modules/*"', [{ text: 'find . -name "*.ts" -not -path "*/node_modules/*"', tool: 'glob' }]],
-    ['find packages -type f | sort', [{ text: 'find packages -type f | sort', tool: 'glob' }]],
-    ['grep -n "port" server.js | head -20', [{ text: 'grep -n "port" server.js | head -20', tool: 'grep' }]],
-    ['grep -rni --include=*.ts retries .', [{ text: 'grep -rni --include=*.ts retries .', tool: 'grep' }]],
-    ['rg -n retries src', [{ text: 'rg -n retries src', tool: 'grep' }]],
     ['cat a.ts 2>/dev/null', [read('cat a.ts 2>/dev/null')]],
-    ['cat package.json; echo ---; ls -la', [read('cat package.json'), { text: 'ls -la', tool: 'list' }]],
-    ['npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git', [{ text: 'grep -rn getUser . --exclude-dir=.git', tool: 'grep' }]],
-    ['ls src test; cat src/money.ts', [{ text: 'ls src test', tool: 'list' }, read('cat src/money.ts')]],
+    ['cat package.json; echo ---; ls -la', [read('cat package.json')]],
+    ['ls src test; cat src/money.ts', [read('cat src/money.ts')]],
+    ['grep -rn getUser . && cat src/a.ts', [read('cat src/a.ts')]],
+    ['find src -name "*.ts" && cat src/a.ts', [read('cat src/a.ts')]],
+    ['for f in *.ts; do wc -l $f; done && cat a.ts', [read('cat a.ts')]],
+    ['for f in a b; do echo $f; done && cat x', [read('cat x')]],
+    ['for f in *\ndo\n  wc -l $f\ndone && cat a.ts', [read('cat a.ts')]],
+    ['if [ -f a.ts ]; then echo yes; fi && cat a.ts', [read('cat a.ts')]],
+    ['while read f; do wc -l "$f"; done < list.txt && cat a.ts', [read('cat a.ts')]],
+    ['for d in a b; do for f in $d/*; do wc -l $f; done; done && cat a.ts', [read('cat a.ts')]],
+    ['done && cat a.ts', []],
     ['npm run build && ls dist; cat a.ts', [read('cat a.ts')]],
     ['npm test || cat a.ts', [read('cat a.ts')]],
     ['cd src/shop && wc -l *.ts && cat cart.ts', [read('cat cart.ts')]],
@@ -66,6 +67,18 @@ describe('fileStepsOf', () => {
     ['npm run build && ls dist', []],
     ['rm -rf build && ls -d build', []],
     ['mkdir -p out && npm run gen && ls out && cat out/a.ts', []],
+    ['for f in *.ts; do node gen.mjs $f; done && cat out.ts', []],
+    ['if npm test; then echo ok; fi && cat a.ts', []],
+    ['for d in a b; do for f in $d/*; do node gen.mjs $f; done; done && cat out.ts', []],
+    ['ls', []],
+    ['ls -R . | head -50', []],
+    ['find . -name "*.ts" -not -path "*/node_modules/*"', []],
+    ['find packages -type f | sort', []],
+    ['grep -n "port" server.js | head -20', []],
+    ['grep -rni --include=*.ts retries .', []],
+    ['rg -n retries src', []],
+    ['npm test; grep -rn x .', []],
+    ['npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git', []],
     ['cat x | node y', []],
     ['git show HEAD:f | head', []],
     ['cat a.ts | wc -l', []],
@@ -97,9 +110,9 @@ describe('fileStepsOf', () => {
 });
 
 describe('fileStepRefusal', () => {
-  it('names each file step and its tool, and the rest of the line to run alone', () => {
+  it('names each read step and its tool, and the rest of the line to run alone, searches included', () => {
     expect(fileStepRefusal('npm run build && npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git; cat src/a.ts', '/work')).toBe(
-      "Geno ran nothing: `grep -rn getUser . --exclude-dir=.git` is the grep tool's job and `cat src/a.ts` is the read tool's job. Run `npm run build && npm test 2>&1 | tail -15` alone in bash, and call grep and read in the same turn; they run at the same time.",
+      "Geno ran nothing: `cat src/a.ts` is the read tool's job. Run `npm run build && npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git` alone in bash, and call read in the same turn; they run at the same time.",
     );
   });
 
@@ -110,8 +123,14 @@ describe('fileStepRefusal', () => {
   });
 
   it('says only to call the tools when the line holds nothing else but labels', () => {
-    expect(fileStepRefusal('ls src test; echo ---; cat src/money.ts', '/work')).toBe(
-      "Geno ran nothing: `ls src test` is the list tool's job and `cat src/money.ts` is the read tool's job. Call list and read instead; calls in one turn run at the same time.",
+    expect(fileStepRefusal('echo ---; cat src/money.ts; cat src/cart.ts', '/work')).toBe(
+      "Geno ran nothing: `cat src/money.ts` is the read tool's job and `cat src/cart.ts` is the read tool's job. Call read instead; calls in one turn run at the same time.",
+    );
+  });
+
+  it('refuses only the cat beside an ls, which runs alone', () => {
+    expect(fileStepRefusal('ls src; cat a.ts', '/work')).toBe(
+      "Geno ran nothing: `cat a.ts` is the read tool's job. Run `ls src` alone in bash, and call read in the same turn; they run at the same time.",
     );
   });
 
@@ -126,6 +145,8 @@ describe('fileStepRefusal', () => {
 
   it('lets through a line with no file step and no write step', () => {
     expect(fileStepRefusal('npm test 2>&1 | grep -E "not ok"', '/work')).toBeUndefined();
+    expect(fileStepRefusal('npm test; grep -rn x .', '/work')).toBeUndefined();
+    expect(fileStepRefusal('ls src && find . -name "*.ts"', '/work')).toBeUndefined();
     expect(fileStepRefusal("cat > \"$TMPDIR/gen.mjs\" <<'EOF'\nconsole.log(1)\nEOF\nnode \"$TMPDIR/gen.mjs\"", '/work')).toBeUndefined();
   });
 });
