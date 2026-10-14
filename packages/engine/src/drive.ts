@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
+import { capUsd, type Session, type UsdCap } from '@g-code/core';
 import { budgetReminder, compactionStuck, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue, TODO_TOOL, todoReminder } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
@@ -72,6 +73,12 @@ export function issuedOnce(turn: AssistantTurn): Director {
  * user's prompt that started the background work.
  */
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number; readonly countFrom?: number | undefined };
+
+/** A run's limits before its model is known: a cost cap a user set, or a default that scales to the model (`capUsd`). */
+export type LimitsSpec = Omit<Limits, 'maxCostUsd'> & { readonly maxCostUsd: UsdCap };
+
+/** The limits of a run on this session's model. */
+export const limitsOn = (spec: LimitsSpec, { provider, model }: Pick<Session, 'provider' | 'model'>): Limits => ({ ...spec, maxCostUsd: capUsd(spec.maxCostUsd, provider, model) });
 
 /** How a run shows what it does as it happens. */
 export type Watcher = {
@@ -414,9 +421,11 @@ export async function drive(
     const left = openWaitOf(events);
     let lastWait = left;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
-    // The last call a limit allows must answer: a child's goes to its report, any other run's with the tools off.
+    // The last call a limit allows must answer: a child's goes to its report, any other run's with the tools off. A child
+    // whose model refuses a forced tool answers with the tools off too, and its last text is its report.
     const last = mode.forced === undefined && lastCallDue(events, run);
-    const forced = mode.forced ?? (last && run.handback === true && mode.tools.some((tool) => tool.name === REPORT_TOOL) ? REPORT_TOOL : undefined);
+    const reportForced = last && run.handback === true && capabilitiesOf(session.provider, session.model).forcesTool && mode.tools.some((tool) => tool.name === REPORT_TOOL);
+    const forced = mode.forced ?? (reportForced ? REPORT_TOOL : undefined);
     const send = async () => gateway.turn({
       snapshot,
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),

@@ -4,7 +4,6 @@ import {
   arenaStep,
   childReport,
   costPreview,
-  DEFAULT_TASK_COST_USD,
   hunksBetween,
   parseBestOfN,
   parseRanking,
@@ -84,23 +83,31 @@ describe('/best-of-n arguments', () => {
   });
 });
 
+const FLASH = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const;
+
 describe('cost preview', () => {
   it('uses the median of the sessions that spent something', () => {
-    const preview = costPreview([0.01, 0, 0.05, 0.02, 0.4], 3, 0.05);
+    const preview = costPreview([0.01, 0, 0.05, 0.02, 0.4], 3, FLASH);
     expect(preview.basis).toEqual({ kind: 'history', samples: 4 });
     expect(preview.perLaneUsd).toBeCloseTo(0.035);
     expect(preview.totalUsd).toBeCloseTo(3 * 0.035 + 0.05);
   });
 
   it('takes the middle value of an odd count', () => {
-    expect(costPreview([0.03, 0.01, 0.02], 2, 0).perLaneUsd).toBe(0.02);
+    expect(costPreview([0.03, 0.01, 0.02], 2, FLASH).perLaneUsd).toBe(0.02);
   });
 
   it('falls back to the stated default with too little history', () => {
-    const preview = costPreview([0.2, 0, 0, Number.NaN], 4, 0.05);
+    const preview = costPreview([0.2, 0, 0, Number.NaN], 4, FLASH);
     expect(preview.basis).toEqual({ kind: 'default' });
-    expect(preview.perLaneUsd).toBe(DEFAULT_TASK_COST_USD);
-    expect(preview.totalUsd).toBeCloseTo(4 * DEFAULT_TASK_COST_USD + 0.05);
+    expect(preview.perLaneUsd).toBe(0.032);
+    expect(preview.totalUsd).toBeCloseTo(4 * 0.032 + 0.05);
+  });
+
+  it("scales the default task cost and the review's cap to the model, and leaves a measured history as it is", () => {
+    const sonnet = { provider: 'anthropic', model: 'claude-sonnet-5-5' } as const;
+    expect(costPreview([], 3, sonnet)).toMatchObject({ perLaneUsd: 0.157, reviewMaxUsd: 0.245 });
+    expect(costPreview([0.3, 0.5, 0.4], 3, sonnet)).toMatchObject({ perLaneUsd: 0.4, reviewMaxUsd: 0.245 });
   });
 });
 
@@ -197,7 +204,7 @@ const run = (): ArenaRun => ({
   task: 'Do it.',
   workspace: '/repo',
   createdAt: '2026-10-06T00:00:00.000Z',
-  preview: costPreview([], 3, 0.05),
+  preview: costPreview([], 3, FLASH),
   lanes: [lane('fix-a', 'A'), lane('fix-b', 'B'), lane('fix-c', 'C')],
   status: 'running',
   review: null,

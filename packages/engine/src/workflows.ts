@@ -26,7 +26,7 @@ import {
   type ApprovalMode,
   type AssistantTurn,
   type JournalEntry,
-  type Rates,
+  type CapModel,
   type Replay,
   type Session,
   type WorkflowPreview,
@@ -134,11 +134,11 @@ export function workflowDriver(
   spec: WorkflowSpec,
   input: string,
   agents: readonly AgentDefinition[],
-  model: string,
+  on: CapModel,
   changed: (run: WorkflowRun, sessionId: string) => void,
   journal: WorkflowJournal,
 ): WorkflowDriver {
-  let run = startWorkflow(spec, input, journal.replay?.run);
+  let run = startWorkflow(spec, input, on, journal.replay?.run);
   let replay = journal.replay;
   let closed = false;
   let journaled = 0;
@@ -157,9 +157,9 @@ export function workflowDriver(
       replay = next.replay;
       await persist(sessionOf(events));
       changed(run, sessionOf(events));
-      if (next.round.calls.length > 0) return workflowTurn(next.round.calls, model);
+      if (next.round.calls.length > 0) return workflowTurn(next.round.calls, on.model);
       closed = true;
-      return closingTurn(run, model);
+      return closingTurn(run, on.model);
     },
     async finish(events, cancelled) {
       const stop = cancelled ? { kind: 'cancelled' as const } : { kind: 'step-failed' as const, unit: 'the run', reason: 'its session ended before the run did' };
@@ -192,8 +192,8 @@ export type EarlierRun = { readonly name: string | undefined; readonly input: st
 export type WorkflowHost = {
   readonly workspace: string;
   readonly homes: ConfigHomes;
-  readonly model: string;
-  readonly rates: (model: string) => Rates | undefined;
+  /** The session's model, which prices the steps and scales the default caps. */
+  readonly on: CapModel;
   readonly mode: () => ApprovalMode;
   readonly agents: () => Promise<readonly AgentDefinition[]>;
   readonly approve: (preview: WorkflowPreview, signal: AbortSignal) => Promise<boolean>;
@@ -225,9 +225,9 @@ export function workflowTools(host: WorkflowHost): WorkflowTools {
       if (earlier !== undefined && earlier.name !== name) throw new ToolError(`run ${resume} is ${earlier.name === undefined ? 'not a workflow run' : `a run of workflow ${earlier.name}`}, not of ${name}`);
       const input = given === '' && earlier?.input !== undefined ? earlier.input : given;
       const replay = resume === undefined ? undefined : startReplay(resume, earlier!.entries);
-      const preview = workflowPreview(spec, input, agents, { model: host.model, rates: host.rates });
+      const preview = workflowPreview(spec, input, agents, host.on);
       return {
-        preview: replay === undefined ? preview : { ...preview, resume: { run: replay.run, replays: replayedBeforeLive(spec, input, agents, replay) } },
+        preview: replay === undefined ? preview : { ...preview, resume: { run: replay.run, replays: replayedBeforeLive(spec, input, host.on, agents, replay) } },
         start: (toolUseId) => host.run(spec, input, agents, toolUseId, replay),
       };
     },

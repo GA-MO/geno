@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { z } from 'zod';
 import {
+  ARENA_REVIEW_USD,
   AGENT_TOOL,
   arenaSettled,
   arenaStep,
@@ -36,9 +37,9 @@ import {
   type Variety,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
-import { openSessionLog, startSession } from './chat.js';
+import { chooseModel, openSessionLog, startSession } from './chat.js';
 import { checkCommand } from './check-command.js';
-import { issuedOnce } from './drive.js';
+import { issuedOnce, type LimitsSpec } from './drive.js';
 import { childEnv } from './child-env.js';
 import type { Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -70,8 +71,8 @@ export type ArenaDeps = {
   readonly onUpdate: (run: ArenaRun) => void;
 };
 
-/** The review child's caps, which the cost preview counts in full. */
-export const REVIEW_LIMITS = { maxTurns: 8, maxCostUsd: 0.05 };
+/** The review run's caps, which the cost preview counts in full. */
+export const REVIEW_LIMITS: LimitsSpec = { maxTurns: 8, maxCostUsd: ARENA_REVIEW_USD };
 
 /** The `arena` setting: the default variety, the models the `models` variety uses, or an explicit variant list. */
 export async function arenaVariants(homes: ConfigHomes, workspace: string, n: ArenaSize, variety: Variety | undefined): Promise<VariantSpec[]> {
@@ -86,7 +87,8 @@ const HISTORY_SAMPLES = 50;
 export async function arenaPreview(store: Store, io: Io, n: ArenaSize) {
   const sessions = await listSessions(store, io, { kind: 'all' });
   const costs = sessions.slice(0, HISTORY_SAMPLES).flatMap((s) => (s.costUsd === null ? [] : [s.costUsd]));
-  return costPreview(costs, n, REVIEW_LIMITS.maxCostUsd);
+  // The review and a lane with no variant model run on the engine's default model.
+  return costPreview(costs, n, chooseModel(io, { provider: undefined, model: undefined }));
 }
 
 const arenasDir = (repo: LaneRepo) => path.join(repo.common, 'geno', 'arenas');

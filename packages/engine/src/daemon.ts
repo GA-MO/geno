@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
 import { LIMIT_FLAGS, limitsOf } from './agent.js';
 import { UsageError, type Command, type Io } from './command.js';
-import type { Limits } from './drive.js';
+import type { LimitsSpec } from './drive.js';
 import { browserLauncherOf } from './mcp/browser.js';
 import { mcpSessions } from './mcp/sessions.js';
 import { engineShared, gcodeAgent, mcpTokensVia } from './serve.js';
@@ -47,7 +47,7 @@ async function listen(server: Server, socket: string): Promise<void> {
  * once no editor is connected and no turn runs for `idleMs`. Another process already on the socket wins: this one
  * exits with 0, and the editor connects to that one. `stopping` ends it at once, windows connected or not.
  */
-export async function serveSocket(io: Io, store: Store, limits: Limits, socket: string, idleMs = IDLE_EXIT_MS, stopping?: AbortSignal): Promise<number> {
+export async function serveSocket(io: Io, store: Store, limits: LimitsSpec, socket: string, idleMs = IDLE_EXIT_MS, stopping?: AbortSignal): Promise<number> {
   const shared = engineShared(io);
   const mcp = mcpSessions(store, io.env, io.err, browserLauncherOf(io.env), mcpTokensVia(shared.viewers));
   // A crash cannot wait for a grace period; a command or an external agent left running would outlive the engine that owns it.

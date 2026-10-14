@@ -216,12 +216,33 @@ describe('the built-ins', () => {
 });
 
 describe('childCaps', () => {
+  const flash = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const;
+  const sonnet = { provider: 'anthropic', model: 'claude-sonnet-5-5' } as const;
+  const opus = { provider: 'anthropic', model: 'claude-opus-5-5' } as const;
+
   it("takes the definition's caps, else the defaults, held to what the parent's run has left", () => {
-    expect(childCaps(builtin('explore'), 1)).toEqual({ maxTurns: 4, maxCostUsd: 0.02 });
-    expect(childCaps({ ...builtin('plan'), maxTurns: undefined, maxCostUsd: undefined }, 1)).toEqual({ maxTurns: 20, maxCostUsd: 0.05 });
-    expect(childCaps(builtin('worker'), 0.07)).toEqual({ maxTurns: 30, maxCostUsd: 0.07 });
-    expect(childCaps(builtin('explore'), 0)).toBeUndefined();
-    expect(childCaps(builtin('explore'), -0.01)).toBeUndefined();
+    expect(childCaps(builtin('explore'), 1, flash)).toEqual({ maxTurns: 4, maxCostUsd: 0.02 });
+    expect(childCaps({ ...builtin('plan'), maxTurns: undefined, maxCostUsd: undefined }, 1, flash)).toEqual({ maxTurns: 20, maxCostUsd: 0.05 });
+    expect(childCaps(builtin('worker'), 0.07, flash)).toEqual({ maxTurns: 30, maxCostUsd: 0.07 });
+    expect(childCaps(builtin('explore'), 0, flash)).toBeUndefined();
+    expect(childCaps(builtin('explore'), -0.01, flash)).toBeUndefined();
+  });
+
+  it("scales a built-in's cost cap to the child's model, so it buys as many typical calls as on qwen3.8-flash", () => {
+    expect(childCaps(builtin('review'), 10, sonnet)).toEqual({ maxTurns: 8, maxCostUsd: 0.245 });
+    expect(childCaps(builtin('review'), 10, opus)).toEqual({ maxTurns: 8, maxCostUsd: 0.436 });
+    expect(childCaps(builtin('explore'), 10, sonnet)!.maxCostUsd).toBe(0.098);
+    expect(childCaps(builtin('worker'), 10, opus)!.maxCostUsd).toBe(1.745);
+    expect(childCaps({ ...builtin('plan'), maxCostUsd: undefined }, 10, sonnet)!.maxCostUsd).toBe(0.245);
+  });
+
+  it("keeps a cap a user set as given: a definition's max_cost_usd and the agent call's own", () => {
+    expect(childCaps({ ...builtin('review'), maxCostUsd: 0.05 }, 10, opus)!.maxCostUsd).toBe(0.05);
+    expect(childCaps(builtin('review'), 10, opus, { maxCostUsd: 0.03 })!.maxCostUsd).toBe(0.03);
+  });
+
+  it('keeps the qwen3.8-flash dollars for a model with no price, whose turn cap is what holds', () => {
+    expect(childCaps(builtin('review'), 10, { provider: 'bedrock', model: 'anthropic.claude-sonnet-5-5' })!.maxCostUsd).toBe(0.05);
   });
 });
 

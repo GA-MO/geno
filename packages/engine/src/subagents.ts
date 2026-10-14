@@ -241,6 +241,10 @@ type StepOptions = {
 
 type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
 
+/** The model a new child runs on. A fork shares the parent's cached prefix only on the parent's model. */
+const childModel = (agent: AgentDefinition, { start, step }: { readonly start: ChildStart; readonly step: StepOptions }, parentModel: string): string =>
+  agent.backend !== undefined ? agent.backend : start === 'fork' ? parentModel : (step.model ?? agent.model ?? parentModel);
+
 /** Where a new child works: a lane of its own, named after it, or the workflow run's lane that its step names. */
 type LaneWant = { readonly kind: 'own' } | { readonly kind: 'named'; readonly name: string };
 
@@ -459,8 +463,7 @@ export function subagents(env: SubagentEnv): Subagents {
       createdAt: new Date().toISOString(),
       workspace,
       provider: parentSession.provider,
-      // A fork shares the parent's cached prefix only on the parent's model.
-      model: agent.backend !== undefined ? agent.backend : start === 'fork' ? parentSession.model : (step.model ?? agent.model ?? parentSession.model),
+      model: childModel(agent, run, parentSession.model),
       effort: agent.effort ?? sessionEffortOf(parentSession, parentEvents),
       ...(agent.backend === undefined ? {} : { backend: { id: agent.backend } }),
     };
@@ -543,7 +546,9 @@ export function subagents(env: SubagentEnv): Subagents {
   ): Promise<ChildOutcome> => {
     // A resumed child gets its spawn's caps afresh, held like any child's to what this run has left for children.
     const asked = run.kind === 'spawn' ? { maxTurns: run.step.max_turns, maxCostUsd: run.step.max_cost_usd } : run.of.caps;
-    const caps = childCaps(agent, env.limits.maxCostUsd - committed, asked);
+    const { provider, model } = parent.log.session;
+    const on = { provider, model: run.kind === 'spawn' ? childModel(agent, run, model) : run.log.session.model };
+    const caps = childCaps(agent, env.limits.maxCostUsd - committed, on, asked);
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
     const place = await openLane(agent, laneName, id);
     try {

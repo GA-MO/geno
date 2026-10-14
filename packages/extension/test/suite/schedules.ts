@@ -72,7 +72,7 @@ async function steps(): Promise<void> {
   const made = (await row())!;
   check(made.title === PROMPT, 'the row is named after the prompt', made);
   check(made.state === 'Scheduled' && made.when === 'Weekdays at 09:00' && made.next.startsWith('Next '), 'it says when it runs next', made);
-  check(made.how === 'Read-only · up to $0.05 and 20 model calls a run', 'it runs read-only, within the default budget', made);
+  check(made.how === "Read-only · up to $0.05 (qwen3.8-flash prices, scaled to the run's model) and 20 model calls a run", 'it runs read-only, within the default budget', made);
   check(made.last === null && made.buttons.join() === 'Run now,Pause,Delete', 'no run yet, and Run now, Pause and Delete', made);
   check((await textOf('[data-section="scheduled"] .tasks-heading')) === 'Scheduled1', 'the section counts it', await textOf('[data-section="scheduled"] .tasks-heading'));
   await screenshots('scheduled');
