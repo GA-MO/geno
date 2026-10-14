@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { SandboxManager, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
-import { credentialPlaces } from '@g-code/core';
+import { credentialPlaces, PACKAGE_HOSTS } from '@g-code/core';
 import { ENGINE_ENV_FILE } from './child-env.js';
 import { EngineError } from './errors.js';
 import { runShell, spawnShell, stopGroup, type ShellOptions, type ShellResult, type SpawnedShell, type SpawnOptions } from './process.js';
@@ -66,18 +66,40 @@ export type PolicyInput = {
   readonly writable?: readonly string[];
 };
 
-/** The variable that turns on the sandbox's network for some hosts, which the editor's `gcode.sandbox.allowedDomains` sets. */
+/** The variable that adds hosts to the sandbox's network, which the editor's `gcode.sandbox.allowedDomains` sets. */
 export const SANDBOX_DOMAINS_ENV = 'GCODE_SANDBOX_ALLOWED_DOMAINS';
+/** `off` closes the package hosts, which the editor's `gcode.sandbox.packageHosts: false` sets. */
+export const SANDBOX_PACKAGE_HOSTS_ENV = 'GCODE_SANDBOX_PACKAGE_HOSTS';
 const SANDBOX_DOMAIN = /^(?:\*\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/;
 
-/** The hosts commands may reach, comma or space separated, as sandbox-runtime takes them: `example.com` or `*.example.com`. Unset is none. */
-export const sandboxDomainsOf = (env: Readonly<Record<string, string | undefined>>): readonly string[] =>
-  (env[SANDBOX_DOMAINS_ENV] ?? '').split(/[\s,]+/).filter((domain) => SANDBOX_DOMAIN.test(domain));
+/**
+ * The hosts commands may reach, as sandbox-runtime takes them (`example.com` or `*.example.com`): the package hosts
+ * unless they are off, then the user's own, comma or space separated, which add to them.
+ */
+export function sandboxDomainsOf(env: Readonly<Record<string, string | undefined>>): readonly string[] {
+  const own = (env[SANDBOX_DOMAINS_ENV] ?? '').split(/[\s,]+/).filter((domain) => SANDBOX_DOMAIN.test(domain));
+  return [...new Set([...(env[SANDBOX_PACKAGE_HOSTS_ENV] === 'off' ? [] : PACKAGE_HOSTS), ...own])];
+}
 
 /**
- * Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. No network
- * unless the engine was started with an allowlist: sandbox-runtime keeps one per process, so every sandbox the engine
- * opens takes the engine's own.
+ * Package managers keep their caches in the home folder, which commands may not write, so every command keeps them in
+ * its temp dir. pnpm 11 reads `pnpm_config_*`, and earlier versions `npm_config_*`.
+ */
+const cacheVariables = (tempDir: string): string =>
+  Object.entries({
+    npm_config_cache: 'npm-cache',
+    npm_config_store_dir: 'pnpm-store',
+    pnpm_config_store_dir: 'pnpm-store',
+    YARN_CACHE_FOLDER: 'yarn-cache',
+    PIP_CACHE_DIR: 'pip-cache',
+  })
+    .map(([name, folder]) => `${name}=${shellQuote(path.join(tempDir, folder))}`)
+    .join(' ');
+
+/**
+ * Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. The
+ * network reaches the hosts of the engine's own environment (`sandboxDomainsOf`): sandbox-runtime keeps one allowlist
+ * per process, so every sandbox the engine opens takes the engine's.
  */
 export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> {
   const repos = (await readTasks(input.store)).map((task) => task.repo);
@@ -192,8 +214,9 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
   };
   // sandbox-runtime sets TMPDIR from its process-wide CLAUDE_CODE_TMPDIR, which an engine serving several sessions
   // cannot give each one, so the command sets its own after the runtime's.
+  const caches = cacheVariables(policy.tempDir);
   const sandboxed = async (command: string, filesystem: Awaited<ReturnType<typeof rules>>) =>
-    wrapOne(runtime, policy, `export TMPDIR=${shellQuote(policy.tempDir)}\n${command}`, filesystem);
+    wrapOne(runtime, policy, `export TMPDIR=${shellQuote(policy.tempDir)} ${caches}\n${command}`, filesystem);
   // The opener's hold and one per retained command; the runtime is left once all have let go.
   let holds = 1;
   const release = async () => {

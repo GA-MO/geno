@@ -19,6 +19,26 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
+/**
+ * The hosts the bash sandbox reaches unless the user turns them off (`gcode.sandbox.packageHosts`): what npm, yarn,
+ * pnpm, pip and git contact to add a dependency or clone a public repository. Checked with real installs in the
+ * sandbox: npm and pnpm fetch from registry.npmjs.org, yarn 1 from registry.yarnpkg.com, pip from pypi.org and
+ * files.pythonhosted.org, and git clone from github.com. npm's GitHub dependencies come from codeload.github.com, raw
+ * files from raw.githubusercontent.com, and release downloads redirect to release-assets.githubusercontent.com, or
+ * objects.githubusercontent.com before GitHub moved them.
+ */
+export const PACKAGE_HOSTS = [
+  'registry.npmjs.org',
+  'registry.yarnpkg.com',
+  'pypi.org',
+  'files.pythonhosted.org',
+  'github.com',
+  'codeload.github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+  'raw.githubusercontent.com',
+] as const;
+
 export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', 'notebook_edit', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'show_files', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
@@ -37,7 +57,7 @@ export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filte
 const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL_SPECS>, Tool>> = {
   bash: {
     name: 'bash',
-    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it has no network beyond localhost, so installing packages or fetching URLs fails. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise. With run_in_background: true the command starts the same way, then returns at once with a job id such as bg-1 and runs on with no timeout, for a dev server, a watcher or a long build; at most ${MAX_BACKGROUND_JOBS} run at once per session. Go on with other work while it runs, read its output with bash_output or from the output file the start line names, and stop it with task_stop when you no longer need it. You are told when one ends, with the end of its output, so do not poll it.
+    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it reaches the network only at localhost and, unless the user turned them off, the package hosts (${PACKAGE_HOSTS.join(', ')}). So npm install, pnpm add, yarn add, pip install and git clone of a public GitHub repository work, and any other download fails; read a web page with web_fetch instead. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise. With run_in_background: true the command starts the same way, then returns at once with a job id such as bg-1 and runs on with no timeout, for a dev server, a watcher or a long build; at most ${MAX_BACKGROUND_JOBS} run at once per session. Go on with other work while it runs, read its output with bash_output or from the output file the start line names, and stop it with task_stop when you no longer need it. You are told when one ends, with the end of its output, so do not poll it.
 
 IMPORTANT: Do not use bash to run cat, head, tail, ls, find, grep, rg, sed, awk or echo, unless no dedicated tool can do it. Geno refuses a command line in which any part only reads files with cat, head, tail, less, more or sed -n, or only writes text into a workspace file with echo, printf, cat or tee, even beside other commands, and runs none of it. Prefer the dedicated tool for the rest too; the user sees each step, and edits stay exact:
 - Read files: read (not cat, head, tail or sed -n)
@@ -48,7 +68,7 @@ IMPORTANT: Do not use bash to run cat, head, tail, ls, find, grep, rg, sed, awk 
 - Write files: edit with create: true and the whole content (not echo >, cat <<EOF, tee, or a script that writes them)
 - Talk to the user: write text (not echo or printf)
 To look at several files or folders, make one read, list or glob call for each, all in the same turn, rather than one bash line that chains cat, ls and find.
-Use bash for builds, tests, git and other programs. Every command starts at the workspace root, so do not start one with cd to it. Dependencies are already installed; do not install packages. If a command is denied, do not run it again as it was; find another way or say what you could not do.
+Use bash for builds, tests, git and other programs. Every command starts at the workspace root, so do not start one with cd to it. The project's dependencies are usually installed already. Add a package only when the task needs one, with the package manager the project's lockfile shows, and name it in your report. If a command is denied, do not run it again as it was; find another way or say what you could not do.
 
 Waiting:
 - Never end a command with & to run it in the background: use run_in_background, which Geno stops when the session ends.
