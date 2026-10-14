@@ -179,14 +179,14 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     expect(result(after)).toEqual({ id: after.id, error: false, text: `${workspace}\n[exit code 0]` });
   });
 
-  it('a line with a step a file tool does is refused with nothing in it run, and a file piped into a program runs', async () => {
+  it('a line with a read step is refused with nothing in it run, and a file piped into a program runs', async () => {
     const mixed = use('bash', { command: 'touch made.txt; cat a.ts; grep -rn a .' });
     const piped = use('bash', { command: 'cat a.ts | wc -l' });
     const { result, workspace } = await session(wire, A_TS, () => [[mixed], [piped]]);
     expect(result(mixed)).toEqual({
       id: mixed.id,
       error: true,
-      text: "Geno ran nothing: `cat a.ts` is the read tool's job and `grep -rn a .` is the grep tool's job. Run `touch made.txt` alone in bash, and call read and grep in the same turn; they run at the same time.",
+      text: "Geno ran nothing: `cat a.ts` is the read tool's job. Run `touch made.txt; grep -rn a .` alone in bash, and call read in the same turn; they run at the same time.",
     });
     expect(existsSync(path.join(workspace, 'made.txt')), 'nothing in the line ran').toBe(false);
     expect(result(piped)).toMatchObject({ error: false, text: expect.stringMatching(/^\s*1\n\[exit code 0\]$/) });
