@@ -229,14 +229,27 @@ function fileToolOf([head, ...rest]: readonly Step[]): FileTool | undefined {
 }
 
 /**
+ * Each pipeline of a command line with the dedicated tool it stands in for, if any. A file step that runs only once a
+ * program before it succeeded, as the ls in `npm run build && ls dist`, checks what the program did, which no dedicated
+ * tool called in the same turn can do, so it is not one.
+ */
+function pipelineTools(command: string): { readonly pipeline: Step[]; readonly tool: FileTool | undefined }[] {
+  let afterProgram = false;
+  return pipelinesOf(stepsOf(command) ?? []).map((pipeline, i, all) => {
+    if (all[i - 1]?.at(-1)!.then !== '&&') afterProgram = false;
+    const own = fileToolOf(pipeline);
+    const tool = afterProgram ? undefined : own;
+    if (own === undefined && !isLabel(pipeline)) afterProgram = true;
+    return { pipeline, tool };
+  });
+}
+
+/**
  * The pipelines of a command line that a dedicated tool does as well, wherever they sit in the line, such as the cat
  * in `cat a.ts; npm test`. A pipeline led by any other program is not one, even one that pipes a file into it.
  */
 export function fileStepsOf(command: string): FileStep[] {
-  return pipelinesOf(stepsOf(command) ?? []).flatMap((pipeline) => {
-    const tool = fileToolOf(pipeline);
-    return tool === undefined ? [] : [{ text: pipelineText(pipeline), tool }];
-  });
+  return pipelineTools(command).flatMap(({ pipeline, tool }) => (tool === undefined ? [] : [{ text: pipelineText(pipeline), tool }]));
 }
 
 const listed = (items: readonly string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
@@ -251,7 +264,7 @@ export function fileStepRefusal(command: string): string | undefined {
   const steps = fileStepsOf(command);
   if (steps.length === 0) return undefined;
   // Labels stay beside a program, as a cd before it, and go when nothing else is left.
-  const others = pipelinesOf(stepsOf(command)!).filter((pipeline) => fileToolOf(pipeline) === undefined);
+  const others = pipelineTools(command).flatMap(({ pipeline, tool }) => (tool === undefined ? [pipeline] : []));
   const kept = others.every(isLabel) ? [] : others;
   const rest = kept.map((pipeline, i) => {
     const then = pipeline.at(-1)!.then;
