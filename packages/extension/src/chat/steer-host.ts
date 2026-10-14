@@ -44,8 +44,8 @@ export type SteerLink = { readonly connection: Connection; readonly sessionId: s
 export type SteerChat = {
   readonly running: () => SteerLink | undefined;
   readonly connection: () => Promise<Connection>;
-  /** No turn runs after all: the text goes as an ordinary prompt. */
-  readonly send: (text: string) => Promise<unknown>;
+  /** No turn runs after all: the text goes as the panel's own send. */
+  readonly send: (text: string) => void;
   /** Shows a steer the turn ended without taking as the next turn, which `response`, the steer's own, ends. */
   readonly adopt: (text: string, response: Promise<acp.PromptResponse>) => Promise<unknown>;
   readonly post: (message: SteerToView) => void;
@@ -83,7 +83,7 @@ export class SteerHost {
     const link = this.chat.running();
     if (link === undefined) {
       this.chat.post({ type: 'steered', target: { kind: 'chat' }, result: { kind: 'next-turn' } });
-      void this.chat.send(text).catch(() => {});
+      this.chat.send(text);
       return;
     }
     const pending: Pending = { link, text, response: steerRequest(link.connection, link.sessionId, text), settled: false };
