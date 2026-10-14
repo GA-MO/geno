@@ -274,7 +274,7 @@ const resultOf = (run: Run, id: string) => run.seen().flatMap((seen) => seen.res
 
 describe.each(WIRES)('PreToolUse on the %s wire', (wire: Wire) => {
   it('T-LOOP-01 runs PreToolUse for every call of a turn before the first one runs, and answers them in call order', async () => {
-    const uses = ['one', 'two', 'three'].map((word) => ({ id: `tu_${word}`, name: 'bash', input: { command: `echo ${word} >> order.txt` } }));
+    const uses = ['one', 'two', 'three'].map((word) => ({ id: `tu_${word}`, name: 'bash', input: { command: `node -e "require('fs').appendFileSync('order.txt', '${word}\\n')"` } }));
     const run = await scripted(wire, [call('', uses), say('Done.')]);
     const hook = await hookScript(run, 'pre', { before: `echo pre >> '${path.join(run.workspace, 'order.txt')}'` });
     await userHooks(run, { PreToolUse: group(hook.command, { matcher: 'Bash' }) });
@@ -292,7 +292,7 @@ describe.each(WIRES)('PreToolUse on the %s wire', (wire: Wire) => {
       permission_mode: 'dontAsk',
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
-      tool_input: { command: 'echo one >> order.txt' },
+      tool_input: { command: `node -e "require('fs').appendFileSync('order.txt', 'one\\n')"` },
       tool_use_id: 'tu_one',
     });
   });

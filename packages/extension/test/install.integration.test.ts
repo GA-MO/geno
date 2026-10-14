@@ -13,7 +13,7 @@ import { reserveLaunch } from './pool/client.js';
 const KEY = `sk-install-test-${randomUUID()}`;
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 const replies: readonly Reply[] = [
-  toolCall('Writing it.', [{ id: 'tu_0', name: 'bash', input: { command: 'echo sandboxed > proof.txt' } }], usage),
+  toolCall('Writing it.', [{ id: 'tu_0', name: 'bash', input: { command: 'pwd > proof.txt' } }], usage),
   answer('Done.', usage),
 ];
 
@@ -116,7 +116,7 @@ describe('g-code installed from its .vsix', () => {
     expect(requests[0]!.body.model).toBe('qwen3.8-flash');
     const result = requests[1]!.body.messages.at(-1).content.find((block: { type: string }) => block.type === 'tool_result');
     expect(result.is_error).toBeFalsy();
-    expect(await readFile(path.join(workspace, 'proof.txt'), 'utf8')).toBe('sandboxed\n');
+    expect(path.basename((await readFile(path.join(workspace, 'proof.txt'), 'utf8')).trim()), 'the command ran in the workspace').toBe(path.basename(workspace));
     expect(fimPrompts[0]).toContain('<|fim_prefix|>export function add');
 
     expect(output).not.toContain(KEY);

@@ -180,7 +180,7 @@ describe('gcode agent', () => {
       toolCall('Editing blind.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
       toolCall('Reading, then changing it behind my own back.', [
         use('read', { path: 'a.ts' }),
-        bash("printf 'export const a = 5;\\n' > a.ts"),
+        bash(`node -e "require('fs').writeFileSync('a.ts', 'export const a = 5;\\n')"`),
         use('edit', { path: 'a.ts', old_str: 'a = 5', new_str: 'a = 6' }),
       ], usage),
       answer('Gave up.', usage),
