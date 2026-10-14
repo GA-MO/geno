@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { capabilitiesOf, FILE_TOOL_NOTES, READER_SYSTEM, WEB_LIMITS, type TurnEvent } from '@g-code/core';
+import { capabilitiesOf, READER_SYSTEM, WEB_LIMITS, type TurnEvent } from '@g-code/core';
 import { twoColorPng } from '../../../core/test/png.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
 import { call, say, scripted, sessionIdOf, WIRES, type SeenResult, type Wire } from './scripted.js';
@@ -11,7 +11,7 @@ import { call, say, scripted, sessionIdOf, WIRES, type SeenResult, type Wire } f
 const A_TS = { 'a.ts': 'export const a = 1;\n' };
 const NOTEBOOKS = path.join(import.meta.dirname, '..', 'fixtures', 'notebooks');
 
-const COMMANDS = { failing: 'cat missing.txt', passing: "printf 'export const a = 1;\\n'" } as const;
+const COMMANDS = { failing: 'wc -l missing.txt', passing: "printf 'export const a = 1;\\n'" } as const;
 
 /** Runs one non-interactive turn in which the model calls bash with `command`, and returns the result it got back. */
 async function bashResult(wire: Wire, command: string): Promise<SeenResult> {
@@ -179,16 +179,17 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     expect(result(after)).toEqual({ id: after.id, error: false, text: `${workspace}\n[exit code 0]` });
   });
 
-  it('a command that only reads a file runs, and its result names the read tool once a session', async () => {
-    const first = use('bash', { command: 'cat a.ts' });
-    const again = use('bash', { command: 'head -1 a.ts' });
-    const listed = use('bash', { command: 'ls' });
+  it('a line with a step a file tool does is refused with nothing in it run, and a file piped into a program runs', async () => {
+    const mixed = use('bash', { command: 'touch made.txt; cat a.ts; grep -rn a .' });
     const piped = use('bash', { command: 'cat a.ts | wc -l' });
-    const { result } = await session(wire, A_TS, () => [[first], [again], [listed], [piped]]);
-    expect(result(first)).toMatchObject({ error: false, text: `export const a = 1;\n[exit code 0]\n${FILE_TOOL_NOTES.read}` });
-    expect(result(again)).toMatchObject({ error: false, text: 'export const a = 1;\n[exit code 0]' });
-    expect(result(listed).text.endsWith(`[exit code 0]\n${FILE_TOOL_NOTES.list}`)).toBe(true);
-    expect(result(piped).text).not.toMatch(/\[Geno\]/);
+    const { result, workspace } = await session(wire, A_TS, () => [[mixed], [piped]]);
+    expect(result(mixed)).toEqual({
+      id: mixed.id,
+      error: true,
+      text: "Geno ran nothing: `cat a.ts` is the read tool's job and `grep -rn a .` is the grep tool's job. Run `touch made.txt` alone in bash, and call read and grep in the same turn; they run at the same time.",
+    });
+    expect(existsSync(path.join(workspace, 'made.txt')), 'nothing in the line ran').toBe(false);
+    expect(result(piped)).toMatchObject({ error: false, text: expect.stringMatching(/^\s*1\n\[exit code 0\]$/) });
   });
 
   it('a server started with & or in the foreground is refused unrun, with the run_in_background call to make instead', async () => {
@@ -213,7 +214,7 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
 
   it('T-TOOL-08 a foreground command that starts with a long sleep is refused unrun, with a pointer to monitor and run_in_background', async () => {
     const slept = use('bash', { command: 'sleep 45; echo ran > ran.txt' });
-    const short = use('bash', { command: 'sleep 1; cat a.ts' });
+    const short = use('bash', { command: 'sleep 1; awk 1 a.ts' });
     const { result, workspace } = await session(wire, A_TS, () => [[slept], [short]]);
     expect(result(slept).error).toBe(true);
     expect(result(slept).text).toMatch(/^Blocked: sleep 45 followed by: echo ran > ran\.txt\./);

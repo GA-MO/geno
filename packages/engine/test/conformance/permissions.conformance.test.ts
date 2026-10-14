@@ -143,12 +143,12 @@ describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
     expect(run.sent()).not.toContain(SECRET);
   });
 
-  it('T-PERM-05 cat .env asks the user in Ask mode, and is refused when nobody can be asked', async () => {
-    const asking = call('bash', { command: 'cat .env' });
+  it('T-PERM-05 a command that prints .env asks the user in Ask mode, and is refused when nobody can be asked', async () => {
+    const asking = call('bash', { command: 'cat -v .env' });
     const ask = await scripted(wire, [{ calls: [asking] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
-    expect(ask.asked).toEqual([expect.objectContaining({ rule: 'secret-path', command: 'cat .env', verdict: 'ask' })]);
+    expect(ask.asked).toEqual([expect.objectContaining({ rule: 'secret-path', command: 'cat -v .env', verdict: 'ask' })]);
 
-    const refused = call('bash', { command: 'cat .env' });
+    const refused = call('bash', { command: 'cat -v .env' });
     const alone = await scripted(wire, [{ calls: [refused] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive' });
     expect(alone.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining('credentials') });
     expect(ask.sent() + alone.sent()).not.toContain(SECRET);
@@ -211,9 +211,9 @@ describe.each(WIRES)('T-PERM-05 user path rules on the %s wire', (wire) => {
   const files = { 'private/plan.md': `${PRIVATE}\n`, 'src/a.ts': 'export const plan = "see private";\n' };
   const rules: readonly NewRule[] = [{ effect: 'deny', tool: 'read', path: 'private/**' }];
 
-  it('T-PERM-05 a Read deny rule refuses read and cat of the file in every mode, naming the rule, and the text never reaches the model', async () => {
+  it('T-PERM-05 a Read deny rule refuses read and a command that prints the file in every mode, naming the rule, and the text never reaches the model', async () => {
     const read = call('read', { path: 'private/plan.md' });
-    const cat = call('bash', { command: 'cat private/plan.md' });
+    const cat = call('bash', { command: 'cat -v private/plan.md' });
     const asking = await scripted(wire, [{ calls: [read] }, { calls: [cat] }, { answer: 'Both refused.' }], { files, mode: 'auto', rules });
     expect(asking.asked).toEqual([]);
     expect(asking.view().get(read.id)).toMatchObject({ error: true, text: expect.stringContaining('the workspace rule that denies `Read(private/**)`') });
@@ -262,7 +262,7 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
   const files = { 'a.ts': 'export const a = 1;\n' };
   const added = (entries: unknown) => ({ GCODE_ADDITIONAL_DIRECTORIES: JSON.stringify(entries) });
 
-  it('T-PERM-04 read and list outside the workspace ask in Ask, as cat of the same path does, and offer the directory for the session', async () => {
+  it('T-PERM-04 read and list outside the workspace ask in Ask, as a command printing the same path does, and offer the directory for the session', async () => {
     const dir = await sibling();
     const read = call('read', { path: path.join(dir, 'notes.md') });
     const asking = await scripted(wire, [{ calls: [read] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
@@ -272,7 +272,7 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const listing = await scripted(wire, [{ calls: [list] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
     expect(listing.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', command: `list ${dir}`, directory: dir })]);
 
-    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const cat = call('bash', { command: `cat -v ${path.join(dir, 'notes.md')}` });
     const catting = await scripted(wire, [{ calls: [cat] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
     expect(catting.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', verdict: 'ask' })]);
     expect(asking.sent() + listing.sent() + catting.sent()).not.toContain(NOTE);
@@ -284,7 +284,7 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const read = call('read', { path: path.join(dir, 'notes.md') });
     const grep = call('grep', { pattern: 'design', path: dir });
     const glob = call('glob', { pattern: '*.md', directory: dir });
-    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const cat = call('bash', { command: `cat -v ${path.join(dir, 'notes.md')}` });
     const run = await scripted(wire, [{ calls: [read, grep, glob, cat] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive', env: added([extra]) });
     for (const refused of [read, grep, glob, cat]) {
       expect(run.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining(`Geno may read only in these directories in this session: '${run.workspace}', '${extra}'.`) });
@@ -306,12 +306,12 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     expect(run.view().get(read.id)).toEqual({ error: false, text: `1\t${NOTE}` });
   });
 
-  it('T-PERM-04 "Allow this directory for the session" reads the rest of the directory without a card, cat included, and keeps credentials files asking', async () => {
+  it('T-PERM-04 "Allow this directory for the session" reads the rest of the directory without a card, commands included, and keeps credentials files asking', async () => {
     const dir = await sibling();
     const first = call('read', { path: path.join(dir, 'notes.md') });
     const again = call('read', { path: path.join(dir, 'other.md') });
     const grep = call('grep', { pattern: 'package|API_KEY', path: dir });
-    const cat = call('bash', { command: `cat ${path.join(dir, 'other.md')}` });
+    const cat = call('bash', { command: `cat -v ${path.join(dir, 'other.md')}` });
     const secret = call('read', { path: path.join(dir, '.env') });
     const kept = new Set<string>();
     const run = await scripted(wire, [{ calls: [first] }, { calls: [again, grep, cat] }, { calls: [secret] }, { answer: 'Stopped.' }], {
@@ -342,7 +342,7 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const read = call('read', { path: path.join(dir, 'notes.md') });
     const list = call('list', { directory: dir });
     const grep = call('grep', { pattern: 'API_KEY|design', path: dir });
-    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const cat = call('bash', { command: `cat -v ${path.join(dir, 'notes.md')}` });
     const secret = call('read', { path: path.join(dir, '.env') });
     const run = await scripted(wire, [{ calls: [read, list, grep, cat, secret] }, { answer: 'Read them.' }], { files, mode: 'non-interactive', env: added([dir]) });
     expect(run.view().get(read.id)).toEqual({ error: false, text: `1\t${NOTE}` });
@@ -576,8 +576,8 @@ describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
   });
 
   it('B/B-62 a settings file that is not JSON is reported once, and the run goes on', async () => {
-    const first = call('bash', { command: 'ls' });
-    const run = await scripted(wire, [{ calls: [first] }, { calls: [call('bash', { command: 'ls' })] }, { answer: 'Listed.' }], { files: { '.claude/settings.json': '{ "permissions": ' }, mode: 'auto' });
+    const first = call('bash', { command: 'ls -t' });
+    const run = await scripted(wire, [{ calls: [first] }, { calls: [call('bash', { command: 'ls -t' })] }, { answer: 'Listed.' }], { files: { '.claude/settings.json': '{ "permissions": ' }, mode: 'auto' });
     expect(run.view().get(first.id)!.error).toBe(false);
     expect(run.warnings).toHaveLength(1);
     expect(run.warnings[0]).toMatch(/^permissions: \.claude\/settings\.json is not valid JSON, so its rules do not apply: /);
@@ -757,7 +757,7 @@ describe.each(WIRES)('B/B-65 the check after an edit under a Bash deny on the %s
 describe.each(WIRES)('N-02 hidden Unicode on the %s wire', (wire) => {
   it('N-02 read and bash show hidden characters as visible escapes, and an edit written from them lands exactly', async () => {
     const read = call('read', { path: 'notes.md' });
-    const cat = call('bash', { command: 'cat notes.md' });
+    const cat = call('bash', { command: 'awk 1 notes.md' });
     const edit = call('edit', { path: 'notes.md', old_str: 'a[U+200B]b', new_str: 'a[U+200B]B' });
     const run = await scripted(wire, [{ calls: [read, cat] }, { calls: [edit] }, { answer: 'Done.' }], { files: { 'notes.md': `${HIDDEN_LINE}\n` }, mode: 'non-interactive' });
     const seen = run.view();
@@ -929,14 +929,14 @@ describe.each(WIRES)('P-04 stopping processes on the %s wire', (wire) => {
     expect(run.view().get(kill.id)!.text).toMatch(/^\[exit code 0\]$|Operation not permitted\n\[exit code 1\]\n\[Geno\] The sandbox lets a command signal only what the same call started\. To stop a background command Geno started, call task_stop with its id: bg-1 \(`sleep 30`\)\.$/);
   });
 
-  it("tail and read of the job's output file run without a question; another session's output file names bash_output", async () => {
+  it("a command and read of the job's output file run without a question; another session's output file names bash_output", async () => {
     const job = background('echo hello-from-job');
     const pause = call('read', { path: 'a.ts' });
     let tail!: FakeToolUse;
     let read!: FakeToolUse;
     const reply = (request: ModelRequest) => {
       const file = /goes to (\S+bg-1\.log)\./.exec(sentText(request))![1]!;
-      tail = call('bash', { command: `tail -n 20 ${file}` });
+      tail = call('bash', { command: `cat -v ${file}` });
       read = call('read', { path: file });
       return [tail, read];
     };
@@ -948,7 +948,7 @@ describe.each(WIRES)('P-04 stopping processes on the %s wire', (wire) => {
     const other = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-other-spill-')));
     await mkdir(path.join(other, 'background'));
     await writeFile(path.join(other, 'background', 'bg-3.log'), 'not yours\n');
-    const elsewhere = call('bash', { command: `tail -n 20 ${path.join(other, 'background', 'bg-3.log')}` });
+    const elsewhere = call('bash', { command: `cat -v ${path.join(other, 'background', 'bg-3.log')}` });
     const alone = await scripted(wire, [{ calls: [elsewhere] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive' });
     expect(alone.view().get(elsewhere.id)).toMatchObject({ error: true, text: expect.stringContaining("read this session's background commands with bash_output and their bg-N id") });
     expect(alone.sent()).not.toContain('not yours');

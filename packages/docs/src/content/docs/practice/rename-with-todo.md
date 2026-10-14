@@ -369,9 +369,9 @@ scenario:
       lane: tool
       at: shell
       do: >-
-        คำสั่งนี้แค่ค้นเนื้อไฟล์ `fileToolNoter` จึงต่อโน้ต "[Geno] Next time, search file contents with the grep tool, not grep -r or rg."
-        ท้ายผล โน้ตของแต่ละ tool ขึ้นครั้งเดียวต่อ session
-      ref: packages/core/src/shell-intent.ts#fileToolNoter
+        คำสั่งนี้แค่ค้นเนื้อไฟล์ ตอนอัด run นี้ Geno ต่อโน้ต "[Geno] Next time, search file contents with the grep tool, not grep -r or rg."
+        ท้ายผล ตอนนี้ `fileStepRefusal` ปฏิเสธบรรทัดแบบนี้ก่อนรัน และบอกให้เรียก `grep` แทน
+      ref: packages/core/src/shell-intent.ts#fileStepRefusal
       emits: [tool-result]
 
     - use: model-call
@@ -426,8 +426,8 @@ check ของ case ผ่านทุกข้อ: model ใช้ todo แล
   ส่วนที่ Geno ทำเองได้คือเตือน: `todoReminder` ส่งรายการที่ค้างกลับไปเมื่อ model ไม่แตะมันครบ 10 รอบ ใน run นี้ไม่ถึงเกณฑ์นั้น
 - **ผลที่ผิดพลาดก็คือผลของ tool** `read` ไฟล์ที่ไม่มี และ `bash` ที่ exit 1 ไม่ทำให้ turn จบ model อ่าน error แล้วเลือกทางใหม่เอง
   ดู [ผลของ tool ส่งกลับอย่างไร](/foundations/tool-results/)
-- **โน้ตท้ายผลสอน model ระหว่างทาง** `[Geno] Next time, …` มาจากตาราง `FILE_TOOL_NOTES` ที่รู้ว่าคำสั่ง shell ไหนแค่อ่านหรือค้นไฟล์
-  โน้ตอยู่ในผลของ tool จึงไม่เปลี่ยน system prompt และไม่ทำให้ cache ส่วนต้นเสีย
+- **โน้ตท้ายผลสอนได้ช้าไปหนึ่งคำสั่ง** ตอนอัด run นี้ โน้ต `[Geno] Next time, …` มาถึงหลังคำสั่งรันไปแล้ว
+  ตอนนี้ `fileStepRefusal` ไม่รันบรรทัดที่มีขั้นซึ่ง `read` `list` `glob` หรือ `grep` ทำได้ และบอกว่าแต่ละขั้นเป็นงานของ tool ไหน
 
 อ่านต่อ:
 

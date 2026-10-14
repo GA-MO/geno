@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileToolsOf, serverRefusal, serverStartOf, stepsOf } from '../src/shell-intent.js';
+import { fileStepRefusal, fileStepsOf, serverRefusal, serverStartOf, stepsOf } from '../src/shell-intent.js';
 
 describe('stepsOf', () => {
   it('splits at operators outside quotes and groups, and keeps redirections apart', () => {
@@ -26,53 +26,83 @@ describe('stepsOf', () => {
   });
 });
 
-describe('fileToolsOf', () => {
-  const table: readonly (readonly [string, readonly string[]])[] = [
-    ['cat package.json', ['read']],
-    ['cat -n src/a.ts src/b.ts', ['read']],
-    ['head -50 notes/deploy.txt', ['read']],
-    ['head -n 20 src/a.ts', ['read']],
-    ['tail -n +40 src/a.ts | head -20', ['read']],
-    ["sed -n '1,40p' src/config.ts", ['read']],
-    ['ls', ['list']],
-    ['ls -la notes/', ['list']],
-    ['ls -R . | head -50', ['list']],
-    ['find . -name "*.ts" -not -path "*/node_modules/*"', ['glob']],
-    ['find packages -type f | sort', ['glob']],
-    ['find . -path ./node_modules -prune -o -type f -print | head -50', ['glob']],
-    ['grep -rn "listen" src', ['grep']],
-    ['grep -n "port" server.js | head -20', ['grep']],
-    ['grep -rni --include=*.ts retries .', ['grep']],
-    ['rg -n retries src', ['grep']],
-    ['cat package.json; echo ---; ls -la', ['read', 'list']],
-    ['cd /work/repo && cat a.ts 2>/dev/null', ['read']],
-    ['ls -la notes/ && head -50 notes/* 2>/dev/null', ['list', 'read']],
+describe('fileStepsOf', () => {
+  const read = (text: string) => ({ text, tool: 'read' });
+  const table: readonly (readonly [string, readonly { text: string; tool: string }[]])[] = [
+    ['cat package.json', [read('cat package.json')]],
+    ['cat -n src/a.ts src/b.ts', [read('cat -n src/a.ts src/b.ts')]],
+    ['head -50 notes/deploy.txt', [read('head -50 notes/deploy.txt')]],
+    ['head -n 20 src/a.ts', [read('head -n 20 src/a.ts')]],
+    ['tail -n +40 src/a.ts | head -20', [read('tail -n +40 src/a.ts | head -20')]],
+    ["sed -n '1,40p' src/config.ts", [read("sed -n '1,40p' src/config.ts")]],
+    ['ls', [{ text: 'ls', tool: 'list' }]],
+    ['ls -R . | head -50', [{ text: 'ls -R . | head -50', tool: 'list' }]],
+    ['find . -name "*.ts" -not -path "*/node_modules/*"', [{ text: 'find . -name "*.ts" -not -path "*/node_modules/*"', tool: 'glob' }]],
+    ['find packages -type f | sort', [{ text: 'find packages -type f | sort', tool: 'glob' }]],
+    ['grep -n "port" server.js | head -20', [{ text: 'grep -n "port" server.js | head -20', tool: 'grep' }]],
+    ['grep -rni --include=*.ts retries .', [{ text: 'grep -rni --include=*.ts retries .', tool: 'grep' }]],
+    ['rg -n retries src', [{ text: 'rg -n retries src', tool: 'grep' }]],
+    ['cat a.ts 2>/dev/null', [read('cat a.ts 2>/dev/null')]],
+    ['cat package.json; echo ---; ls -la', [read('cat package.json'), { text: 'ls -la', tool: 'list' }]],
+    ['npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git', [{ text: 'grep -rn getUser . --exclude-dir=.git', tool: 'grep' }]],
+    ['ls src test; cat src/money.ts', [{ text: 'ls src test', tool: 'list' }, read('cat src/money.ts')]],
+    ['git status && cat a.ts', [read('cat a.ts')]],
+    ['cd /work/repo && cat a.ts', [read('cat a.ts')]],
+    ['(cd sub && make); cat a.ts', [read('cat a.ts')]],
 
+    ['npm test 2>&1 | grep -E "not ok"', []],
+    ['cat x | node y', []],
+    ['git show HEAD:f | head', []],
+    ['cat a.ts | wc -l', []],
+    ['cat src/config.ts | od -c', []],
+    ['ls | grep test', []],
+    ['git log | grep fix', []],
     ['cat /proc/cpuinfo', []],
     ['cat', []],
     ['cat - < input.txt', []],
     ['tail -f server.log', []],
     ['head -c 100 a.bin', []],
-    ['cat a.ts | wc -l', []],
-    ['cat src/config.ts | od -c', []],
-    ['ls | grep test', []],
     ['grep -l retries -r src', []],
     ['grep -c TODO src/a.ts', []],
-    ['git log | grep fix', []],
     ['find . -name "*.tmp" -delete', []],
     ['find src -newer a.ts', []],
     ['cat a.ts > b.ts', []],
+    ['cat a.ts | head > b.ts', []],
     ['cat > notes.txt <<EOF\nx\nEOF', []],
     ['cat $(git ls-files)', []],
-    ['git status && cat a.ts', []],
-    ['node --version && cat package.json', []],
     ['ls & sleep 1', []],
     ['echo done', []],
+    ['cd sub && pwd', []],
     ['sudo cat /etc/hosts', []],
     ['awk "{print $1}" a.txt', []],
   ];
-  it.each(table)('%s', (command, tools) => {
-    expect(fileToolsOf(command)).toEqual(tools);
+  it.each(table)('%s', (command, steps) => {
+    expect(fileStepsOf(command)).toEqual(steps);
+  });
+});
+
+describe('fileStepRefusal', () => {
+  it('names each file step and its tool, and the rest of the line to run alone', () => {
+    expect(fileStepRefusal('npm run build && npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git; cat src/a.ts')).toBe(
+      "Geno ran nothing: `grep -rn getUser . --exclude-dir=.git` is the grep tool's job and `cat src/a.ts` is the read tool's job. Run `npm run build && npm test 2>&1 | tail -15` alone in bash, and call grep and read in the same turn; they run at the same time.",
+    );
+  });
+
+  it('keeps a cd with the program it runs before', () => {
+    expect(fileStepRefusal('cd sub && npm test; cat a.ts')).toBe(
+      "Geno ran nothing: `cat a.ts` is the read tool's job. Run `cd sub && npm test` alone in bash, and call read in the same turn; they run at the same time.",
+    );
+  });
+
+  it('says only to call the tools when the line holds nothing else but labels', () => {
+    expect(fileStepRefusal('ls src test; echo ---; cat src/money.ts')).toBe(
+      "Geno ran nothing: `ls src test` is the list tool's job and `cat src/money.ts` is the read tool's job. Call list and read instead; calls in one turn run at the same time.",
+    );
+  });
+
+  it('lets through a line with no file step', () => {
+    expect(fileStepRefusal('npm test 2>&1 | grep -E "not ok"')).toBeUndefined();
+    expect(fileStepRefusal("cat <<EOF > a.txt\nhi\nEOF")).toBeUndefined();
   });
 });
 
