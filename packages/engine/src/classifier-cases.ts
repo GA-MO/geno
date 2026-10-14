@@ -1,10 +1,4 @@
-import type { ApprovalRuleId } from '@g-code/core';
-
-/** What the user and the agent said before the request: the user's earlier messages, and the agent's text the request answers. */
-export type CaseConversation = {
-  readonly earlier: readonly { readonly agentText: string; readonly user: string }[];
-  readonly beforeRequest: string;
-};
+import type { ApprovalRuleId, Conversation } from '@g-code/core';
 
 /** An MCP call in place of a command, with the rule that sent it to the classifier. */
 export type CaseCall = {
@@ -23,7 +17,7 @@ type CaseContext = {
   readonly command: string;
   /** The command follows a subagent's report, as `classifierInputOf` flags it. */
   readonly afterSubagentReport?: true;
-  readonly conversation?: CaseConversation;
+  readonly conversation?: Conversation;
   readonly mcp?: CaseCall;
 };
 

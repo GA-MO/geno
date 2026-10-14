@@ -9,11 +9,12 @@ import {
   classifierChoiceOf,
   type ClassifierInput,
   type ClassifierRun,
+  type Conversation,
   type CommandScope,
   type Denial,
   type Verdict,
 } from '@g-code/core';
-import { ALLOW_CASES, DANGEROUS_CASES, type CaseCall, type CaseConversation } from './classifier-cases.js';
+import { ALLOW_CASES, DANGEROUS_CASES, type CaseCall } from './classifier-cases.js';
 import { commandClassifier, type Classify } from './classifier.js';
 import type { Command } from './command.js';
 import { positiveNumber } from './drive.js';
@@ -33,7 +34,7 @@ type LabeledCase = {
   readonly command: string;
   readonly scope: CommandScope;
   readonly afterSubagentReport?: true;
-  readonly conversation?: CaseConversation;
+  readonly conversation?: Conversation;
   readonly mcp?: CaseCall;
 };
 
@@ -143,6 +144,7 @@ export const caseInput = (c: Omit<LabeledCase, 'set' | 'scope'>, denial: Denial 
   command: c.command,
   flagged: denial ?? UNLISTED_DENIAL(c.command),
   ...(c.afterSubagentReport === true ? { afterSubagentReport: true } : {}),
+  ...(c.conversation === undefined ? {} : { conversation: c.conversation }),
   ...(c.mcp === undefined ? {} : { mcp: { server: c.mcp.server, tool: c.mcp.tool, arguments: c.mcp.arguments, ...(c.mcp.page === undefined ? {} : { page: c.mcp.page }) } }),
 });
 
@@ -242,7 +244,8 @@ function table(summary: Summary, model: string): string[] {
 
 /**
  * `gcode eval classifier`: the gate before Auto ships. Benign commands from past eval runs, hand-written dangerous ones,
- * and steps Auto should run. `--sample n` judges n of the benign commands, spread over them, to bound the cost.
+ * and steps Auto should run. `--sample n` judges n of the benign commands, spread over them, to bound the cost;
+ * `--only a,b` keeps the cases whose set or category is named, such as `allow,answer`.
  */
 export const classifierEvalCommand: Command = async (args, { io, store }) => {
   const { values } = parseArgs({
@@ -253,13 +256,15 @@ export const classifierEvalCommand: Command = async (args, { io, store }) => {
       concurrency: { type: 'string', default: '4' },
       'max-cost': { type: 'string', default: '0.40' },
       sample: { type: 'string' },
+      only: { type: 'string' },
     },
   });
   const width = positiveNumber('concurrency', values.concurrency, true);
   const maxCostUsd = positiveNumber('max-cost', values['max-cost'], false);
   const home = io.env['HOME'] || homedir();
   const sample = values.sample === undefined ? undefined : positiveNumber('sample', values.sample, true);
-  const cases = sampleBenign([...(await benignCases(store, home)), ...handWritten()], sample);
+  const only = values.only === undefined ? undefined : new Set(values.only.split(','));
+  const cases = sampleBenign([...(await benignCases(store, home)), ...handWritten()], sample).filter((c) => only === undefined || only.has(c.set) || only.has(c.category));
   const model = classifierChoiceOf(io.env).model ?? 'none';
   const classify: Classify = commandClassifier(io.env, io.fetch);
   let spent = 0;
