@@ -22,7 +22,7 @@ const FIXED_AT = '2026-10-12T09:00:00.000Z';
 const NORMALIZED = 'temp paths, session ids, Geno-made call ids, timestamps and subagent durations';
 
 /** Replaces what differs between runs: temp paths, session and call ids, clock times and durations. */
-function normalizer(roots: { readonly workspace: string; readonly home: string; readonly tmp: string }) {
+function normalizer(roots: { readonly workspace: string; readonly home: string; readonly tmp: string; readonly scratch: RegExp }) {
   const ids = new Map<string, string>();
   const idFor = (found: string, make: (n: number) => string): string => {
     let id = ids.get(found);
@@ -34,7 +34,8 @@ function normalizer(roots: { readonly workspace: string; readonly home: string; 
   };
   const hex = (n: number, width: number) => n.toString(16).padStart(width, '0');
   return (text: string): string => {
-    let out = text.replaceAll(roots.workspace, '/home/dev/shop').replaceAll(roots.home, '/home/dev').replaceAll(roots.tmp, '/tmp');
+    let out = text.replace(roots.scratch, (_, start: string) => `/tmp/gcode-1000/${idFor(start, (n) => hex(n, 8))}`);
+    out = out.replaceAll(roots.workspace, '/home/dev/shop').replaceAll(roots.home, '/home/dev').replaceAll(roots.tmp, '/tmp');
     out = out.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, (found) => idFor(found, (n) => `${hex(n, 8)}-0000-4000-8000-${hex(n, 12)}`));
     for (const [found, id] of ids) if (found.includes('-')) out = out.replaceAll(`-${found.slice(0, 8)}`, `-${id.slice(0, 8)}`);
     out = out.replace(/toolu_gcode_[0-9a-f]{32}/g, (found) => idFor(found, (n) => `toolu_gcode_${hex(n, 32)}`));
@@ -94,6 +95,8 @@ async function main(): Promise<void> {
   const engineCommit = execFileSync('git', ['-C', REPO, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   mkdirSync(path.join(REPO, RECORDED), { recursive: true });
   const tmp = await realpath(tmpdir());
+  // A session's scratchpad (`scratchpadOf`): this user's folder under /tmp, then the start of the session id.
+  const scratch = new RegExp(`${await realpath('/tmp')}/gcode-${process.getuid?.()}/([0-9a-f]{8,})`, 'g');
   for (const flow of FLOWS) {
     if (only.length > 0 && !only.includes(flow.name)) continue;
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${flow.name}: no end after 60s`)), 60_000).unref());
@@ -101,7 +104,7 @@ async function main(): Promise<void> {
     const { exchanges, workspace, home } = recording;
     const failed = exchanges.findIndex((exchange) => exchange.status !== 200 && exchange.aborted !== true);
     if (failed >= 0) throw new Error(`${flow.name}: request ${failed + 1} got HTTP ${exchanges[failed]!.status}: ${exchanges[failed]!.response.slice(0, 400)}`);
-    const normalize = normalizer({ workspace, home, tmp });
+    const normalize = normalizer({ workspace, home, tmp, scratch });
     const text = `${normalize(lines(flow, recording, engineCommit).join('\n'))
       .split('\n')
       .map((line) => joinedInputs(line, normalize))

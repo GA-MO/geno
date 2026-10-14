@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, readFile, realpath } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -12,8 +12,77 @@ const exec = promisify(execFile);
 /** A slow repository costs the session's start at most this long per git command. */
 const GIT_TIMEOUT_MS = 5000;
 
-/** The session's scratchpad: its own folder under the real temp dir, the same path every time the session runs. */
-export const scratchpadOf = async (sessionId: string): Promise<string> => path.join(await realpath(os.tmpdir()), 'gcode-sessions', sessionId);
+/** Inside a scratchpad, the full id of the session that made it, so a session whose id starts the same makes its own. */
+const OWNER_FILE = '.gcode-session';
+
+const errnoOf = (error: unknown): string | undefined => (error as NodeJS.ErrnoException).code;
+
+/**
+ * Whether `root` is a folder only `uid` can write: made now with mode 0700, or found as a real directory (not a symlink)
+ * that `uid` owns and that its group and others cannot write. Anything else at that shared path may be another user's.
+ */
+async function privateRoot(root: string, uid: number): Promise<boolean> {
+  try {
+    await mkdir(root, { mode: 0o700 });
+  } catch (error) {
+    if (errnoOf(error) !== 'EEXIST') return false;
+  }
+  const stat = await lstat(root);
+  return stat.isDirectory() && stat.uid === uid && (stat.mode & 0o022) === 0;
+}
+
+/** Makes `dir` this session's, or says it is another's: one made by a session whose id starts the same. */
+async function claimed(dir: string, sessionId: string): Promise<boolean> {
+  try {
+    await mkdir(dir, { mode: 0o700 });
+  } catch (error) {
+    if (errnoOf(error) !== 'EEXIST') throw error;
+    return (await readFile(path.join(dir, OWNER_FILE), 'utf8').catch(() => undefined)) === sessionId;
+  }
+  await writeFile(path.join(dir, OWNER_FILE), sessionId);
+  return true;
+}
+
+export type ScratchRoots = {
+  /** The shared temp dir the short root sits in. */
+  readonly tmp?: string;
+  /** The user the short root must belong to; absent where the platform has no uids, such as Windows. */
+  readonly uid?: number | undefined;
+  readonly warn?: (line: string) => void;
+};
+
+/**
+ * A new session's scratchpad, made now: `/tmp/gcode-<uid>/<first 8 hex of the id>`, more of the id when a live session
+ * already has that folder. It is every command's $TMPDIR, and macOS caps a unix socket's path at 104 bytes, so the
+ * per-user temp dir (/private/var/folders/…/T, about 50) leaves a project too little room for the sockets it makes there.
+ * Where the short root cannot be trusted or written, as in a sandbox that may write only its own scratchpad, or there
+ * are no uids, it is the old `<temp dir>/gcode-sessions/<id>`.
+ */
+export async function scratchpadOf(sessionId: string, { tmp = '/tmp', uid = process.getuid?.(), warn = () => {} }: ScratchRoots = {}): Promise<string> {
+  if (uid !== undefined) {
+    const root = path.join(await realpath(tmp), `gcode-${uid}`);
+    const compact = sessionId.replaceAll('-', '');
+    const names = [...[8, 16, 24].filter((length) => length < compact.length).map((length) => compact.slice(0, length)), sessionId];
+    try {
+      if (!(await privateRoot(root, uid))) throw new Error(`${root} is not a private folder of this user`);
+      for (const name of names) if (await claimed(path.join(root, name), sessionId)) return path.join(root, name);
+    } catch (error) {
+      warn(`scratchpad: ${(error as Error).message}; this session's scratchpad is under the temp dir`);
+    }
+  }
+  return path.join(await realpath(os.tmpdir()), 'gcode-sessions', sessionId);
+}
+
+/**
+ * Makes a session's recorded scratchpad again for a run, as a reboot empties /tmp. False when it sits in a short root
+ * that is no longer this user's private folder, so the run does not write where another user could.
+ */
+export async function reopenScratchpad(scratchpad: string, uid = process.getuid?.()): Promise<boolean> {
+  const root = path.dirname(scratchpad);
+  if (uid !== undefined && path.basename(root) === `gcode-${uid}` && !(await privateRoot(root, uid))) return false;
+  await mkdir(scratchpad, { recursive: true, mode: 0o700 });
+  return true;
+}
 
 const git = async (workspace: string, args: readonly string[]): Promise<string | undefined> => {
   try {
