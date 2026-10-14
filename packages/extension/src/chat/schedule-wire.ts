@@ -11,7 +11,7 @@ export const schedulesUpdate = z
         title: z.string(),
         when: z.looseObject({ kind: z.enum(['cron', 'at']) }),
         edits: z.boolean(),
-        budget: z.object({ maxCostUsd: z.number(), maxTurns: z.number() }),
+        budget: z.object({ maxCostUsd: z.union([z.number(), z.object({ referenceUsd: z.number() })]), maxTurns: z.number() }),
         paused: z.boolean(),
         runs: z.array(z.looseObject({ kind: z.enum(['ran', 'missed', 'not-started']) })),
         nextAt: z.number().nullable(),

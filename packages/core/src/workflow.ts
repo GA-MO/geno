@@ -4,12 +4,11 @@ import type { ApprovalMode } from './approval.js';
 import { reportBody } from './fence.js';
 import { STRUCTURED_OUTPUT_TOOL } from './handback.js';
 import type { Parsed } from './ask-user.js';
-import type { Rates } from './cost.js';
-import { costAt } from './cost.js';
+import { capUsd, costAt, defaultUsd, ratesOf, type UsdCap } from './cost.js';
 import { formatUsd as usd } from './spend-view.js';
 import type { WorkflowProgress, WorkflowStatus } from './workflow-progress.js';
 import { ZERO_USAGE, type AssistantTurn, type TurnEvent } from './session.js';
-import { AGENT_TOOL, childEndWords, DEFAULT_CHILD_CAPS, findAgent, isReadOnly, type AgentDefinition, type ChildCaps, type ChildEnd } from './subagent.js';
+import { AGENT_TOOL, childEndWords, DEFAULT_CHILD_CAPS, findAgent, isReadOnly, type AgentDefinition, type CapModel, type ChildCaps, type ChildEnd } from './subagent.js';
 
 /**
  * Workflows: a small JSON file that runs subagents in a fixed order, such as review, then fix, then verify. The file
@@ -42,7 +41,7 @@ export const WORKFLOW_LIMITS = {
   prompt: 20_000,
 } as const;
 
-export const DEFAULT_WORKFLOW_CAP_USD = 0.5;
+export const DEFAULT_WORKFLOW_CAP_USD = defaultUsd(0.5);
 export const DEFAULT_PIPELINE_ITEMS = 5;
 
 /** What the estimate takes one model call to be: about Geno's first request with tools, and a short answer. */
@@ -102,7 +101,8 @@ export type WorkflowSpec = {
   readonly description: string;
   /** What the text after the name means, shown in the preview; undefined when the workflow takes none. */
   readonly input: string | undefined;
-  readonly maxCostUsd: number;
+  /** The run's total cap: the file's dollars, or the default, scaled to the model of the session that runs it. */
+  readonly maxCostUsd: UsdCap;
   readonly steps: readonly WorkflowNode[];
   readonly source: WorkflowSource;
   /** Shown to the user: relative to the workspace for a workspace file. */
@@ -409,9 +409,13 @@ export function mergeWorkflows(groups: readonly (readonly WorkflowSpec[])[]): Wo
 const agentSteps = (node: WorkflowNode): readonly AgentStep[] =>
   node.kind === 'agent' ? [node] : node.kind === 'parallel' ? node.branches : node.kind === 'pipeline' ? node.stages : [];
 
-/** What a step runs with: its own caps and model, else its role's, else a child's defaults. */
-export function stepCaps(step: AgentStep, role: AgentDefinition | undefined): ChildCaps {
-  return { maxTurns: step.maxTurns ?? role?.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: step.maxCostUsd ?? role?.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd };
+/** The model a step runs on: its own, else its role's, else the session's. */
+const stepModel = (step: AgentStep, role: AgentDefinition | undefined, on: CapModel): CapModel => ({ provider: on.provider, model: step.model ?? role?.model ?? on.model });
+
+/** What a step runs with: its own caps, else its role's, else a child's defaults, a default cost scaled to the step's model. */
+export function stepCaps(step: AgentStep, role: AgentDefinition | undefined, on: CapModel): ChildCaps {
+  const { provider, model } = stepModel(step, role, on);
+  return { maxTurns: step.maxTurns ?? role?.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: capUsd(step.maxCostUsd ?? role?.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd, provider, model) };
 }
 
 /**
@@ -477,15 +481,15 @@ export function workflowPreview(
   spec: WorkflowSpec,
   input: string,
   agents: readonly AgentDefinition[],
-  session: { readonly model: string; readonly rates: (model: string) => Rates | undefined },
+  session: CapModel,
 ): WorkflowPreview {
   const rows: PreviewRow[] = [];
   const unpriced = new Set<string>();
   const agentRow = (step: AgentStep, count: number, dynamic: boolean): PreviewRow => {
     const role = findAgent(agents, step.role);
-    const caps = stepCaps(step, role);
-    const model = step.model ?? role?.model ?? session.model;
-    const call = costAt(session.rates(model), { ...ZERO_USAGE, ...ESTIMATE_CALL });
+    const caps = stepCaps(step, role, session);
+    const { model } = stepModel(step, role, session);
+    const call = costAt(ratesOf(session.provider, model), { ...ZERO_USAGE, ...ESTIMATE_CALL });
     if (call === null) unpriced.add(model);
     const label = count === 1 && !dynamic ? step.id : `${step.id} × ${dynamic ? 'up to ' : ''}${count}`;
     const estimateUsd = call === null ? null : round6(Math.min(caps.maxCostUsd, Math.min(caps.maxTurns, ESTIMATE_CALLS) * call));
@@ -501,11 +505,12 @@ export function workflowPreview(
       for (const step of agentSteps(node)) rows.push(agentRow(step, 1, false));
     }
   }
+  const total = capUsd(spec.maxCostUsd, session.provider, session.model);
   let worst = 0;
   let stopsBefore: string | undefined;
   for (const row of rows) {
     const each = row.caps?.maxCostUsd ?? 0;
-    if (stopsBefore === undefined && worst + each * row.count > spec.maxCostUsd + 1e-9) stopsBefore = row.label;
+    if (stopsBefore === undefined && worst + each * row.count > total + 1e-9) stopsBefore = row.label;
     worst += each * row.count;
   }
   const estimates = rows.map((row) => (row.estimateUsd === null ? null : row.estimateUsd * row.count));
@@ -517,7 +522,7 @@ export function workflowPreview(
     rows,
     estimateUsd: estimates.includes(null) ? null : round6(estimates.reduce<number>((sum, usd) => sum + usd!, 0)),
     worstUsd: round6(worst),
-    capUsd: spec.maxCostUsd,
+    capUsd: total,
     stopsBefore,
     unpriced: [...unpriced],
   };
@@ -579,6 +584,10 @@ type PipelineItem = { readonly item: string; readonly last: StepOutput | undefin
 
 export type WorkflowRun = {
   readonly spec: WorkflowSpec;
+  /** The session the run is issued in, whose model scales the default caps. */
+  readonly on: CapModel;
+  /** The spec's total cap on that model. */
+  readonly capUsd: number;
   readonly input: string;
   readonly status: WorkflowStatus;
   readonly stop: WorkflowStop | undefined;
@@ -592,8 +601,10 @@ export type WorkflowRun = {
   readonly resumes: string | undefined;
 };
 
-export const startWorkflow = (spec: WorkflowSpec, input: string, resumes?: string): WorkflowRun => ({
+export const startWorkflow = (spec: WorkflowSpec, input: string, on: CapModel, resumes?: string): WorkflowRun => ({
   spec,
+  on,
+  capUsd: capUsd(spec.maxCostUsd, on.provider, on.model),
   input,
   resumes,
   status: 'running',
@@ -777,7 +788,7 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
     type Planned = { readonly unit: Omit<WorkflowUnit, 'index'>; readonly call: (index: number) => UnitCall };
     const planAgent = (step: AgentStep, label: string, item: PipelineItem | undefined): Planned => {
       const role = findAgent(agents, step.role);
-      const caps = stepCaps(step, role);
+      const caps = stepCaps(step, role, current.on);
       const task = [render(step.prompt, current, item).trim(), ...(step.schema === undefined ? [] : ['', schemaNote(step.schema)])].join('\n');
       const key = unitKey({ task, caps, role: step.role, model: step.model, lane: step.lane });
       const unit = { node: current.at.node, kind: 'agent' as const, step: step.id, label, role: step.role, caps, status: 'running' as const, costUsd: null, turns: 0, sessionId: undefined, note: undefined, key, report: undefined, empty: false };
@@ -792,7 +803,7 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
             ? items!.map((item, i) => planAgent(node.stages[current.at.stage]!, `${node.stages[current.at.stage]!.id} #${i + 1}`, item))
             : [{ unit: { node: current.at.node, kind: 'check', step: node.id, label: node.id, role: undefined, caps: undefined, status: 'running', costUsd: null, turns: 0, sessionId: undefined, note: undefined, key: undefined, report: undefined, empty: false }, call: (index) => ({ kind: 'check', index }) }];
     const needUsd = round6(planned.reduce((sum, { unit }) => sum + (unit.caps?.maxCostUsd ?? 0), 0));
-    const leftUsd = round6(current.spec.maxCostUsd - workflowSpent(current));
+    const leftUsd = round6(current.capUsd - workflowSpent(current));
     if (needUsd > leftUsd + 1e-9) return { run: stopped(current, { kind: 'total-cap', before: planned[0]!.unit.label, needUsd, leftUsd }), calls: [] };
     const first = current.units.length + 1;
     const units = planned.map(({ unit }, i) => ({ ...unit, index: first + i }));
@@ -953,8 +964,8 @@ export function nextLiveRound(run: WorkflowRun, agents: readonly AgentDefinition
 }
 
 /** The units a resumed run replays before its first call that runs, for the preview; a check's outcome can let more replay after it. */
-export function replayedBeforeLive(spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], replay: Replay): string[] {
-  const { round } = nextLiveRound(startWorkflow(spec, input, replay.run), agents, replay);
+export function replayedBeforeLive(spec: WorkflowSpec, input: string, on: CapModel, agents: readonly AgentDefinition[], replay: Replay): string[] {
+  const { round } = nextLiveRound(startWorkflow(spec, input, on, replay.run), agents, replay);
   return round.run.units.filter((unit) => unit.status === 'replayed').map((unit) => unit.label);
 }
 
@@ -1011,7 +1022,7 @@ const plural = (n: number, one: string, many: string): string => `${n} ${n === 1
  */
 export function workflowReport(run: WorkflowRun): string {
   const spent = workflowSpent(run);
-  const ran = `${plural(run.units.length, 'step', 'steps')} ran, ${usd(spent)} of its ${usd(run.spec.maxCostUsd)} cap.`;
+  const ran = `${plural(run.units.length, 'step', 'steps')} ran, ${usd(spent)} of its ${usd(run.capUsd)} cap.`;
   const replayed = run.units.filter((unit) => unit.status === 'replayed').length;
   const resumed = run.resumes === undefined ? '' : ` Resumed from run ${run.resumes}: ${replayed} replayed with no model call.`;
   const head = (run.status === 'done' ? `Workflow ${run.spec.name} finished: ${ran}` : `Workflow ${run.spec.name} ${run.stop === undefined ? 'ended' : stopWords(run.stop)}. ${ran}`) + resumed;
@@ -1061,7 +1072,7 @@ export function workflowProgress(run: WorkflowRun): WorkflowProgress {
     steps: run.spec.steps.length,
     running: run.units.filter((unit) => unit.status === 'running').map((unit) => unit.label),
     spentUsd: round6(workflowSpent(run)),
-    capUsd: run.spec.maxCostUsd,
+    capUsd: run.capUsd,
     status: run.status,
     ...(run.stop === undefined ? {} : { stop: stopWords(run.stop) }),
   };

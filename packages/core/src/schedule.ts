@@ -2,6 +2,7 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
 import type { Parsed } from './ask-user.js';
 import { instantOf, MONTH_NAMES, nextCronAfter, parseCron, wallOf, WEEKDAY_NAMES, weekdayOf, type Wall } from './cron.js';
+import { defaultUsd, REFERENCE_MODEL, type UsdCap } from './cost.js';
 import type { TurnEvent } from './session.js';
 import type { Brand } from './types.js';
 
@@ -17,10 +18,11 @@ export type ScheduleId = Brand<string, 'ScheduleId'>;
 /** A cron expression in the engine's local time, or one instant. */
 export type When = { readonly kind: 'cron'; readonly expr: string } | { readonly kind: 'at'; readonly at: number };
 
-export type ScheduleBudget = { readonly maxCostUsd: number; readonly maxTurns: number };
+/** `maxCostUsd` is the dollars a user set, or the default, which scales to the model each run is on. */
+export type ScheduleBudget = { readonly maxCostUsd: UsdCap; readonly maxTurns: number };
 
 /** A run spends money with nobody watching, so the default is small; a task asks for more when it needs it. */
-export const DEFAULT_SCHEDULE_BUDGET: ScheduleBudget = { maxCostUsd: 0.05, maxTurns: 20 };
+export const DEFAULT_SCHEDULE_BUDGET = { maxCostUsd: defaultUsd(0.05), maxTurns: 20 } as const satisfies ScheduleBudget;
 
 /** `runs` is how many of a task's runs it keeps, newest last. */
 export const SCHEDULE_LIMITS = { title: 60, prompt: 8000, maxCostUsd: 1, maxTurns: 100, tasks: 50, runs: 10 } as const;
@@ -224,7 +226,10 @@ export function describeWhen(when: When, zone: string, now?: number): string {
 
 const usd = (n: number): string => `$${n.toFixed(n < 0.1 ? 3 : 2).replace(/(\.\d\d)0$/, '$1')}`;
 
-export const budgetText = ({ maxCostUsd, maxTurns }: ScheduleBudget): string => `up to ${usd(maxCostUsd)} and ${maxTurns} model calls a run`;
+const capText = (cap: UsdCap): string =>
+  typeof cap === 'number' ? usd(cap) : `${usd(cap.referenceUsd)} (${REFERENCE_MODEL.model} prices, scaled to the run's model)`;
+
+export const budgetText = ({ maxCostUsd, maxTurns }: ScheduleBudget): string => `up to ${capText(maxCostUsd)} and ${maxTurns} model calls a run`;
 
 /** One line about a task for the model and the approval card: when, next run, where it runs, and its budget. */
 export function taskLine(task: ScheduleDraft & { readonly paused?: boolean }, zone: string, now: number): string {
@@ -261,7 +266,7 @@ const WHEN_HELP = 'in 1h, in 30m, at 9:00, at 2026-10-08 09:00, daily at 18:30, 
 
 export const SCHEDULE_TASK_SPEC: Tool = {
   name: SCHEDULE_TASK_TOOL,
-  description: `Create, list, change or delete a scheduled task: a prompt Geno runs by itself later, each run as a new background session, once or on a schedule in the user's local time. Use it only when the user asks for something to happen later or regularly, such as "every weekday at 9 run /review" or "in an hour, check the deploy". A run is unattended and spends money, so create, update and delete ask the user's approval; list does not. A run is read-only (Plan mode, in the main checkout) unless edits is true, which runs it in its own lane in Auto. Each run stops at its budget: max_cost_usd (default ${usd(DEFAULT_SCHEDULE_BUDGET.maxCostUsd)}, at most ${usd(SCHEDULE_LIMITS.maxCostUsd)}) and max_turns (default ${DEFAULT_SCHEDULE_BUDGET.maxTurns}, at most ${SCHEDULE_LIMITS.maxTurns}). The prompt is the run's first message and the run does not see this conversation, so make it self-contained; it may be a slash command such as /review. A run missed while Geno was not running runs once when it starts again, if that is within an hour.`,
+  description: `Create, list, change or delete a scheduled task: a prompt Geno runs by itself later, each run as a new background session, once or on a schedule in the user's local time. Use it only when the user asks for something to happen later or regularly, such as "every weekday at 9 run /review" or "in an hour, check the deploy". A run is unattended and spends money, so create, update and delete ask the user's approval; list does not. A run is read-only (Plan mode, in the main checkout) unless edits is true, which runs it in its own lane in Auto. Each run stops at its budget: max_cost_usd (default ${capText(DEFAULT_SCHEDULE_BUDGET.maxCostUsd)}, at most ${usd(SCHEDULE_LIMITS.maxCostUsd)}) and max_turns (default ${DEFAULT_SCHEDULE_BUDGET.maxTurns}, at most ${SCHEDULE_LIMITS.maxTurns}). The prompt is the run's first message and the run does not see this conversation, so make it self-contained; it may be a slash command such as /review. A run missed while Geno was not running runs once when it starts again, if that is within an hour.`,
   input_schema: {
     type: 'object',
     properties: {
@@ -271,7 +276,7 @@ export const SCHEDULE_TASK_SPEC: Tool = {
       prompt: { type: 'string', description: 'What each run does: its first message, self-contained.' },
       when: { type: 'string', description: `When it runs: ${WHEN_HELP}.` },
       edits: { type: 'boolean', description: 'true to let runs change files, each in its own lane. Defaults to false: read-only.' },
-      max_cost_usd: { type: 'number', description: `The most one run may spend, in US dollars. Defaults to ${DEFAULT_SCHEDULE_BUDGET.maxCostUsd}.` },
+      max_cost_usd: { type: 'number', description: `The most one run may spend, in US dollars. Defaults to ${capText(DEFAULT_SCHEDULE_BUDGET.maxCostUsd)}.` },
       max_turns: { type: 'integer', description: `The most model calls one run may make. Defaults to ${DEFAULT_SCHEDULE_BUDGET.maxTurns}.` },
       paused: { type: 'boolean', description: 'For update: true pauses the task, false resumes it.' },
     },
@@ -403,12 +408,12 @@ export function parseWhen(text: string, now: number, zone: string): Parsed<When>
   return read.value.rest === '' ? { ok: true, value: read.value.when } : fail(`"${read.value.rest}" follows the time; ${WHEN_HELP}`);
 }
 
+/** A cost the user gives holds as given, up to the limit; none keeps `base`'s, which may be the scaled default. */
 function parseBudget(cost: unknown, turns: unknown, base: ScheduleBudget = DEFAULT_SCHEDULE_BUDGET): Parsed<ScheduleBudget> {
-  const maxCostUsd = cost ?? base.maxCostUsd;
   const maxTurns = turns ?? base.maxTurns;
-  if (typeof maxCostUsd !== 'number' || !(maxCostUsd > 0) || maxCostUsd > SCHEDULE_LIMITS.maxCostUsd) return fail(`max_cost_usd is more than 0 and at most ${SCHEDULE_LIMITS.maxCostUsd}`);
+  if (cost !== undefined && (typeof cost !== 'number' || !(cost > 0) || cost > SCHEDULE_LIMITS.maxCostUsd)) return fail(`max_cost_usd is more than 0 and at most ${SCHEDULE_LIMITS.maxCostUsd}`);
   if (typeof maxTurns !== 'number' || !Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > SCHEDULE_LIMITS.maxTurns) return fail(`max_turns is a whole number from 1 to ${SCHEDULE_LIMITS.maxTurns}`);
-  return { ok: true, value: { maxCostUsd, maxTurns } };
+  return { ok: true, value: { maxCostUsd: cost ?? base.maxCostUsd, maxTurns } };
 }
 
 const titleOf = (prompt: string): string => {

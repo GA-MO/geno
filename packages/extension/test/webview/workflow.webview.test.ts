@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { BUILTIN_AGENTS, parseWorkflow, PRICES, previewQuestion, workflowPreview, type TaskRecord, type WorkflowProgress } from '@g-code/core';
+import { BUILTIN_AGENTS, parseWorkflow, previewQuestion, workflowPreview, type TaskRecord, type WorkflowProgress } from '@g-code/core';
 import { closeBrowser, openPanel, type Panel } from './harness.js';
 import { toolEnd, toolStart, turnStart } from './turns.js';
 
@@ -21,7 +21,7 @@ const SPEC = parseWorkflow(
   { name: 'review-fix-verify', source: 'workspace', path: '.g-code/workflows/review-fix-verify.json' },
 );
 if (!SPEC.ok) throw new Error(SPEC.problem);
-const PREVIEW = workflowPreview(SPEC.value, 'the login form', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] });
+const PREVIEW = workflowPreview(SPEC.value, 'the login form', BUILTIN_AGENTS, { provider: 'modelstudio', model: 'qwen3.8-flash' });
 const OPTIONS = [
   { optionId: 'allow', name: 'Run', kind: 'allow_once' },
   { optionId: 'reject', name: "Don't run", kind: 'reject_once' },

@@ -5,6 +5,8 @@ import type { Effort } from './session.js';
 import { reportBody } from './fence.js';
 import type { CheckOutcome } from './tasks.js';
 import type { Brand } from './types.js';
+import { capUsd, defaultUsd } from './cost.js';
+import type { ProviderName } from './providers.js';
 
 /**
  * The Arena, or best-of-N: one task run in n lanes at once, each with its own variant, then checked, ranked by a
@@ -83,8 +85,13 @@ export function parseBestOfN(args: string): BestOfN | { readonly error: string }
   return { n, variety, task: match[3]! };
 }
 
-/** E5's median task cost on qwen3.8-flash, $0.032 over 20 tasks (docs/e0-e5-results.md); used until Geno has its own history. */
-export const DEFAULT_TASK_COST_USD = 0.032;
+/**
+ * E5's median task cost on qwen3.8-flash, $0.032 over 20 tasks (docs/e0-e5-results.md), scaled to the model; used until
+ * Geno has its own history.
+ */
+export const DEFAULT_TASK_COST_USD = defaultUsd(0.032);
+/** The arena review's cost cap, at qwen3.8-flash prices; the engine's review run takes it too. */
+export const ARENA_REVIEW_USD = defaultUsd(0.05);
 /** Fewer finished sessions than this say too little about a median, so the preview uses the default. */
 export const MIN_COST_SAMPLES = 3;
 
@@ -99,11 +106,15 @@ export function median(values: readonly number[]): number {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-/** `costs` are past sessions' costs; a session that cost nothing never called the model and does not count. */
-export function costPreview(costs: readonly number[], n: ArenaSize, reviewMaxUsd: number): CostPreview {
+/**
+ * `costs` are past sessions' costs; a session that cost nothing never called the model and does not count. `on` is the
+ * model the review runs on, and a lane without a history.
+ */
+export function costPreview(costs: readonly number[], n: ArenaSize, on: { readonly provider: ProviderName; readonly model: string }): CostPreview {
   const spent = costs.filter((cost) => Number.isFinite(cost) && cost > 0);
   const basis: CostBasis = spent.length >= MIN_COST_SAMPLES ? { kind: 'history', samples: spent.length } : { kind: 'default' };
-  const perLaneUsd = basis.kind === 'history' ? median(spent) : DEFAULT_TASK_COST_USD;
+  const perLaneUsd = basis.kind === 'history' ? median(spent) : capUsd(DEFAULT_TASK_COST_USD, on.provider, on.model);
+  const reviewMaxUsd = capUsd(ARENA_REVIEW_USD, on.provider, on.model);
   return { n, perLaneUsd, reviewMaxUsd, totalUsd: n * perLaneUsd + reviewMaxUsd, basis };
 }
 

@@ -5,6 +5,8 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import { childrenOf, SUBAGENT_META, SUBAGENT_METHOD, TASKS_METHOD, type SubagentNotice, type TaskRecord, type TasksResponse, type ToolResultEvent, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
+import { DEFAULT_TURN_USD } from '../src/agent.js';
+import type { LimitsSpec } from '../src/drive.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
@@ -43,11 +45,14 @@ const agentCall = (id: string, agent: string, task: string): FakeToolUse => ({ i
 
 type Run = {
   readonly native?: boolean;
+  /** Variables over the fixture's, such as another provider. */
+  readonly env?: Readonly<Record<string, string>>;
+  readonly limits?: LimitsSpec;
   /** Called on each session update, with the connection, so the test can act mid-turn. */
   readonly onUpdate?: (params: acp.SessionNotification, ctx: acp.ClientContext) => void;
 };
 
-async function fixture() {
+async function fixture(over: Readonly<Record<string, string>> = {}) {
   const workspace = await realpath(
     makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const alpha = 1;\n', 'b.ts': 'export const beta = 2;\n', '.gcode.json': '{ "agentTool": ["ask", "auto", "non-interactive"] }\n' } }]),
   );
@@ -60,12 +65,13 @@ async function fixture() {
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     GCODE_RG: rgCommand(),
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    ...over,
   };
   return { workspace, env, store: openStore(env) };
 }
 
 async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, opts: Run = {}) {
-  const { workspace, env, store } = await fixture();
+  const { workspace, env, store } = await fixture(opts.env);
   const transport = routedTransport(chats);
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
   const updates: acp.SessionNotification[] = [];
@@ -88,7 +94,7 @@ async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, 
       updates.push(params);
       opts.onUpdate?.(params, connection!);
     });
-  const { sessionId, response } = await client.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
+  const { sessionId, response } = await client.connectWith(gcodeAgent(io, store, opts.limits ?? { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
     connection = ctx;
     await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: opts.native === true ? { subagents: {} } : {} });
     const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
@@ -177,6 +183,59 @@ describe('gcode serve: subagents', () => {
     expect(child.map((r) => r.body.tool_choice)).toEqual([undefined, undefined, undefined, { type: 'tool', name: 'report' }]);
     const [sent] = toolResults(transport.requests('[parent]')[1]!.body);
     expect(sent!.content).toContain('a.ts:1 defines alpha; b.ts unchecked.');
+  });
+
+  describe('on Claude Sonnet 5.5, with the default turn budget', () => {
+    const SONNET = { env: { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'sk-ant-fake' }, limits: { maxTurns: 40, maxCostUsd: DEFAULT_TURN_USD } } as const;
+    // A fresh child's first call writes its whole prompt to the cache: about $0.036 at Sonnet's $4 per million.
+    const cold = { input: 4, cacheRead: 0, cacheWrite: 9_000 };
+    const warm = { input: 4, cacheRead: 9_000, cacheWrite: 1_000 };
+    const grep = (id: string, at: typeof cold) => toolCall('Searching.', [{ id, name: 'grep', input: { pattern: 'alpha' } }], at);
+    const lastCallNoticed = (body: { messages: { content: unknown }[] }) => JSON.stringify(body.messages.at(-1)).includes('This is the last model call');
+
+    it("gives a review child a cost cap scaled to Sonnet's price, so it reads past its first call before the last-call notice", async () => {
+      const { transport, log } = await runPrompt(
+        {
+          '[parent]': {
+            replies: [toolCall('Reviewing twice.', [agentCall('tu_r1', 'review', '[child-r1] review a.ts'), agentCall('tu_r2', 'review', '[child-r2] review b.ts')], cold), answer('Both reviewed.', warm)],
+          },
+          '[child-r1]': { replies: [grep('tu_g1', cold), grep('tu_g2', warm), grep('tu_g3', warm), handBack('a.ts: no findings.', warm)] },
+          '[child-r2]': { replies: [grep('tu_h1', cold), grep('tu_h2', warm), handBack('b.ts: no findings.', warm)] },
+        },
+        '[parent] review a.ts and b.ts',
+        SONNET,
+      );
+      const first = transport.requests('[child-r1]');
+      expect(first, 'every call the child asked for went out').toHaveLength(4);
+      expect(first.filter((r) => lastCallNoticed(r.body)), 'no last-call notice').toEqual([]);
+      expect(first.map((r) => r.body.thinking)).toEqual(Array(4).fill({ type: 'adaptive', display: 'omitted' }));
+      const starts = log.events.filter((e) => e.kind === 'child-start');
+      expect(starts.map((e) => e.kind === 'child-start' && e.caps)).toEqual([
+        { maxTurns: 8, maxCostUsd: 0.245 },
+        { maxTurns: 8, maxCostUsd: 0.245 },
+      ]);
+      const [r1, r2] = toolResults(transport.requests('[parent]')[1]!.body);
+      expect(r1!.content).toContain('a.ts: no findings.');
+      expect(r2!.content).toContain('b.ts: no findings.');
+      expect(log.events.some((e) => e.kind === 'error'), 'the turn ends within its budget').toBe(false);
+    });
+
+    it("ends a child at its turn cap with the tools off and no forced report, which Sonnet refuses, and hands back the child's text", async () => {
+      const { transport } = await runPrompt(
+        {
+          '[parent]': { replies: [toolCall('Exploring.', [agentCall('tu_x', 'explore', '[child-x] where is alpha')], cold), answer('Found it.', warm)] },
+          '[child-x]': { replies: [grep('tu_g1', cold), grep('tu_g2', warm), grep('tu_g3', warm), answer('a.ts:1 defines alpha; b.ts unchecked.', warm)] },
+        },
+        '[parent] find alpha',
+        SONNET,
+      );
+      const child = transport.requests('[child-x]');
+      expect(child.map((r) => r.body.tool_choice)).toEqual([undefined, undefined, undefined, { type: 'none' }]);
+      expect(child.map((r) => r.body.thinking)).toEqual(Array(4).fill({ type: 'adaptive', display: 'omitted' }));
+      expect(lastCallNoticed(child[3]!.body)).toBe(true);
+      const [sent] = toolResults(transport.requests('[parent]')[1]!.body);
+      expect(sent!.content).toContain('a.ts:1 defines alpha; b.ts unchecked.');
+    });
   });
 
   it('cancels one child by its session id, and the parent goes on with its partial report', async () => {
