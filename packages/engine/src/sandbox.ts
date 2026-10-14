@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
+import { SandboxManager, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { credentialPlaces } from '@g-code/core';
 import { ENGINE_ENV_FILE } from './child-env.js';
 import { EngineError } from './errors.js';
@@ -17,6 +17,12 @@ export type SandboxPolicy = {
   readonly allowedDomains: readonly string[];
   /** Every command's $TMPDIR: the session's scratchpad the model is told of, rather than sandbox-runtime's shared /tmp/claude. */
   readonly tempDir: string;
+  /**
+   * The only places a command may bind or connect to a unix socket: the workspace and the temp dir, never a system
+   * socket such as Docker's or the SSH agent's. macOS only: on Linux sandbox-runtime's seccomp filter, which cannot
+   * read a socket's path, refuses every unix socket.
+   */
+  readonly unixSockets: readonly string[];
 };
 
 /** `writable` lets this one command also write there, as the check writes its build info outside the workspace. */
@@ -87,6 +93,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
     readable: await withRealPaths([input.workspace]),
     allowedDomains: input.allowedDomains ?? sandboxDomainsOf(process.env),
     tempDir: input.tempDir,
+    unixSockets: await withRealPaths([input.workspace, input.tempDir]),
   };
 }
 
@@ -97,6 +104,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
  */
 type SharedRuntime = {
   readonly allowlist: string;
+  readonly config: SandboxRuntimeConfig;
   readonly ready: Promise<void>;
   readonly ended: Promise<void>;
   readonly finish: () => void;
@@ -114,17 +122,19 @@ function end(runtime: SharedRuntime): void {
 
 function start(policy: SandboxPolicy): SharedRuntime {
   let finish!: () => void;
+  const config: SandboxRuntimeConfig = {
+    // Loopback only, so a dev server started in the background can be reached with curl; the allowlist still holds for every other host.
+    network: { allowedDomains: [...policy.allowedDomains], deniedDomains: [], allowLocalBinding: true },
+    // Every command passes its own rules, so a command wrapped without them may write nothing.
+    filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+  };
   const runtime: SharedRuntime = {
     allowlist: allowlistOf(policy),
+    config,
     ended: new Promise((resolve) => (finish = resolve)),
     finish,
     users: 1,
-    ready: SandboxManager.initialize({
-      // Loopback only, so a dev server started in the background can be reached with curl; the allowlist still holds for every other host.
-      network: { allowedDomains: [...policy.allowedDomains], deniedDomains: [], allowLocalBinding: true },
-      // Every command passes its own rules, so a command wrapped without them may write nothing.
-      filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
-    }),
+    ready: SandboxManager.initialize(config),
   };
   runtime.ready.catch(() => end(runtime));
   return runtime;
@@ -150,6 +160,22 @@ async function leave(runtime: SharedRuntime): Promise<void> {
   }
 }
 
+let wrapping: Promise<unknown> = Promise.resolve();
+
+/**
+ * `command` wrapped with `policy`'s unix socket places. sandbox-runtime reads them from its one process-wide config,
+ * not per command as it does the filesystem rules, so each wrap sets them first and the wraps run one at a time:
+ * otherwise a command of one chat could reach a socket in another chat's workspace.
+ */
+function wrapOne(runtime: SharedRuntime, policy: SandboxPolicy, command: string, filesystem: NonNullable<SandboxRuntimeConfig['filesystem']>): Promise<string> {
+  const wrapped = wrapping.then(() => {
+    SandboxManager.updateConfig({ ...runtime.config, network: { ...runtime.config.network, allowUnixSockets: [...policy.unixSockets] } });
+    return SandboxManager.wrapWithSandbox(command, undefined, { filesystem });
+  });
+  wrapping = wrapped.catch(() => {});
+  return wrapped;
+}
+
 /** More places closed to every command, read before each one, such as what the workspace's deny path rules name. */
 export type PathDenials = () => Promise<{ readonly denyRead: readonly string[]; readonly denyWrite: readonly string[] }>;
 
@@ -167,7 +193,7 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
   // sandbox-runtime sets TMPDIR from its process-wide CLAUDE_CODE_TMPDIR, which an engine serving several sessions
   // cannot give each one, so the command sets its own after the runtime's.
   const sandboxed = async (command: string, filesystem: Awaited<ReturnType<typeof rules>>) =>
-    SandboxManager.wrapWithSandbox(`export TMPDIR=${shellQuote(policy.tempDir)}\n${command}`, undefined, { filesystem });
+    wrapOne(runtime, policy, `export TMPDIR=${shellQuote(policy.tempDir)}\n${command}`, filesystem);
   // The opener's hold and one per retained command; the runtime is left once all have let go.
   let holds = 1;
   const release = async () => {
