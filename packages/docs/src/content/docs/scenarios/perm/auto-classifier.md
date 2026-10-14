@@ -4,12 +4,12 @@ description: ในโหมด Auto คำสั่งที่ไม่อย�
 scenario:
   surface: vscode
   given:
-    - session อยู่ในโหมด Auto และ Auto ยังไม่ถูกพัก (classifier ยังไม่บล็อกครบ 3 ครั้งติดกัน)
+    - session อยู่ในโหมด Auto
     - ไม่มี hook ที่ตั้งไว้ และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
     model ขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` ซึ่งไม่อยู่ใน safe list
-  covers: [perm.auto-classifier-allows, perm.auto-classifier-denies, perm.auto-classifier-blocks, perm.classifier-unavailable]
-  related: [perm.ask-allow, tool.bash-safe-runs, perm.auto-paused-asks-user, perm.auto-hard-ask]
+  covers: [perm.auto-classifier-allows, perm.auto-classifier-denies, perm.classifier-unavailable]
+  related: [perm.ask-allow, tool.bash-safe-runs, perm.auto-classifier-asks-user, perm.auto-hard-ask]
   steps:
     - id: asks
       lane: model
@@ -99,7 +99,7 @@ scenario:
                 beat:
                   title: "Classifier อนุญาต"
                   text: >-
-                    คำสั่งรันได้โดยไม่มีการ์ด ตัวนับการบล็อกติดกันเริ่มใหม่ Geno จดว่า classifier เป็นผู้อนุญาตพร้อมเหตุผล
+                    คำสั่งรันได้โดยไม่มีการ์ด Geno จดว่า classifier เป็นผู้อนุญาตพร้อมเหตุผล
                     บันทึกจาก run จริงด้านล่างเป็นแบบนี้
                   from: engine
                   to: panel
@@ -108,9 +108,8 @@ scenario:
                     source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=19
                     highlight: [approval.classifier.verdict, approval.classifier.reason]
                 do: >-
-                  `CLASSIFIER_OUTCOMES` ให้ `allow` เป็น `run` สถานะ Auto รีเซ็ตตัวนับการบล็อกติดกัน
                   `settle` คืนบันทึก `decidedBy: classifier, verdict: allow` พร้อมเหตุผลของ classifier ไม่มีการ์ดและไม่ถามใคร
-                ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
+                ref: packages/engine/src/tools/agent.ts#settle
               - lane: tool
                 at: shell
                 beat:
@@ -169,7 +168,7 @@ scenario:
                     source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=24
                     highlight: [approval.classifier.verdict, approval.classifier.reason]
                 do: >-
-                  `CLASSIFIER_OUTCOMES` ให้ `deny` เป็น `refuse` `settle` คืนบันทึก `decidedBy: classifier, verdict: deny`
+                  `settle` คืนบันทึก `decidedBy: classifier, verdict: deny`
                   `refusalOf` สร้าง `ToolDenied` ไม่ใช่ `ToolRejected` คำสั่งไม่ได้รัน แต่ turn ไม่จบ
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolDenied]
@@ -221,54 +220,18 @@ scenario:
               - lane: policy
                 at: settle
                 beat:
-                  title: "Classifier ไม่แน่ใจ Auto บล็อกแทน"
+                  title: "Classifier ไม่แน่ใจ Geno จึงถามคุณ"
                   text: >-
-                    ขณะ Auto ยังไม่พัก ความไม่แน่ใจไม่ไปถึงคุณ คำสั่งถูกบล็อกและ Geno นับครั้ง ครบ 3 ครั้งติดกันหรือ 20 ครั้งรวม
-                    Auto จะพัก ผลบอก model ให้หาทางอื่น หรือบอกว่าต้องให้คุณอนุญาตอะไร
+                    ความไม่แน่ใจของ classifier ไปถึงคุณเป็นการ์ดพร้อมเหตุผลของมัน คุณอนุญาต อนุญาตตลอด หรือปฏิเสธได้เหมือนในโหมด Ask
                   from: engine
-                  to: model
+                  to: panel
                 do: >-
-                  ขณะ Auto ยังไม่ถูกพัก `ask` ไม่ไปถึงผู้ใช้ `CLASSIFIER_OUTCOMES` ให้เป็น `block`
-                  คำสั่งถูกปฏิเสธเป็น `ToolDenied` และ `nextAutoState` นับการบล็อก ครบ 3 ครั้งติดกันหรือ 20 ครั้งรวม Auto จะพัก
-                ref: packages/core/src/auto.ts#nextAutoState
-                emits: [ToolDenied]
-              - lane: loop
-                at: tools
-                do: >-
-                  ผลของ call มีสถานะ `denied` ข้อความบอก model ว่า Auto บล็อกคำสั่งโดยไม่ถามผู้ใช้เพราะ classifier ไม่ยอม
-                  ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกในคำตอบว่าต้องให้ผู้ใช้อนุญาตอะไร
-                ref: packages/engine/src/tools/agent.ts#denialText
-                emits: [denied]
-              - use: tool-result-returns
-              - lane: panel
-                at: rail
-                beat:
-                  title: "แชตขึ้น Denied by Auto"
-                  text: >-
-                    แชตแสดงป้ายปฏิเสธของ Auto เหมือนตอน classifier ปฏิเสธ เพราะทั้งสองมาจาก classifier
-                  from: panel
-                  to: you
-                  sees: { kind: step, label: node scripts/build-icons.mjs, status: denied, note: Denied by Auto }
-                do: >-
-                  แผงแสดงป้ายปฏิเสธของ Auto เหมือนกรณี deny เพราะทั้งสองมาจาก classifier
-                sees: '"Denied by Auto" ตามด้วยเหตุผลของ classifier'
-                ref: packages/extension/src/chat/session-updates.ts#denialOf
-              - lane: loop
-                at: step
-                beat:
-                  title: "Turn ทำต่อ"
-                  text: >-
-                    Geno เรียก model ต่อ ถ้า Auto พักแล้ว คำสั่งถัดไปที่ classifier ไม่แน่ใจจะขึ้นการ์ดถามคุณแทน
-                  from: engine
-                  to: model
-                  end: "Auto บล็อก turn ทำต่อ"
-                do: >-
-                  `loopStep` ตัดสิน `call-model` turn ทำงานต่อ ถ้า Auto พักแล้ว คำสั่งถัดไปที่ classifier ตอบ `ask`
-                  จะขึ้นการ์ดถามผู้ใช้แทน จนกว่าผู้ใช้จะอนุญาตหนึ่งครั้ง
-                ref: packages/core/src/loop.ts#loopStep
-                emits: [call-model]
-                phase: calling-model
-                end: { turn: continues, reason: call-model }
+                  `settle` ส่งคำตอบ `ask` ของ classifier ให้ผู้ใช้ตัดสินผ่าน `approve` พร้อมเหตุผลของ classifier
+                  ไม่มีคำสั่งไหนถูกบล็อกโดยไม่ถาม
+                ref: packages/engine/src/tools/agent.ts#settle
+                emits: [ask-user]
+                phase: waiting-user
+                goto: perm.auto-classifier-asks-user
           - id: unavailable
             label: ตอบไม่ได้ (ปิด ไม่มี key หรือช้าเกิน)
             steps:
@@ -278,75 +241,47 @@ scenario:
                   title: "Classifier ตอบไม่ได้"
                   text: >-
                     classifier ถูกปิด ไม่มี key ช้าเกิน 8 วินาที หรือตอบผิดรูป Geno ไม่เดาว่าคำสั่งปลอดภัย
-                    แต่นับเป็นไม่แน่ใจพร้อมเหตุผลที่ล้ม
+                    แต่นับเป็นไม่แน่ใจพร้อมเหตุผลที่ล้ม ถ้า classifier ใช้ไม่ได้เลย เช่นไม่มี key หรือ key ผิด
+                    แชตขึ้นข้อความครั้งเดียวว่า classifier ของ Auto ใช้ไม่ได้
                   from: engine
                   to: engine
                 do: >-
                   `commandClassifier` ไม่ได้คำตัดสินจริง: `GCODE_CLASSIFIER_MODEL=off`, ผู้ให้บริการของ classifier ไม่มี key,
                   เกิน 8 วินาที, ผู้ให้บริการปฏิเสธ หรือคำตอบผิดรูป ทุกกรณีคืน `ask` พร้อมเหตุผลว่าอะไรล้ม
-                  เช่น "the classifier is off" หรือ "the classifier timed out after 8s" ไม่มีการเดาว่าคำสั่งปลอดภัย
-                ref: "packages/engine/src/classifier.ts#\"if (model === 'off') return always('the classifier is off');\""
-                emits: [the classifier is off]
+                  ไม่มีการเดาว่าคำสั่งปลอดภัย เมื่อตั้งค่าไม่ได้ หรือผู้ให้บริการปฏิเสธ key หรือ model `onBroken` แจ้ง engine
+                  ซึ่งบอกผู้ใช้ครั้งเดียวต่อ session
+                ref: packages/engine/src/classifier.ts#commandClassifier
+                emits: [ask]
               - lane: policy
                 at: settle
                 beat:
-                  title: "Geno บล็อกและนับครั้ง"
+                  title: "Geno ถามคุณแทน"
                   text: >-
-                    เหมือนตอน classifier ไม่แน่ใจ คำสั่งถูกบล็อกและนับครั้ง classifier ที่ปิดอยู่จึงบล็อกทุกคำสั่งนอกรายการปลอดภัย
-                    ครั้งที่สามติดกันทำให้ Auto พัก
+                    เหมือนตอน classifier ไม่แน่ใจ คำสั่งขึ้นการ์ดถามคุณพร้อมบรรทัดว่าอะไรล้ม
                   from: engine
-                  to: model
+                  to: panel
                 do: >-
-                  `ask` ระหว่างที่ Auto ยังไม่พักเป็น `block` เหมือนคำตอบ `ask` จริง คำสั่งถูกปฏิเสธเป็น `ToolDenied` และนับการบล็อก
-                  classifier ที่ปิดอยู่บล็อกทุกคำสั่งนอก safe list ครั้งที่สามติดกันทำให้ Auto พัก
-                ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
-                emits: [ToolDenied]
-              - use: tool-result-returns
-              - lane: panel
-                at: rail
-                beat:
-                  title: "แชตขึ้นเหตุผลของความล้มเหลว"
-                  text: >-
-                    ป้ายปฏิเสธของ Auto แสดงว่าอะไรล้ม แทนเหตุผลของ classifier
-                  from: panel
-                  to: you
-                  sees: { kind: step, label: node scripts/build-icons.mjs, status: denied, note: Denied by Auto · the classifier is off }
-                do: >-
-                  ป้ายปฏิเสธของ Auto แสดงเหตุผลของความล้มเหลวแทนเหตุผลของ classifier
-                sees: '"Denied by Auto" ตามด้วย "the classifier is off"'
-                ref: packages/extension/src/chat/session-updates.ts#denialOf
-              - lane: loop
-                at: step
-                beat:
-                  title: "Turn ทำต่อ แล้ว Auto พักและถามคุณ"
-                  text: >-
-                    Geno เรียก model ต่อ เมื่อ Auto พักแล้ว คำสั่งถัดไปขึ้นการ์ดถามคุณพร้อมบรรทัดว่า Auto ตัดสินไม่ได้เพราะอะไร
-                  from: engine
-                  to: model
-                  end: "Auto พักแล้วถามคุณ"
-                do: >-
-                  `loopStep` ตัดสิน `call-model` turn ทำงานต่อ เมื่อ Auto พักแล้ว คำสั่งถัดไปที่ได้ `ask` จะขึ้นการ์ดถามผู้ใช้
-                  พร้อมบรรทัด "Auto could not decide: the classifier is off."
-                ref: packages/core/src/loop.ts#loopStep
-                emits: [call-model]
-                phase: calling-model
-                goto: perm.auto-paused-asks-user
+                  `settle` ส่ง `ask` ที่มาจากความล้มเหลวให้ผู้ใช้เหมือนคำตอบ `ask` จริง
+                ref: packages/engine/src/tools/agent.ts#settle
+                emits: [ask-user]
+                phase: waiting-user
+                goto: perm.auto-classifier-asks-user
 ---
 
-โหมด Auto ไม่ได้แปลว่าทุกอย่างผ่าน มันแปลว่า**ไม่มีใครถูกถาม** สำหรับคำสั่งกลุ่มที่ classifier ตัดสินได้
+โหมด Auto ไม่ได้แปลว่าทุกอย่างผ่าน มันแปลว่า**ไม่มีใครถูกถาม** สำหรับคำสั่งที่ classifier อนุญาตหรือปฏิเสธ
 คำสั่งใน safe list ยังรันทันทีเหมือนโหมด Ask คำสั่งที่ย้อนไม่ได้ เช่น `rm -rf` ของ workspace ยังขึ้นการ์ดถามผู้ใช้เสมอ
 
-| classifier ตอบ | Auto ยังทำงาน | Auto พักแล้ว |
-| --- | --- | --- |
-| `allow` | รัน | รัน |
-| `deny` | ปฏิเสธ | ปฏิเสธ |
-| `ask` | บล็อก (ปฏิเสธและนับ) | ขึ้นการ์ดถามผู้ใช้ |
+| classifier ตอบ | Auto ทำอะไร |
+| --- | --- |
+| `allow` | รัน |
+| `deny` | ปฏิเสธ |
+| `ask` | ขึ้นการ์ดถามผู้ใช้ |
 
 สิ่งที่ควรสังเกต
 
-- **classifier ที่ล่มเท่ากับ `ask`** หมดเวลา ไม่ได้ตั้งค่า หรือตอบผิดรูป ทั้งหมดกลายเป็น `ask` ซึ่งบล็อกคำสั่ง
-  เมื่อบล็อกครบ 3 ครั้งติดกัน Auto พัก และคำถามไปถึงผู้ใช้ Geno จึงไม่รันคำสั่งที่ไม่มีใครตัดสิน
-- **ทุกทางไม่จบ turn** ต่างจากปุ่ม Reject บนการ์ดของโหมด Ask คำปฏิเสธของ classifier เป็น `ToolDenied`
+- **classifier ที่ล่มเท่ากับ `ask`** หมดเวลา ไม่ได้ตั้งค่า หรือตอบผิดรูป ทั้งหมดกลายเป็น `ask` ซึ่งขึ้นการ์ดถามผู้ใช้
+  Geno จึงไม่รันคำสั่งที่ไม่มีใครตัดสิน
+- **คำปฏิเสธของ classifier ไม่จบ turn** ต่างจากปุ่ม Reject บนการ์ด คำปฏิเสธของ classifier เป็น `ToolDenied`
   model อ่านเหตุผลแล้วทำต่อ
 - **ป้าย Auto-approved ซ่อนในมุมมองย่อ** แผงแสดงป้ายนี้เฉพาะเมื่อวาดทุกขั้น ส่วนป้าย "Denied by Auto" แสดงเสมอ
 

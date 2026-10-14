@@ -33,7 +33,7 @@ const replies: readonly Reply[] = [
   verdict('deny', REASONS.deny),
   toolCall('Clearing dist too.', [bash(COMMANDS.removeDist)], usage),
   verdict('ask', REASONS.ask),
-  asModel(answer('Cleaned the build; dist needs your OK, and I left a.ts alone.', usage)),
+  asModel(answer('Cleaned build and dist, and I left a.ts alone.', usage)),
   // Denied in Ask, which ends the turn with no answer after it.
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
   // A model that tries to edit in Plan: every mode offers edit, and Plan refuses the call.
@@ -102,7 +102,7 @@ afterAll(() => {
 const exists = (file: string) => access(file).then(() => true, () => false);
 
 describe('Ask and Auto in the chat panel', () => {
-  it('starts in the configured mode, badges what Auto settled, blocks what the classifier will not allow without asking, and switches to Ask from the picker', async () => {
+  it('starts in the configured mode, badges what Auto settled, asks about what the classifier is unsure of, and switches to Ask from the picker', async () => {
     // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
     const { work, home, workspace, suite } = await setUp('modes', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
@@ -134,6 +134,6 @@ describe('Ask and Auto in the chat panel', () => {
     expect(FOLLOW_UP, 'the fixture shows what Start building sends').toBe(PROMPT_ACTIONS['start-building']);
     expect(lastTexts(10)).toEqual([MODE_NOTICES.auto, USER_PROMPT_FOLLOWS, userActionText(FOLLOW_UP)]);
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
-    expect(await exists(path.join(workspace, 'dist'))).toBe(true);
+    expect(await exists(path.join(workspace, 'dist')), 'the user allowed removing dist').toBe(false);
   }, 600_000);
 });

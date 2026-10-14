@@ -3,13 +3,11 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
-  AUTO_START,
   baseOf,
   CELL_EDIT_MODES,
   CELL_TYPES,
   changeOf,
   changesDirectory,
-  CLASSIFIER_OUTCOMES,
   checkHeadline,
   commandLineOf,
   classifierInputOf,
@@ -30,8 +28,6 @@ import {
   AGENT_TOOL_NAMES,
   MODE_REFUSALS,
   neutralizeNoticeLines,
-  nextAutoState,
-  OUTCOME_VERDICTS,
   outsideReadDenial,
   filesRun,
   sessionEdits,
@@ -54,7 +50,6 @@ import {
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
-  type AutoState,
   type BaseRead,
   type ClassifierInput,
   type ClassifierRun,
@@ -139,13 +134,9 @@ export type Approval =
       mode(): SessionMode;
       readonly approve: Approver;
       readonly classify: Classify;
-      /** The session's Auto state, which outlives the turn. */
-      readonly auto: { state: AutoState };
     };
 
 export const NON_INTERACTIVE: Approval = { kind: 'non-interactive' };
-
-export const freshAuto = (): { state: AutoState } => ({ state: AUTO_START });
 
 export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
@@ -162,10 +153,10 @@ async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInp
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
- * In Auto a classifier `ask` blocks the command without asking anyone, until the blocks pause Auto. `keep` runs, and
- * is awaited, when the user's yes outlives the call. Where the card would show, or where a run nobody can answer would
- * refuse only for that, the call's PermissionRequest hooks answer first; a refusal that holds whoever answers never
- * reaches them.
+ * In Auto the classifier's allow runs the command and its deny refuses it; its ask, or a failed call, puts the card
+ * to the user. `keep` runs, and is awaited, when the user's yes outlives the call. Where the card would show, or where
+ * a run nobody can answer would refuse only for that, the call's PermissionRequest hooks answer first; a refusal that
+ * holds whoever answers never reaches them.
  */
 export async function settle(
   approval: Approval,
@@ -185,19 +176,13 @@ export async function settle(
     return { ...record, decidedBy: 'hook', verdict: 'allow' };
   };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
-  const { auto } = approval;
   const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
-  const outcome = classifier === undefined ? 'ask-user' : CLASSIFIER_OUTCOMES[auto.state.phase][classifier.verdict];
-  if (outcome !== 'ask-user') {
-    auto.state = nextAutoState(auto.state, outcome);
-    return { ...record, classifier, decidedBy: 'classifier', verdict: OUTCOME_VERDICTS[outcome] };
-  }
+  if (classifier !== undefined && classifier.verdict !== 'ask') return { ...record, classifier, decidedBy: 'classifier', verdict: classifier.verdict };
   const byHook = await hooked();
   if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
   const answer = await approval.approve(denial, classifier);
   if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
   const allowed = typeof answer === 'string' && answer !== 'reject';
-  auto.state = nextAutoState(auto.state, allowed ? 'user-allow' : 'user-reject');
   const comment = typeof answer === 'string' ? {} : { comment: answer.comment };
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...comment };
 }
@@ -216,9 +201,6 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   }
   if (rule === 'workspace-ask') {
     return `denied: \`${command}\` matches ${reason}, and nobody can answer here. ${DONT_ASK}`;
-  }
-  if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
-    return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
   }
   // A path the user must allow is not a tool-specific block, so it gets no invitation to try another tool on it.
   if (mode === 'non-interactive' && decidedBy === 'rule' && rule === 'path-outside-workspace') {

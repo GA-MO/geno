@@ -13,7 +13,7 @@ import { attachmentFileName, type ImageAttachment, type ClassifierInput, type Cl
 import { openMcpHub, type McpHub, type McpTokens } from '../src/mcp/hub.js';
 import { createLane, laneRepoOf } from '../src/lanes.js';
 import { openStore } from '../src/store.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { fakeMcpServer } from './fake-mcp-server.js';
 import { fakeOAuth, type FakeOAuth } from './fake-oauth.js';
@@ -76,7 +76,6 @@ function approval(mode: SessionMode, answer: PermissionAnswer, verdict: Classifi
       classified.push(input);
       return { verdict, reason: `classifier said ${verdict}`, model: 'fake', latencyMs: 1, costUsd: 0 };
     },
-    auto: freshAuto(),
   };
   return { value, asked, classified };
 }

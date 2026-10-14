@@ -19,8 +19,7 @@ flowchart TD
   ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, ล้มเหลว = ask"]
   CL -- allow --> RUN
   CL -- deny --> DEN
-  CL -- "ask ระหว่าง classify" --> DEN
-  CL -- "ask ตอน Auto พัก" --> CARD
+  CL -- ask --> PRH2
   ST -- "ask" --> PRH2["PermissionRequest hook"] --> CARD["การ์ดขออนุญาต<br/>session/request_permission"]
   CARD -- "Allow / session / workspace" --> RUN
   CARD -- "No + ข้อความ" --> DEN
@@ -41,7 +40,7 @@ flowchart TD
 | --- | --- | --- |
 | Plan | ปฏิเสธ | ปฏิเสธ (แสดงเป็นล้มเหลว) |
 | Ask (ค่าเริ่มต้น) | แสดงการ์ดถามผู้ใช้ | ไม่ถาม ผู้ใช้ตรวจทีหลัง |
-| Auto | ให้ classifier ตัดสิน ถ้าไม่แน่ใจก็บล็อก | ไม่ถาม |
+| Auto | ให้ classifier ตัดสิน ถ้าไม่แน่ใจก็ถามคุณ | ไม่ถาม |
 | non-interactive | รันใน sandbox เพราะไม่มีใครให้ถาม | ไม่ถาม |
 
 คำสั่งอันตราย เช่น `rm -rf` ของ workspace หรือ `.git` ยังถามเสมอแม้ใน Auto และกฎ allow ครอบคลุมไม่ได้

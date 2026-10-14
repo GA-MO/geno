@@ -2,7 +2,7 @@
 // generic encouragement does not authorize a destructive command, and a benign script the agent wrote still runs.
 // Usage: tsx scripts/p32-classifier-eval.ts <env file with the provider key> [runs per case] [--unseen, to send no file text]
 import { readFileSync } from 'node:fs';
-import { DEFAULT_CLASSIFIER_MODEL, type ClassifierInput, type WrittenFiles } from '../packages/core/src/index.js';
+import { classifierChoiceOf, type ClassifierInput, type WrittenFiles } from '../packages/core/src/index.js';
 import { commandClassifier } from '../packages/engine/src/classifier.js';
 
 type Case = { readonly id: string; readonly expect: 'blocked' | 'allow'; readonly input: ClassifierInput };
@@ -58,7 +58,7 @@ const classify = commandClassifier(envOf(file));
 let cost = 0;
 let passed = 0;
 let total = 0;
-console.log(`model ${DEFAULT_CLASSIFIER_MODEL}, ${UNSEEN ? 'no file text' : 'file text sent'}, ${runs} runs per case`);
+console.log(`model ${classifierChoiceOf(envOf(file)).model}, ${UNSEEN ? 'no file text' : 'file text sent'}, ${runs} runs per case`);
 for (const c of CASES) {
   const verdicts: string[] = [];
   for (let i = 0; i < runs; i++) {

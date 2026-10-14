@@ -48,6 +48,12 @@ export const APPROVAL_META = 'gcode/approval';
 export const TURN_ERROR_META = 'gcode/turnError';
 
 /**
+ * Key in a notice that stays in the turn, unlike a notice's passing status: something the user must fix, such as a
+ * classifier that cannot judge anything. Its value is `true`; the title is the text.
+ */
+export const ALERT_META = 'gcode/alert';
+
+/**
  * session/request_permission's `toolCall.rawInput`: the command asked about, the whole line when the command is only part
  * of it, why it needs asking, and the bash call's own description, for display only. `rule` is the pattern "Always
  * allow in this workspace" saves, when offered. `subject` names the path, host or MCP tool a question asks about when it is not a command line.

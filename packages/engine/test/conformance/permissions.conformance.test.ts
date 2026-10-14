@@ -10,7 +10,7 @@ import { startSession } from '../../src/chat.js';
 import { DISK_FILES } from '../../src/files.js';
 import { permissionStore } from '../../src/permissions.js';
 import { homeOf } from '../../src/store.js';
-import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
+import { type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
 import { runTool, type ToolContext } from '../../src/tools/index.js';
 import type { Resolve } from '../../src/tools/web.js';
 import type { ModelRequest } from '../fake-model.js';
@@ -95,7 +95,6 @@ async function scripted(wire: Wire, turns: readonly Turn[] | ((home: string) => 
           classify: classify ?? (async () => {
             throw new Error('no classifier in these tests');
           }),
-          auto: freshAuto(),
         };
   const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
   const result = await runAgent(io, store, opened, 'Go.', {
