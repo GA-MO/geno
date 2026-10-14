@@ -5,6 +5,7 @@ import {
   CLASSIFIER_TIMEOUT_MS,
   CLASSIFIER_TOOL,
   classifierChoiceOf,
+  capabilitiesOf,
   classifierRequest,
   classifyModelError,
   costOf,
@@ -75,7 +76,7 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { t
     const elapsed = () => Math.round(performance.now() - started);
     const timeout = AbortSignal.timeout(timeoutMs);
     try {
-      const message = await wire.stream(classifierRequest(input, model, sandboxHosts), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
+      const message = await wire.stream(classifierRequest(input, model, sandboxHosts, capabilitiesOf(provider, model)), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
       const costUsd = costOf(provider, model, usageOf(message));
       if (message.stop_reason === 'refusal') return asks('the classifier refused to judge the command', elapsed(), costUsd);
       return { ...classifierVerdictOf(message.content), model, latencyMs: elapsed(), costUsd };
