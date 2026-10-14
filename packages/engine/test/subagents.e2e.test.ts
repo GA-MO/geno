@@ -48,14 +48,17 @@ type Run = {
   /** Variables over the fixture's, such as another provider. */
   readonly env?: Readonly<Record<string, string>>;
   readonly limits?: LimitsSpec;
+  /** The workspace's `.gcode.json`; the default turns the agent tool on in Ask, Auto and non-interactive runs. */
+  readonly settings?: string | undefined;
   /** Called on each session update, with the connection, so the test can act mid-turn. */
   readonly onUpdate?: (params: acp.SessionNotification, ctx: acp.ClientContext) => void;
 };
 
-async function fixture(over: Readonly<Record<string, string>> = {}) {
-  const workspace = await realpath(
-    makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const alpha = 1;\n', 'b.ts': 'export const beta = 2;\n', '.gcode.json': '{ "agentTool": ["ask", "auto", "non-interactive"] }\n' } }]),
-  );
+const AGENT_TOOL_SETTING = '{ "agentTool": ["ask", "auto", "non-interactive"] }\n';
+
+async function fixture(over: Readonly<Record<string, string>>, settings: string | undefined) {
+  const files = { 'a.ts': 'export const alpha = 1;\n', 'b.ts': 'export const beta = 2;\n', ...(settings === undefined ? {} : { '.gcode.json': settings }) };
+  const workspace = await realpath(makeRepo('ws', [{ message: 'start', files }]));
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const env = {
     GCODE_HOME: home,
@@ -71,7 +74,7 @@ async function fixture(over: Readonly<Record<string, string>> = {}) {
 }
 
 async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, opts: Run = {}) {
-  const { workspace, env, store } = await fixture(opts.env);
+  const { workspace, env, store } = await fixture(opts.env ?? {}, 'settings' in opts ? opts.settings : AGENT_TOOL_SETTING);
   const transport = routedTransport(chats);
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
   const updates: acp.SessionNotification[] = [];
@@ -220,6 +223,17 @@ describe('gcode serve: subagents', () => {
       expect(log.events.some((e) => e.kind === 'error'), 'the turn ends within its budget').toBe(false);
     });
 
+    it('offers the agent tool by default on Claude, keeps it off on qwen3.8-flash, and lets the agentTool setting win', async () => {
+      const offered = async (opts: Run) => {
+        const { transport } = await runPrompt({ '[parent]': { replies: [answer('Done.', warm)] } }, '[parent] hi', opts);
+        return (transport.requests('[parent]')[0]!.body.tools as { name: string }[]).some((tool) => tool.name === 'agent');
+      };
+      expect(await offered({ ...SONNET, settings: undefined }), 'Sonnet, no setting').toBe(true);
+      expect(await offered({ settings: undefined }), 'qwen3.8-flash, no setting').toBe(false);
+      expect(await offered({ ...SONNET, settings: '{ "agentTool": [] }\n' }), 'Sonnet, the setting lists no mode').toBe(false);
+      expect(await offered({ settings: '{ "agentTool": ["ask"] }\n' }), 'qwen3.8-flash, the setting lists Ask').toBe(true);
+    });
+
     it("ends a child at its turn cap with the tools off and no forced report, which Sonnet refuses, and hands back the child's text", async () => {
       const { transport } = await runPrompt(
         {
@@ -364,7 +378,7 @@ describe('gcode agent: subagents in a non-interactive run', () => {
   });
 
   it('starts only read-only subagents unless --allow-worker says otherwise', async () => {
-    const { workspace, env, store } = await fixture();
+    const { workspace, env, store } = await fixture({}, AGENT_TOOL_SETTING);
     const refused = routedTransport(worker('[w1]'));
     const first = await runCli(['agent', '--workspace', workspace, '--non-interactive', '@worker [w1] tidy a.ts'], env, { fetch: refused.fetch });
     expect(first.code).toBe(0);

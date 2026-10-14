@@ -1,4 +1,6 @@
+import { SESSION_MODES, type ApprovalMode } from './approval.js';
 import { capUsd, defaultUsd, type UsdCap } from './cost.js';
+import { capabilitiesOf } from './model-capabilities.js';
 import type { ProviderName } from './providers.js';
 import { EXTERNAL_BACKEND_IDS, EXTERNAL_BACKENDS, isExternalBackendId, type ExternalBackendId } from './backends.js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
@@ -569,6 +571,15 @@ export function childReport(name: string, child: SessionId, end: ChildEnd, repor
     `${partial ? `The subagent ${childEndWords(end)} before it finished, so this is what it had. ` : ''}${REPORT_NOTE}`,
   ].join('\n');
 }
+
+/**
+ * The modes whose model may start subagents itself when the `agentTool` setting names none: Plan, Ask and Auto, for a
+ * model that uses the tool well, as Claude does in Claude Code, and none for one that does not, such as qwen3.8-flash,
+ * which never called it in the P25 eval (docs/results/p25-agent-default.md). Plan mode still refuses a child's edits.
+ * Every session mode gets the same tools, so a mode switch keeps the cached prefix.
+ */
+export const DEFAULT_AGENT_TOOL_MODES: readonly ApprovalMode[] = SESSION_MODES;
+export const agentToolModes = (provider: ProviderName, model: string): readonly ApprovalMode[] => (capabilitiesOf(provider, model).subagents ? DEFAULT_AGENT_TOOL_MODES : []);
 
 /** The model-callable tool, with the agents the session has. Sorted, so the cached prefix holds while they do. */
 export function agentToolDefinition(agents: readonly AgentDefinition[]): Tool {

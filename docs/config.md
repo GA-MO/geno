@@ -55,7 +55,7 @@ Every settings file has the same schema. `engine/src/settings.ts` reads it.
 | `hooks` | every file | Commands that run at session events. See [hooks.md](hooks.md). |
 | `enabledPlugins` | every file | `"name@marketplace": false` turns off a Claude Code plugin's hooks. |
 | `check` | Geno's files | The command the `check` tool runs, such as `"pnpm typecheck"`. |
-| `agentTool` | Geno's files | The approval modes whose model may start subagents itself, such as `["ask", "auto"]`. |
+| `agentTool` | Geno's files | The approval modes whose model may start subagents itself, such as `["ask", "auto"]`. Without it, a Claude model gets `["plan", "ask", "auto"]` and qwen gets none: Claude starts subagents well, and qwen3.8-flash never did in the P25 eval (docs/results/p25-agent-default.md). In Plan mode a child cannot edit. `[]` turns the tool off. |
 | `appendSystemPrompt` | Geno's files | Text that ends the system prompt of every run. |
 | `arena` | Geno's files | The Arena's default `variety`, its `models`, or a list of `variants`. |
 | `laneSetup` | the project's Geno files | Commands that set up each new lane, which you approve once per repository. |
