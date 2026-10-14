@@ -91,9 +91,9 @@ const add = (ctx: acp.ClientContext, cwd: string, effect: 'allow' | 'ask' | 'den
 
 describe('remembered permission rules', () => {
   it('saves "Always allow in this workspace" under the app home, and a later session runs the same command without asking in Ask', async () => {
-    const first = bash('ls ..');
-    const again = bash('ls ..');
-    const longer = bash('ls .. -a');
+    const first = bash('ls -t ..');
+    const again = bash('ls -t ..');
+    const longer = bash('ls -t .. -a');
     const { workspace, home, permissions, session, sessionless, prompt, results, answerWith } = await setup([
       toolCall('Listing.', [first], usage),
       answer('Listed.', usage),
@@ -111,7 +111,7 @@ describe('remembered permission rules', () => {
       ['allow-workspace', 'Always allow in this workspace'],
       ['reject-with-comment', 'No, and tell the agent…'],
     ]);
-    expect(permissions[0]!.toolCall.rawInput).toMatchObject({ command: 'ls ..', reason: 'a path outside the workspace', rule: 'ls ..' });
+    expect(permissions[0]!.toolCall.rawInput).toMatchObject({ command: 'ls -t ..', reason: 'a path outside the workspace', rule: 'ls -t ..' });
 
     answerWith('reject');
     const listed = await session(async (ctx, sessionId) => {
@@ -121,7 +121,7 @@ describe('remembered permission rules', () => {
     expect(permissions).toHaveLength(1);
     expect(results().get(again.id)).not.toContain('denied');
     expect(results().get(longer.id)).not.toContain('denied');
-    expect(listed).toEqual({ workspace, rules: [expect.objectContaining({ effect: 'allow', pattern: ['ls', '..'] })] });
+    expect(listed).toEqual({ workspace, rules: [expect.objectContaining({ effect: 'allow', pattern: ['ls', '-t', '..'] })] });
 
     expect(readdirSync(path.join(home, 'permissions'))).toHaveLength(1);
     const sessions = readdirSync(path.join(home, 'sessions')).length;
@@ -183,7 +183,7 @@ describe('remembered permission rules', () => {
   });
 
   it('saves an ask rule and a Read rule typed in Settings, and the ask rule puts a card up in Auto with no rule to keep', async () => {
-    const listing = bash('ls');
+    const listing = bash('ls -t');
     const { workspace, permissions, transport, session, prompt } = await setup([toolCall('Listing.', [listing], usage), answer('Not listed.', usage)]);
     await session(async (ctx, sessionId) => {
       const { rules } = await add(ctx, workspace, 'ask', 'Bash(ls *)');
@@ -197,7 +197,7 @@ describe('remembered permission rules', () => {
       await prompt(ctx, sessionId, 'List it');
     });
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls', reason: 'the workspace rule that asks before `ls`, which the user set in Settings under Permissions' });
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls -t', reason: 'the workspace rule that asks before `ls`, which the user set in Settings under Permissions' });
     expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject', 'reject-with-comment']);
     expect(transport.requests.filter((r) => r.body.tool_choice !== undefined), 'the classifier is not called').toEqual([]);
   });
