@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -264,7 +264,7 @@ describe("a command's TMPDIR in a run", () => {
     const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
     const head = (await readSessionLog(sessionFile(store, asSessionId(id)))).events[0]!;
     const scratchpad = head.kind === 'session-start' ? head.environment?.scratchpad : undefined;
-    expect(scratchpad).toMatch(/gcode-sessions/);
+    expect(scratchpad).toBe(path.join(realpathSync('/tmp'), `gcode-${process.getuid!()}`, id.replaceAll('-', '').slice(0, 8)));
     const bodies = transport.requests.map((r) => r.body as Body);
     expect(resultOf(bodies[1]!, where.id).split('\n')[0]).toBe(scratchpad);
     const showed = resultOf(bodies[4]!, shown!.id);

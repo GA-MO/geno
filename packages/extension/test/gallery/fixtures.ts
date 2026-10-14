@@ -337,7 +337,7 @@ const SPEND: SessionSpend = {
 
 /** Where the show_files states' images are: `media.ts` paints them, and the page serves them under /gallery-media/. */
 const MEDIA = '/gallery-media';
-const SCRATCH = '/private/var/folders/x1/T/gcode-sessions/4eb7ce59';
+const SCRATCH = '/private/tmp/gcode-501/4eb7ce59';
 const SIZES: Readonly<Record<string, number>> = { 'before.png': 4210, 'after.png': 4188, 'phone-before.png': 2630, 'phone-after.png': 2611, 'chart.png': 3020 };
 
 const shownFile = (name: string, bytes = SIZES[name] ?? 18_400): ShownFile => ({ kind: 'shown', given: `${SCRATCH}/${name}`, path: `${MEDIA}/${name}`, name, bytes, show: shownKindOf(name) });
