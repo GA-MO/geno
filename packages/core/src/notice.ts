@@ -54,28 +54,34 @@ export const LAST_CALL_NOTE = `${GENO_NOTE} This is the last model call this run
 
 /**
  * The todo list as it stands, when it has work left that the model may have let go stale: `idle` after
- * `TODO_REMINDER_CALLS` model calls without a todo call; at a prompt the user typed, `stopped` when the turn before was
- * stopped, failed or capped by its limits, and `earlier` when it ended on its own. Logged with the list, so a replay
- * sends the same bytes.
+ * `TODO_REMINDER_CALLS` model calls without a todo call; `ending` when the model ended its turn on its own, once a run;
+ * at a prompt the user typed, `stopped` when the turn before was stopped, failed or capped by its limits, and `earlier`
+ * when it ended on its own. Logged with the list, so a replay sends the same bytes.
  */
-export type TodoReminder = { readonly why: 'idle' | 'stopped' | 'earlier'; readonly list: TodoList };
+export type TodoReminder = { readonly why: 'idle' | 'ending' | 'stopped' | 'earlier'; readonly list: TodoList };
 
 // The value commonly reported for Claude Code's TodoWrite reminder, which research/claude-code-harness does not record:
 // 10 assistant turns since the last write, and 10 between reminders.
 export const TODO_REMINDER_CALLS = 10;
 
-const TODO_REMINDER_OPENINGS: Readonly<Record<TodoReminder['why'], string>> = {
-  idle: `You have not updated your todo list in your last ${TODO_REMINDER_CALLS} model calls, and it still has unfinished items:`,
-  stopped: 'Your last turn ended before your todo list was finished, and the list still stands as it was then:',
-  earlier: 'Your todo list from earlier still has unfinished items:',
+const UPDATE_NOW =
+  "Bring it up to date now with one todo call that passes the whole list. Mark done every item you have already finished, even if the rest of the list still applies, and mark in_progress the one you are working on. If the user's latest request moved on to something else and the list no longer applies, clear it by calling todo with an empty list. Do not mention this note to the user.";
+
+const TODO_REMINDER_TEXTS: Readonly<Record<TodoReminder['why'], (unfinished: number) => { readonly opening: string; readonly closing: string }>> = {
+  idle: () => ({ opening: `You have not updated your todo list in your last ${TODO_REMINDER_CALLS} model calls, and it still has unfinished items:`, closing: UPDATE_NOW }),
+  ending: (unfinished) => ({
+    opening: `You ended your turn, but your todo list still shows ${unfinished} unfinished ${unfinished === 1 ? 'item' : 'items'}:`,
+    closing:
+      'The user sees this list. Update it to match what is done with one todo call that passes the whole list, or clear it with an empty list if it no longer applies, then end your turn. If you stopped to wait for the user, say so in one line and end your turn. Do not mention this note to the user.',
+  }),
+  stopped: () => ({ opening: 'Your last turn ended before your todo list was finished, and the list still stands as it was then:', closing: UPDATE_NOW }),
+  earlier: () => ({ opening: 'Your todo list from earlier still has unfinished items:', closing: UPDATE_NOW }),
 };
 
-export const renderTodoReminder = ({ why, list }: TodoReminder): string =>
-  [
-    `${GENO_NOTE} ${TODO_REMINDER_OPENINGS[why]}`,
-    ...todoLines(list),
-    "Bring it up to date now with one todo call that passes the whole list. Mark done every item you have already finished, even if the rest of the list still applies, and mark in_progress the one you are working on. If the user's latest request moved on to something else and the list no longer applies, clear it by calling todo with an empty list. Do not mention this note to the user.",
-  ].join('\n');
+export function renderTodoReminder({ why, list }: TodoReminder): string {
+  const { opening, closing } = TODO_REMINDER_TEXTS[why](list.filter((item) => item.status !== 'done').length);
+  return [`${GENO_NOTE} ${opening}`, ...todoLines(list), closing].join('\n');
+}
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, noticeTexts, replayMessages, renderTodoReminder, TODO_REMINDER_CALLS, todoReminder, type Session, type TodoList, type TodoStatus, type TurnEvent } from '../src/index.js';
+import { asSessionId, loopStep, noticeTexts, replayMessages, renderTodoReminder, TODO_REMINDER_CALLS, todoReminder, type LoopStep, type Run, type Session, type TodoList, type TodoStatus, type TurnEvent } from '../src/index.js';
 
 const at = '2026-10-10T00:00:01.000Z';
 const session: Session = { id: asSessionId('s1'), createdAt: at, workspace: '/ws', provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' };
@@ -114,5 +114,76 @@ describe('the todo reminder', () => {
     const blocks = typeof last.content === 'string' ? [] : last.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
     expect(blocks.indexOf(text)).toBeGreaterThanOrEqual(0);
     expect(blocks.indexOf(text)).toBeLessThan(blocks.findIndex((b) => b.includes('Why does the build fail?')));
+  });
+});
+
+describe('the todo reminder as the model ends its turn', () => {
+  const run: Run = { firstSeq: 1, maxTurns: 50, maxCostUsd: 10, todo: true };
+  const ended: LoopStep = { kind: 'done', reason: 'end_turn' };
+  /** Steps the loop as drive does at an end: logs the reminder a `remind-todo` step asks for, and returns the step. */
+  const step = (s: ReturnType<typeof log>, limits = run): LoopStep => {
+    const next = loopStep(s.events, limits);
+    if (next.kind === 'remind-todo') s.events.push({ kind: 'notice', seq: s.events.length, at, todo: next.todo });
+    return next;
+  };
+  const unfinished = () => log().prompt().todo(list('in_progress', 'pending', 'pending'));
+
+  it('goes on once with the unfinished list, and the model is called again', () => {
+    const s = unfinished().reads(3).answer();
+    expect(step(s)).toEqual({ kind: 'remind-todo', todo: { why: 'ending', list: list('in_progress', 'pending', 'pending') } });
+    expect(step(s), "the logged reminder is the model's next message").toEqual({ kind: 'call-model' });
+    expect(todoReminder(s.events), 'no idle reminder on top of it').toBeUndefined();
+    const last = replayMessages(s.events).at(-1)!;
+    const blocks = typeof last.content === 'string' ? [last.content] : last.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
+    expect(blocks, 'the model reads it as the message after its answer').toContain(renderTodoReminder({ why: 'ending', list: list('in_progress', 'pending', 'pending') }));
+  });
+
+  it('ends the turn when the model ends again without fixing the list', () => {
+    const s = unfinished().answer();
+    step(s);
+    s.answer();
+    expect(step(s)).toEqual(ended);
+  });
+
+  it('ends the turn once the model brings the list up to date', () => {
+    const s = unfinished().answer();
+    step(s);
+    s.todo(list('done', 'done', 'done')).answer();
+    expect(step(s)).toEqual(ended);
+  });
+
+  it('ends the turn with no list, a plan nobody started, a finished one, or a cleared one', () => {
+    expect(step(log().prompt().reads(2).answer())).toEqual(ended);
+    expect(step(log().prompt().todo(list('pending', 'pending', 'pending')).answer()), 'a plan the user has yet to approve').toEqual(ended);
+    expect(step(log().prompt().todo(list('done', 'done', 'done')).answer())).toEqual(ended);
+    expect(step(unfinished().todo([]).answer())).toEqual(ended);
+  });
+
+  it('ends the turn without the todo tool, at a limit, and when the next call would be the last', () => {
+    expect(step(unfinished().answer(), { ...run, todo: undefined })).toEqual(ended);
+    expect(step(unfinished().answer(), { ...run, maxTurns: 2 })).toEqual(ended);
+    expect(step(unfinished().answer(), { ...run, maxTurns: 3 }), 'a last call goes out with the tools off').toEqual(ended);
+  });
+
+  it('leaves a capped turn as it was, so the next prompt says it was stopped', () => {
+    const capped = unfinished();
+    capped.events.push({ kind: 'notice', seq: 98, at, last: true });
+    capped.answer();
+    expect(step(capped, { ...run, maxTurns: 2 })).toEqual(ended);
+    capped.prompt('Something else.');
+    expect(capped.told()?.why).toBe('stopped');
+  });
+
+  it('leaves the turns of earlier runs alone', () => {
+    const s = unfinished().answer();
+    expect(step(s, { ...run, firstSeq: s.events.length + 1 })).toEqual(ended);
+  });
+
+  it('counts the unfinished items and says how to end', () => {
+    const text = renderTodoReminder({ why: 'ending', list: list('done', 'in_progress', 'pending') });
+    expect(text).toMatch(/^\[Geno\] You ended your turn, but your todo list still shows 2 unfinished items:\n\[x\] 1: Read the code\n\[~\] 2: Write tests\n\[ \] 3: Run them\n/);
+    expect(text).toMatch(/clear it with an empty list/);
+    expect(text).toMatch(/If you stopped to wait for the user, say so/);
+    expect(renderTodoReminder({ why: 'ending', list: list('pending') })).toMatch(/still shows 1 unfinished item:/);
   });
 });

@@ -41,6 +41,7 @@ export const STEER_AT: Readonly<Record<LoopStep['kind'], SteerAction>> = {
   'run-tools': 'hold',
   'answer-tools': 'hold',
   nudge: 'hold',
+  'remind-todo': 'hold',
   done: 'next-turn',
 };
 

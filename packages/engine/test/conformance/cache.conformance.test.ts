@@ -94,7 +94,7 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
 
   it(`a list left alone for ${TODO_REMINDER_CALLS} calls comes back once as a notice, and the prefix holds`, async () => {
     const reads = Array.from({ length: TODO_REMINDER_CALLS + 1 }, (_, i) => read(`tu_r${i}`));
-    const { workspace, cli, bodies, log } = await scripted(wire, [todo('tu_t'), ...reads, say('Done.')]);
+    const { workspace, cli, bodies, log } = await scripted(wire, [todo('tu_t'), ...reads, say('Done.'), say('Waiting for you.')]);
     const result = await cli(['agent', '--workspace', workspace, '--max-turns', '40', 'Change a.ts']);
     expect(result.code).toBe(0);
 
@@ -103,24 +103,43 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
     expect(reminded, 'once, on the call after the tenth without a todo call').toEqual([TODO_REMINDER_CALLS + 1]);
     expect(newestOf(sent[TODO_REMINDER_CALLS + 1]!)).toMatch(/not updated your todo list in your last 10 model calls/);
     for (let i = 1; i < sent.length; i++) expectPrefix(sent[i - 1]!, sent[i]!);
-    expect((await log(result.stdout)).filter((e) => e.kind === 'notice' && e.todo !== undefined)).toHaveLength(1);
+    expect((await log(result.stdout)).flatMap((e) => (e.kind === 'notice' && e.todo !== undefined ? [e.todo.why] : [])), 'then once more as the turn ends').toEqual(['idle', 'ending']);
+  });
+
+  it('a turn the model ends with the list unfinished goes on once with the list, and ends at the next end', async () => {
+    const { workspace, cli, bodies, log } = await scripted(wire, [todo('tu_t'), read('tu_r'), say('a.ts is changed.'), say('The tests still need a run; I stopped to ask you which suite.')]);
+    const result = await cli(['agent', '--workspace', workspace, 'Change a.ts']);
+    expect(result.code).toBe(0);
+
+    const sent = bodies() as Body[];
+    expect(sent, 'one call more than the script before the end').toHaveLength(4);
+    const asked = newestOf(sent[3]!);
+    expect(asked).toMatch(/^\[Geno\] You ended your turn, but your todo list still shows 2 unfinished items:\n\[x\] 1: Read a.ts\n\[~\] 2: Change it\n\[ \] 3: Run the tests\n/);
+    expect(asked).toMatch(/If you stopped to wait for the user, say so/);
+    expect(sent[3]!.messages.at(-2)!.role, 'it follows the answer the model ended on').toBe('assistant');
+    expectPrefix(sent[2]!, sent[3]!);
+    expect((await log(result.stdout)).flatMap((e) => (e.kind === 'notice' && e.todo !== undefined ? [e.todo.why] : []))).toEqual(['ending']);
   });
 
   it.each([
     ['stopped at its limit mid-call', ['--max-turns', '2'], [todo('tu_t'), read('tu_r')], 'stopped'],
     ['capped by its limit with a closing report', ['--max-turns', '3'], [todo('tu_t'), read('tu_r'), say('I ran out of calls: a.ts is read, the change is still to do.')], 'stopped'],
-    ['that ended on its own', [], [todo('tu_t'), read('tu_r'), say('a.ts is read; I will change it next.')], 'earlier'],
+    ['that ended on its own', [], [todo('tu_t'), read('tu_r'), say('a.ts is read.'), say('I will change it next.')], 'earlier'],
   ] as const)('a prompt after a turn %s shows the unfinished list before the prompt, and the prefix holds', async (_how, limit, first, why) => {
-    const { workspace, cli, bodies, events } = await scripted(wire, [...first, say('The build fails on a missing import.')]);
+    const clear = call('The list is moot now.', [{ id: 'tu_c', name: 'todo', input: { items: [] } }]);
+    const { workspace, cli, bodies, events } = await scripted(wire, [...first, clear, say('The build fails on a missing import.')]);
     const id = sessionIdOf((await cli(['agent', '--workspace', workspace, ...limit, 'Change a.ts'])).stdout);
     expect((await cli(['agent', '--session', id, 'Why does the build fail?'])).code).toBe(0);
 
     const sent = bodies() as Body[];
-    const asked = newestOf(sent.at(-1)!);
-    expect(sent.slice(0, -1).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
+    const prompted = sent.findIndex((body) => newestOf(body).includes('Why does the build fail?'));
+    const asked = newestOf(sent[prompted]!);
+    expect(sent.slice(0, prompted).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
     expect(asked).toMatch(why === 'stopped' ? /last turn ended before your todo list was finished/ : /Your todo list from earlier still has unfinished items/);
     expect(asked.search(REMINDED), 'the list comes before the prompt').toBeLessThan(asked.indexOf('Why does the build fail?'));
-    expectPrefix(sent.at(-2)!, sent.at(-1)!);
-    expect((await events(id)).find((e) => e.kind === 'notice' && e.todo !== undefined)).toMatchObject({ todo: { why, list: items } });
+    expectPrefix(sent[prompted - 1]!, sent[prompted]!);
+    const reminders = (await events(id)).flatMap((e) => (e.kind === 'notice' && e.todo !== undefined ? [e.todo] : []));
+    expect(reminders.map((todo) => todo.why), 'a capped turn is not reminded as it ends').toEqual(why === 'stopped' ? [why] : ['ending', why]);
+    expect(reminders.at(-1)).toEqual({ why, list: items });
   });
 });
