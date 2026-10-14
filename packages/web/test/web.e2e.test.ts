@@ -332,6 +332,76 @@ describe('the web host', () => {
     }
   }, 90_000);
 
+  it('queues a prompt sent before the panel heard the last one’s turn start, and sends it when that turn ends', async ({ skip }) => {
+    const browser = await chromium.launch(process.env['GCODE_CHROMIUM'] ? { executablePath: process.env['GCODE_CHROMIUM'] } : {}).catch((error: unknown) => skip(`no Chromium for playwright: ${String(error)}`));
+    try {
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      // Registered before the panel's own listener, it hears each host message first, and holds it back from the panel while asked to.
+      await page.addInitScript(() => {
+        const w = window as unknown as { held: unknown[] | undefined; heard: unknown[] };
+        w.heard = [];
+        window.addEventListener('message', (event) => {
+          w.heard.push(event.data);
+          if (w.held === undefined) return;
+          w.held.push(event.data);
+          event.stopImmediatePropagation();
+        });
+      });
+      await page.goto(address);
+      await page.locator('textarea').waitFor();
+      await page.evaluate(() => void ((window as unknown as { held: unknown[] }).held = []));
+      const heard = (type: string, text?: string) =>
+        page.waitForFunction(([type, text]) => (window as unknown as { heard: { type: string; prompt?: string; text?: string }[] }).heard.some((m) => m.type === type && (text === undefined || m.prompt === text || m.text === text)), [type, text] as const, { timeout: 45_000 }).catch(async (error: unknown) => {
+          throw new Error(`${String(error)}\nheard ${JSON.stringify(await page.evaluate(() => (window as unknown as { heard: { type: string }[] }).heard.map((m) => [m.type, (m as { prompt?: string }).prompt])))}\n${stderr()}`);
+        });
+      await page.locator('textarea').fill('List the parent folder');
+      await page.keyboard.press('Enter');
+      await heard('turn-start', 'List the parent folder');
+      await page.locator('textarea').fill('Say hello after the listing');
+      await page.keyboard.press('Enter');
+      await heard('unsent', 'Say hello after the listing');
+      await page.evaluate(() => {
+        const w = window as unknown as { held: unknown[] | undefined };
+        const held = w.held!;
+        w.held = undefined;
+        for (const data of held) window.dispatchEvent(new MessageEvent('message', { data }));
+      });
+      const chip = page.locator('.queued-chip');
+      await chip.waitFor();
+      expect(await chip.textContent()).toContain('Say hello after the listing');
+      expect(await page.locator('textarea').inputValue()).toBe('');
+
+      await heard('permission');
+      const permission = await page.evaluate(() => (window as unknown as { heard: { type: string; id: string; options: { optionId: string; kind: string }[] }[] }).heard.find((m) => m.type === 'permission')!);
+      const allow = permission.options.find((o) => o.kind === 'allow_once')!;
+      await page.evaluate(({ id, optionId }) => fetch('/message?view=chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'permission', id, optionId }) }), { id: permission.id, optionId: allow.optionId });
+      const hello = page.locator('article.turn[aria-busy="false"]', { has: page.locator('.request-bubble', { hasText: 'Say hello after the listing' }) });
+      await hello.getByText('Hello from the fake model.').waitFor({ timeout: 45_000 });
+      await chip.waitFor({ state: 'hidden' });
+      const order = await page.locator('article.turn .request-bubble').allTextContents();
+      expect(order.slice(-2).map((text) => text.trim())).toEqual(['List the parent folder', 'Say hello after the listing']);
+      expect(errors).toEqual([]);
+    } finally {
+      await browser.close();
+    }
+  }, 90_000);
+
+  it('gives a send that failed before its turn back to the composer, above the draft typed since', async ({ skip }) => {
+    const browser = await chromium.launch(process.env['GCODE_CHROMIUM'] ? { executablePath: process.env['GCODE_CHROMIUM'] } : {}).catch((error: unknown) => skip(`no Chromium for playwright: ${String(error)}`));
+    try {
+      const page = await browser.newPage();
+      await page.goto(address);
+      await page.locator('textarea').fill('typed since');
+      // What the host posts when a send fails before its turn shows, as when the action a slash command names throws.
+      await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'unsent', text: 'Start over', attachments: [], error: 'the engine did not start' } })));
+      expect(await page.locator('textarea').inputValue()).toBe('Start over\n\ntyped since');
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+
   it('runs only the chat view’s title actions, from the header icons and, when narrow, from its … menu', async ({ skip }) => {
     const cookie = await signIn();
     const run = (command: string) => fetch(`${origin}/command`, { method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' }, body: JSON.stringify({ command }) });
