@@ -21,7 +21,7 @@ export const WORK: readonly (Call & { readonly pose: string })[] = [
   { say: 'Swapping the operands.', name: 'edit', input: { path: 'a.ts', old_str: 'return a + b;', new_str: 'return b + a;' }, pose: 'coding' },
   { say: 'Now the notes.', name: 'read', input: { path: 'notes.md' }, pose: 'reading' },
   { say: 'Noting the change.', name: 'edit', input: { path: 'notes.md', old_str: 'Nothing yet.', new_str: 'add takes b first.' }, pose: 'writing' },
-  { say: 'Looking at the folder.', name: 'bash', input: { command: 'ls' }, pose: 'running' },
+  { say: 'Looking at the folder.', name: 'bash', input: { command: 'ls -t' }, pose: 'running' },
   { say: 'Checking the project.', name: 'check', input: {}, pose: 'running' },
 ];
 
