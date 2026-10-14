@@ -71,6 +71,7 @@ import {
   type TurnEvent,
   type Waiter,
   withoutInstructions,
+  WEB_TOOLS,
   ZERO_USAGE,
   configPaths,
   type ConfigHomes,
@@ -629,7 +630,8 @@ export function subagents(env: SubagentEnv): Subagents {
       },
     };
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
-    const executors = pick(place?.executors(childApproval) ?? env.executors(childApproval), agent.tools);
+    // A fork is offered its parent's tools, web_fetch and web_search among them, and runs those beside its role's own.
+    const executors = pick(place?.executors(childApproval) ?? env.executors(childApproval), start === 'fork' ? [...agent.tools, ...WEB_TOOLS] : agent.tools);
     // A lane's review is its apply, so its files go to disk and never through the editor's buffers of the main checkout.
     const files = place === undefined ? env.files : DISK_FILES;
     const toolHooks = env.toolHooks?.(childApproval, { id: session.id, type: agent.name });

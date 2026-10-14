@@ -322,7 +322,7 @@ export async function drive(
       const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
-      const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, shown, file, ran: asRan } = await callOf(steps?.[i], use, toolCtx);
+      const { status, text, change, approval, helper, images, widget, editorAction, todo, loaded, spinoff, chapter, shown, file, ran: asRan } = await callOf(steps?.[i], use, toolCtx);
       watcher.toolEnd(use, status, todo);
       if (hooks !== undefined) {
         // After Geno's own check, which the edit's result already holds, and before the call after it starts.
@@ -332,7 +332,7 @@ export async function drive(
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name), spillLimitOf(use.name, ctx.spillChars));
       const timing = { startAt: started.startAt, endAt: Date.now() };
       running.delete(i);
-      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, shown, file, ...output, timing };
+      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, helper, images, widget, editorAction, todo, loaded, spinoff, chapter, shown, file, ...output, timing };
     };
     const work = (async () => {
       // PreToolUse fires for every call of the turn before the first one runs, as Claude Code's does (T-LOOP-01).

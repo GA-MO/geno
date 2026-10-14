@@ -84,6 +84,12 @@ export const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, o
 /** A model call's spend as the log records it. */
 export type Spend = { readonly usage: TokenUsage; readonly costUsd: number | null; readonly model: string };
 
+/**
+ * A model call a tool made for its own work, such as web_fetch's reader or web_search's search. `searches` counts the
+ * server-side web searches it ran, which the provider bills apart from tokens and `costUsd` includes.
+ */
+export type HelperSpend = Spend & { readonly searches?: number | undefined };
+
 export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   input: a.input + b.input,
   cacheRead: a.cacheRead + b.cacheRead,
@@ -140,6 +146,8 @@ export type ToolResultEvent = {
   readonly change?: FileChange | undefined;
   /** How a flagged command was let through or refused. */
   readonly approval?: ApprovalRecord | undefined;
+  /** The model call the tool made for its own work, which the turn's spend counts. */
+  readonly helper?: HelperSpend | undefined;
   /** Images the tool returned beside its text, such as a read of a PNG. */
   readonly images?: readonly ImageAttachment[] | undefined;
   /** The widget a show_widget call drew, stored by its hash. */
@@ -348,6 +356,12 @@ export const spendOf = (event: TurnEvent): Spend | undefined =>
 
 /** What the Auto classifier's call cost to settle one tool call; 0 when none ran or its model has no price. */
 export const classifierCostOf = (event: TurnEvent): number => (event.kind === 'tool-result' ? (event.approval?.classifier?.costUsd ?? 0) : 0);
+
+/** What a tool's own model call cost, such as web_search's search; 0 when it made none or its model has no price. */
+export const helperCostOf = (event: TurnEvent): number => (event.kind === 'tool-result' ? (event.helper?.costUsd ?? 0) : 0);
+
+/** What a tool call cost beside the session's model requests: the classifier's call that settled it and the tool's own call. */
+export const sideCostOf = (event: TurnEvent): number => classifierCostOf(event) + helperCostOf(event);
 
 export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
   content.filter((block): block is ToolUseBlock => block.type === 'tool_use');

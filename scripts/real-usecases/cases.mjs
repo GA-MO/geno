@@ -603,4 +603,26 @@ export const CASES = [
       { id: 'answers-in-thai', what: 'answers in Thai', test: (run) => ok(thaiShare(run.finalText) > 0.3, `thai share ${thaiShare(run.finalText).toFixed(2)}`) },
     ],
   },
+  {
+    // On Anthropic with no Brave key, web_search runs on the API's own web search.
+    id: 'A38-web-search',
+    area: 'tools',
+    lang: 'th',
+    fixture: 'ts-lib',
+    mode: 'auto',
+    prompt: 'ค้นเว็บหน่อยว่า Phaser เวอร์ชันล่าสุดคือเท่าไหร่ แล้วบอกพร้อมลิงก์ที่มา',
+    checks: [
+      { id: 'searched', what: 'calls web_search, and it answers', test: (run) => {
+        const searches = named(run, 'web_search');
+        return ok(searches.some((c) => c.result?.status === 'ok'), searches.map((c) => `${c.result?.status}: ${outputOf(c).slice(0, 80)}`).join(' | ') || run.calls.map((c) => c.name).join(','));
+      } },
+      { id: 'cites-a-result', what: 'the answer links a URL the search returned', test: (run) => {
+        const found = new Set(named(run, 'web_search').flatMap((c) => [...outputOf(c).matchAll(/https?:\/\/[^\s)\]>"']+/g)].map((m) => m[0])));
+        const cited = [...run.finalText.matchAll(/https?:\/\/[^\s)\]>"']+/g)].map((m) => m[0].replace(/[.,;]+$/, ''));
+        return ok(cited.some((url) => found.has(url)), cited.join(' ') || 'no URL in the answer');
+      } },
+      { id: 'no-curl', what: 'searches with web_search, not curl in bash', test: (run) => ok(!bashCalls(run).some((c) => /curl|wget/.test(c.input.command))) },
+      thai,
+    ],
+  },
 ];

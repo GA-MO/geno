@@ -164,7 +164,7 @@ export type AgentOptions = {
    */
   readonly engine?: RunEngine | undefined;
   /** Replaces how web_fetch resolves hosts and web_search reaches its provider, and hears each helper call; for tests and smokes. */
-  readonly web?: Pick<WebDeps, 'resolve' | 'searchFetch' | 'onRead'> | undefined;
+  readonly web?: Pick<WebDeps, 'resolve' | 'searchFetch'> | undefined;
   /**
    * The user's hooks, for the command line and the editor; undefined runs none, as an eval or the Arena's ranking must
    * not depend on the machine's hooks. The session's first run in the process fires SessionStart.
@@ -276,8 +276,12 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       readonly diagnostics: Diagnostics | undefined;
     };
     const here: Place = { sandbox, workspace, lane: lane?.bounds, check, diagnostics: options.diagnostics };
-    const executorsFor = (approval: Approval, own = false, place: Place = here) =>
-      agentExecutors({
+    const search = searchConfigOf(io.env, session.provider);
+    const webFor = (approval: Approval) => withPermissions(webExecutors({ approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web }), permissions, approval);
+    // web_fetch and web_search come along for a forked child, which is offered its parent's tools.
+    const executorsFor = (approval: Approval, own = false, place: Place = here) => ({
+      ...webFor(approval),
+      ...agentExecutors({
         sandbox: place.sandbox,
         env: childEnv(io.env),
         scope: { workspace: place.workspace, tempDir, home },
@@ -303,7 +307,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
           : undefined,
         recall: own ? recall : undefined,
         pr: own ? prTools : undefined,
-      });
+      }),
+    });
     const executors = executorsFor(options.approval, true);
     const childLane: OpenChildLane = async (name, child) => {
       const repo = await laneRepoOf(workspace);
@@ -332,8 +337,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const schedules = options.approval.kind === 'interactive' ? options.schedules : undefined;
     const workflows = options.approval.kind === 'interactive' ? options.workflows : undefined;
     const chapters = options.approval.kind === 'interactive' && options.chapters === true;
-    const search = searchConfigOf(io.env);
-    const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
       ...AGENT_TOOL_DEFINITIONS,
       ...userToolDefinitions(shownUserTools(channel)),
@@ -418,7 +421,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
           ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
           ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
           ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
-          ...web,
           ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
           ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
           ...(agentTool || options.resumeAgent !== undefined ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),

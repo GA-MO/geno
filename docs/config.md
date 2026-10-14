@@ -92,6 +92,10 @@ The factors are 4.91 for Claude Sonnet 5.5 and 8.725 for Claude Opus 5.5, on Ant
 
 A model with no price, such as Claude on Bedrock or Vertex, keeps the `qwen3.8-flash` dollars. Geno cannot see what its calls cost, so it counts them as free, and the turn cap is what stops the run.
 
+## Web search
+
+`web_search` searches with Brave when you store a Brave Search key in Settings under Providers. Without a key, it uses the web search of Anthropic's API when the chat provider is `anthropic` or `vertex`, with no other key: a helper call on that provider runs one search and returns the results with a short summary that cites them. Anthropic bills $10 per 1,000 searches on top of the helper's tokens, and the turn's spend counts both. Bedrock has no web search, and other providers without a key offer none.
+
 ## Move from .gcode.json
 
 Geno still reads `.gcode.json` in the workspace root, as the project's shared Geno file. It sits just below `.g-code/settings.json`, so a key in both takes the new file's value. When both files exist, Geno prints one note that asks you to move the keys.
