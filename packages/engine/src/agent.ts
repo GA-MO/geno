@@ -56,6 +56,7 @@ import {
   subagentModelsOf,
   claudeDirOf,
   defaultUsd,
+  agentToolModes,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -334,8 +335,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
-    // `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
-    const agentTool = options.agentTool ?? settings.geno.agentTool?.value.includes(startMode) === true;
+    // `agentTool` lists the modes whose model may start subagents itself, by default those the model's capabilities give;
+    // `@` mentions work in every mode.
+    const agentTool = options.agentTool ?? (settings.geno.agentTool?.value ?? agentToolModes(session.provider, session.model)).includes(startMode);
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     // The session's temp dir is its own: the environment text offers it for scratch files, and bash's TMPDIR is it.
     const readRoots = [tempDir, ...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];

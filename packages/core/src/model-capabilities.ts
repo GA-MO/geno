@@ -141,9 +141,9 @@ export const MODEL_CAPABILITIES: { readonly [P in ProviderName]: Readonly<Record
 
 /**
  * A model with no row. With no window there is no clamp and no auto compaction; a provider that refuses a call as too
- * long still gets one. The output limit is the one Geno asked every model for before P23. Thinking off, a forced tool and a temperature
- * go out as they did before Claude 5.5, and the `agent` tool stays off by default, as it was for every model. No effort is sent, since a
- * model that does not take it refuses the whole request. The Chat Completions wire sends none of these fields, so the
+ * long still gets one. The output limit is the one Geno asked every model for before P23. Thinking off, a forced tool
+ * and a temperature go out as they did before Claude 5.5, and the `agent` tool stays off by default, as it was for every
+ * model. No effort is sent, since a model that does not take it refuses the whole request. The Chat Completions wire sends none of these fields, so the
  * provider's own defaults apply there.
  */
 export const UNKNOWN_MODEL: ModelCapabilities = {
