@@ -332,7 +332,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
     const agentTool = options.agentTool ?? settings.geno.agentTool?.value.includes(startMode) === true;
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
-    const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
+    // The session's temp dir is its own: the environment text offers it for scratch files, and bash's TMPDIR is it.
+    const readRoots = [tempDir, ...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const scan = await loadAgents(workspace, homes, plugins, subagentModelsOf(io.env));
     for (const problem of scan.problems) io.err(`agents: ${problem}`);
     // A prompt logged before the run, with its attachments, is the newest event.
