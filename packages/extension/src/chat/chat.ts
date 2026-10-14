@@ -5,6 +5,9 @@ import * as vscode from 'vscode';
 import { z } from 'zod';
 import {
   DIAGNOSTICS_METHOD,
+  FIELD_IDS,
+  NO_CREDENTIALS_ERROR,
+  PROVIDERS,
   EDITOR_ACTION_METHOD,
   READ_TERMINAL_METHOD,
   type ReadTerminalRequest,
@@ -87,6 +90,7 @@ import { DEFAULT_REVIEW_MODE, REVIEW_MODE_SETTING, REVIEW_MODES, type ReviewMode
 import { TOKENS_SETTING } from './tokens.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { currentBranch } from '../git-branch.js';
+import { providerOf, SET_KEY_COMMAND, unreachableNotice } from '../runtime.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
 import { droppedUris, openTarget, pickFiles, promptBlocks, readForComposer, sessionFolders, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
 import { shownPaths } from './show-files-model.js';
@@ -114,6 +118,7 @@ import {
   CHAT_DETAILS,
   UI_STYLES,
   type Action,
+  type ErrorFix,
   type FromView,
   type Header,
   type HistoryHit,
@@ -324,6 +329,15 @@ function totalsLabel(transcript: Transcript): string {
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 const warn = (error: unknown): void => void vscode.window.showWarningMessage(messageOf(error));
+
+const noCredentials = z.object({ reason: z.literal(NO_CREDENTIALS_ERROR.reason), provider: z.enum(PROVIDERS), model: z.string(), field: z.enum(FIELD_IDS) });
+
+/** The turn's error as the panel shows it: a chat whose provider has no key here names it and offers the ways on. */
+function turnErrorOf(error: unknown, model: string): { readonly message: string; readonly fixes?: readonly ErrorFix[] } {
+  const data = error instanceof acp.RequestError && error.code === NO_CREDENTIALS_ERROR.code ? noCredentials.safeParse(error.data) : undefined;
+  if (data?.success !== true) return { message: messageOf(error) };
+  return unreachableNotice(data.data, { provider: providerOf(vscode.workspace.getConfiguration('gcode')), model });
+}
 
 /** An open question of a session the panel left; the engine asks the next window that shows the session. */
 const NOT_SHOWN = Symbol('not shown');
@@ -795,7 +809,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       return response.stopReason;
     } catch (error) {
       if (mine !== undefined && left()) throw error;
-      this.dispatch({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+      this.dispatch({ type: 'error', ...turnErrorOf(error, this.modelName()) });
       this.dispatch({ type: 'turn-end', at: Date.now(), status: 'failed', usage: undefined });
       throw error;
     } finally {
@@ -1328,6 +1342,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'open-change': ({ path, checkpoint }) => void vscode.commands.executeCommand(OPEN_CHANGE_COMMAND, path, checkpoint),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
       'choose-model': () => this.showSettings(),
+      'error-fix': ({ fix }) => {
+        if (fix.fix === 'new-chat') void this.newChat().catch(warn);
+        else if (fix.fix === 'set-key') void vscode.commands.executeCommand(SET_KEY_COMMAND, undefined, fix.provider, fix.field).then(undefined, warn);
+        else this.showSettings();
+      },
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'start-building': () => void this.startBuilding().catch(warn),

@@ -87,7 +87,7 @@ scenario:
       do: >-
         คำขอ `session/prompt` ถูกปฏิเสธ `prompt()` จับ error แล้วส่ง action `error` ด้วยข้อความของมัน
         ตามด้วย `turn-end` สถานะ `failed`
-      ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'error', message: error instanceof Error ? error.message : String(error) });\""
+      ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'error', ...turnErrorOf(error, this.modelName()) });\""
       emits: [error, turn-end]
 
     - id: shown

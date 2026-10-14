@@ -1,4 +1,4 @@
-import type { ApprovalSubject, TurnErrorKind, CallProgress, EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
+import type { ApprovalSubject, FieldId, ProviderName, TurnErrorKind, CallProgress, EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -238,8 +238,15 @@ export type PermissionBlock = {
   readonly subject?: ApprovalSubject | undefined;
 };
 
+/** A button under a turn's error, which the extension carries out: a new chat, or setting a provider's missing value. */
+export type ErrorFix = { readonly label: string } & (
+  | { readonly fix: 'new-chat' }
+  | { readonly fix: 'set-key'; readonly provider: ProviderName; readonly field: FieldId }
+  | { readonly fix: 'open-settings' }
+);
+
 /** `error` is the engine's kind of a turn's error, such as `max-turns`; undefined for one the panel raised itself. */
-export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string; readonly error?: TurnErrorKind | undefined };
+export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string; readonly error?: TurnErrorKind | undefined; readonly fixes?: readonly ErrorFix[] | undefined };
 
 /** A message that joined the running turn where it landed: after the tool steps before it, before the model's next answer. */
 export type SteerBlock = { readonly kind: 'steer'; readonly id: string; readonly seq: number; readonly shown: SteerShown };
@@ -321,7 +328,7 @@ export type Action =
     }
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined; readonly comment?: string | undefined }
-  | { readonly type: 'error'; readonly message: string; readonly error?: TurnErrorKind | undefined }
+  | { readonly type: 'error'; readonly message: string; readonly error?: TurnErrorKind | undefined; readonly fixes?: readonly ErrorFix[] | undefined }
   /** A steer the engine logged in the running turn at `seq`. */
   | { readonly type: 'steer'; readonly seq: number; readonly shown: SteerShown }
   /** The engine's compaction chunk, live or replayed; once per seq. */
@@ -520,6 +527,8 @@ export type FromView =
   | { readonly type: 'copy'; readonly text: string }
   /** Opens the Models and Keys page. */
   | { readonly type: 'choose-model' }
+  /** One of the buttons under a turn's error. */
+  | { readonly type: 'error-fix'; readonly fix: ErrorFix }
   /** Opens a diagram full size in an editor tab. */
   | { readonly type: 'open-diagram'; readonly source: string }
   | WidgetFromView
