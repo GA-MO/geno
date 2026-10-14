@@ -55,7 +55,7 @@ scenario:
       do: >-
         ACP SDK ปฏิเสธทุกคำขอที่ค้างบนการเชื่อมต่อนั้นด้วย "ACP connection closed" รวมถึง `session/prompt` ของ turn นี้
         `prompt()` จับ error แล้วส่ง action `error` ตามด้วย `turn-end` สถานะ `failed`
-      ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'error', message: error instanceof Error ? error.message : String(error) });\""
+      ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'error', ...turnErrorOf(error, this.modelName()) });\""
       emits: [error, turn-end]
 
     - id: shown
