@@ -2,7 +2,7 @@ import type { ChangedFile } from './fold.js';
 import type { CallProgress, WaitKind } from '@g-code/core';
 import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
-import type { Child, CompactBlock, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
+import type { AlertBlock, Child, CompactBlock, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 import type { EditorTool } from './editor-step.js';
 import { isChapterCall, type ChapterTool } from './chapter-model.js';
@@ -36,6 +36,7 @@ export type Step =
   /** The todo list: above a running turn's latest step, and once the turn ends, where it last changed. */
   | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly place: TodoPlace }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
+  | { readonly kind: 'alert'; readonly key: string; readonly block: AlertBlock }
   | { readonly kind: 'thinking'; readonly key: 'thinking'; readonly progress: CallProgress | undefined }
   | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
   /** Compact detail only: the line the turn's work folds behind, which opens and closes the whole trail. */
@@ -112,6 +113,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
     else if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
+    else if (block.kind === 'alert') steps.push({ kind: 'alert', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
     else if (block.kind === 'compact') steps.push({ kind: 'compact', key: block.id, block });
     else if (asking.has(block.id)) steps.push({ kind: 'asking', key: `calls:${block.id}`, tool: block });
@@ -143,6 +145,7 @@ export function nodeOf(step: Step): NodeState {
   switch (step.kind) {
     case 'text':
     case 'steer':
+    case 'alert':
       return 'text';
     case 'calls':
       if (step.tools.some((t) => t.status === 'running')) return 'live';

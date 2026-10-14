@@ -62,7 +62,7 @@ import { checkCommand, type CheckCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
 import { workspaceDir } from './workspace.js';
-import { commandClassifier } from './classifier.js';
+import { brokenClassifierNotice, commandClassifier } from './classifier.js';
 import { addedDirectories, settingDirectories, workingDirectories } from './directories.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -203,6 +203,17 @@ export const askOnTerminal =
 function modeFlag(raw: string | undefined): SessionMode | undefined {
   if (raw === undefined || isSessionMode(raw)) return raw;
   throw new UsageError('--mode must be ask or auto, or plan to plan without changing anything');
+}
+
+/** Auto's classifier for a terminal run, which says once on stderr when it cannot judge anything. */
+function terminalClassifier(io: Io) {
+  let told = false;
+  return commandClassifier(io.env, io.fetch, {
+    onBroken: (problem) => {
+      if (!told) io.err(brokenClassifierNotice(problem));
+      told = true;
+    },
+  });
 }
 
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
@@ -493,7 +504,7 @@ export const agent: Command = async (args, { io, store }) => {
   const mode = sessionModeOf(log.events);
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
-    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
+    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: terminalClassifier(io) };
   const appendSystemPrompt = values['append-system-prompt'];
   if (appendSystemPrompt?.trim() === '') throw new UsageError('--append-system-prompt needs text');
   // The command line runs the user's own hooks and no workspace's: no editor vouches that the user trusts the folder.

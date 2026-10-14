@@ -1,5 +1,5 @@
 import type * as acp from '@agentclientprotocol/sdk';
-import { APPROVAL_META, TURN_ERROR_META } from '@g-code/core';
+import { ALERT_META, APPROVAL_META, TURN_ERROR_META } from '@g-code/core';
 import { describe, expect, it } from 'vitest';
 import type { Action } from '../src/chat/messages.js';
 import { actionOf } from '../src/chat/session-updates.js';
@@ -26,6 +26,23 @@ describe("a turn's error", () => {
 
   it("is nothing for the user's own stop, which the turn's end already says", () => {
     expect(actionOf(chunk('abort', 'interrupted by the user'), 1)).toBeUndefined();
+  });
+});
+
+describe('an alert', () => {
+  const TEXT = "Auto mode's classifier is not working (DASHSCOPE_API_KEY is not set), so commands it would judge ask you instead.";
+
+  it('stays in the turn after the output that clears a passing notice', () => {
+    const alert = actionOf({ sessionUpdate: 'notice', severity: 'warning', title: TEXT, _meta: { [ALERT_META]: true } }, 1);
+    expect(alert).toEqual({ type: 'alert', text: TEXT });
+    const actions: Action[] = [
+      { type: 'turn-start', id: 't0', at: 0, prompt: 'Build it.' },
+      alert!,
+      { type: 'tool', id: 'tu1', at: 2, name: 'bash', status: 'running' },
+      { type: 'text', text: 'Done.' },
+    ];
+    const turn = actions.reduce(reduce, emptyTranscript('m')).turns[0]!;
+    expect(turn.blocks.filter((block) => block.kind === 'alert')).toEqual([{ kind: 'alert', id: expect.any(String), text: TEXT }]);
   });
 });
 

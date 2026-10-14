@@ -6,7 +6,7 @@ import { renderMarkdown } from './markdown.js';
 import type { ApprovalSubject, AskUserRequest, BackendShown, TurnErrorKind } from '@g-code/core';
 import { COMMENT_OPTION } from '@g-code/core/permission-comment';
 import { showsTokens, turnCost } from './backend-model.js';
-import type { AutoDecision, Denial, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import type { AlertBlock, AutoDecision, Denial, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { answerWords, settledLine } from './question-model.js';
 import { questionCard } from './question-view.js';
 import { workflowCardBody } from './workflow-view.js';
@@ -760,6 +760,9 @@ export function errorBlock(block: ErrorBlock, ui: Ui): HTMLElement {
   const text = h('span', {}, sentence(block.message));
   return h('div', { class: 'turn-error', role: 'alert' }, icon('error'), fixes.length === 0 ? text : h('div', { class: 'turn-error-body' }, text, h('div', { class: 'turn-error-fixes' }, ...fixes)));
 }
+
+/** A warning the engine told the turn once, drawn like a limit the turn reached. */
+export const alertBlock = (block: AlertBlock): HTMLElement => h('div', { class: 'turn-error turn-limit', role: 'status' }, icon('warning'), h('span', {}, block.text));
 
 /** Assistant text, revealed up to `shown` characters, with a caret while more is coming. */
 export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
