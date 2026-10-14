@@ -209,14 +209,14 @@ describe('a session in a lane', () => {
       `git --git-dir=${repo}/.git log`,
     ];
     // A path built at run time passes the text check; the sandbox, which writes only to the lane, still refuses it.
-    const runtime = 'ln -s "$(printf "%s%s/%s%s/%s%s" . . . . . .)" up && echo pwned > up/marker';
+    const runtime = 'ln -s "$(printf "%s%s/%s%s/%s%s" . . . . . .)" up && pwd > up/marker';
     const transport = fakeTransport([
       toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
       toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
       toolCall('Escaping by edit.', [use('edit', { path: '../../../a.ts', old_str: 'a = 1', new_str: 'a = 3' }), use('edit', { path: path.join(repo, 'marker'), create: true, new_str: 'x' })], usage),
       ...escapes.map((command) => toolCall('Escaping.', [use('bash', { command })], usage)),
       toolCall('Escaping at run time.', [use('bash', { command: runtime })], usage),
-      toolCall('Working.', [use('bash', { command: 'echo ok > note.txt && git add note.txt && git -c user.name=t -c user.email=t@example.com -c commit.gpgsign=false commit -qm lane-work && echo committed' })], usage),
+      toolCall('Working.', [use('bash', { command: `node -e "require('fs').writeFileSync('note.txt', 'ok\\n')"` + ' && git add note.txt && git -c user.name=t -c user.email=t@example.com -c commit.gpgsign=false commit -qm lane-work && echo committed' })], usage),
       answer('Done.', usage),
     ]);
     const result = await runCli(['agent', '--workspace', work, '--mode', 'ask', '--no-mcp', '--no-check-after-edit', 'Do the work'], env, { fetch: transport.fetch, confirm: () => true });

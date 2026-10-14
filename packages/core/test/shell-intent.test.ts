@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileStepRefusal, fileStepsOf, serverRefusal, serverStartOf, stepsOf } from '../src/shell-intent.js';
+import { fileStepRefusal, fileStepsOf, serverRefusal, serverStartOf, stepsOf, writeStepsOf } from '../src/shell-intent.js';
 
 describe('stepsOf', () => {
   it('splits at operators outside quotes and groups, and keeps redirections apart', () => {
@@ -20,8 +20,17 @@ describe('stepsOf', () => {
     ]);
   });
 
-  it('leaves a heredoc or an open quote to the shell', () => {
-    expect(stepsOf("cat <<EOF > a.txt\nhi\nEOF")).toBeUndefined();
+  it('keeps a heredoc as a redirection and leaves its body out', () => {
+    expect(stepsOf("cat <<'EOF' > a.txt && npm test\nx; rm -rf /\nEOF\necho done")!.map((s) => [s.text, s.then, s.redirects])).toEqual([
+      ['cat', '&&', ["<<'EOF'", '>a.txt']],
+      ['npm test', ';', []],
+      ['echo done', 'end', []],
+    ]);
+    expect(stepsOf('cat <<-EOF\n\tx\n\tEOF')!.map((s) => s.redirects)).toEqual([['<<-EOF']]);
+  });
+
+  it('leaves a heredoc with no end line or an open quote to the shell', () => {
+    expect(stepsOf('cat <<EOF > a.txt\nhi')).toBeUndefined();
     expect(stepsOf("echo 'open")).toBeUndefined();
   });
 });
@@ -89,26 +98,77 @@ describe('fileStepsOf', () => {
 
 describe('fileStepRefusal', () => {
   it('names each file step and its tool, and the rest of the line to run alone', () => {
-    expect(fileStepRefusal('npm run build && npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git; cat src/a.ts')).toBe(
+    expect(fileStepRefusal('npm run build && npm test 2>&1 | tail -15; grep -rn getUser . --exclude-dir=.git; cat src/a.ts', '/work')).toBe(
       "Geno ran nothing: `grep -rn getUser . --exclude-dir=.git` is the grep tool's job and `cat src/a.ts` is the read tool's job. Run `npm run build && npm test 2>&1 | tail -15` alone in bash, and call grep and read in the same turn; they run at the same time.",
     );
   });
 
   it('keeps a cd with the program it runs before', () => {
-    expect(fileStepRefusal('cd sub && npm test; cat a.ts')).toBe(
+    expect(fileStepRefusal('cd sub && npm test; cat a.ts', '/work')).toBe(
       "Geno ran nothing: `cat a.ts` is the read tool's job. Run `cd sub && npm test` alone in bash, and call read in the same turn; they run at the same time.",
     );
   });
 
   it('says only to call the tools when the line holds nothing else but labels', () => {
-    expect(fileStepRefusal('ls src test; echo ---; cat src/money.ts')).toBe(
+    expect(fileStepRefusal('ls src test; echo ---; cat src/money.ts', '/work')).toBe(
       "Geno ran nothing: `ls src test` is the list tool's job and `cat src/money.ts` is the read tool's job. Call list and read instead; calls in one turn run at the same time.",
     );
   });
 
-  it('lets through a line with no file step', () => {
-    expect(fileStepRefusal('npm test 2>&1 | grep -E "not ok"')).toBeUndefined();
-    expect(fileStepRefusal("cat <<EOF > a.txt\nhi\nEOF")).toBeUndefined();
+  it('names a write step as the edit tool job, after && too', () => {
+    expect(fileStepRefusal("mkdir -p test && cat > test/levels.test.js <<'EOF'\nimport x from 'y';\nEOF", '/work')).toBe(
+      "Geno ran nothing: `cat >test/levels.test.js <<'EOF'` is the edit tool's job (create: true with the whole content). Run `mkdir -p test` alone in bash, and call edit.",
+    );
+    expect(fileStepRefusal('echo dist >> .gitignore; cat a.ts', '/work')).toBe(
+      "Geno ran nothing: `echo dist >>.gitignore` is the edit tool's job (read the file, then add the text) and `cat a.ts` is the read tool's job. Call edit and read instead.",
+    );
+  });
+
+  it('lets through a line with no file step and no write step', () => {
+    expect(fileStepRefusal('npm test 2>&1 | grep -E "not ok"', '/work')).toBeUndefined();
+    expect(fileStepRefusal("cat > \"$TMPDIR/gen.mjs\" <<'EOF'\nconsole.log(1)\nEOF\nnode \"$TMPDIR/gen.mjs\"", '/work')).toBeUndefined();
+  });
+});
+
+describe('writeStepsOf', () => {
+  const write = (text: string, files: string[], append = false) => [{ text, files, append }];
+  const table: readonly (readonly [string, readonly { text: string; files: readonly string[]; append: boolean }[]])[] = [
+    ["cat > test/levels.test.js <<'EOF'\nconst a = 1;\nEOF", write("cat >test/levels.test.js <<'EOF'", ['test/levels.test.js'])],
+    ['cat <<EOF > notes.txt\nx\nEOF', write('cat <<EOF >notes.txt', ['notes.txt'])],
+    ['echo x >> .gitignore', write('echo x >>.gitignore', ['.gitignore'], true)],
+    ["printf '%s\\n' a b > list.txt", write("printf '%s\\n' a b >list.txt", ['list.txt'])],
+    ["echo '$HOME is literal here' > a.txt", write("echo '$HOME is literal here' >a.txt", ['a.txt'])],
+    ['echo "{}" > "config/app.json"', write('echo "{}" >"config/app.json"', ['config/app.json'])],
+    ['echo hi | tee out.txt', write('echo hi | tee out.txt', ['out.txt'])],
+    ['echo hi | tee -a log.txt >/dev/null', write('echo hi | tee -a log.txt >/dev/null', ['log.txt'], true)],
+    ['npm run build && echo ok > status.txt', write('echo ok >status.txt', ['status.txt'])],
+    ['cd src && echo x > a.ts', write('echo x >a.ts', ['a.ts'])],
+    ['echo x > /work/a.txt', write('echo x >/work/a.txt', ['/work/a.txt'])],
+    ['cat <<<"hi" > a.txt', write('cat <<<"hi" >a.txt', ['a.txt'])],
+
+    ["printf '%s\\n' a > \"$TMPDIR/x\"", []],
+    ["cat > $TMPDIR/gen.mjs <<'EOF'\nx\nEOF", []],
+    ['echo x > /tmp/a.txt', []],
+    ['echo x > ../other/a.txt', []],
+    ['cd /tmp && echo x > a.txt', []],
+    ['cd "$TMPDIR" && echo x > a.txt', []],
+    ['echo x > ~/notes.txt', []],
+    ['npm test > out.log', []],
+    ['npm test > out.log 2>&1', []],
+    ['node gen.mjs > a.js', []],
+    ['cat a > b', []],
+    ['cat < a > b', []],
+    ['echo hi', []],
+    ['echo hi >&2', []],
+    ['echo hi > /dev/null 2>&1', []],
+    ['echo "built $(date)" > stamp.txt', []],
+    ['sleep 60 & echo $! > pid.txt', []],
+    ['echo "v=$VERSION" > version.txt', []],
+    ['grep -c "@returns" src/shop/*.ts | head -3', []],
+    [`node -e "const m=require('./maze');console.log(m.MAZE.filter(r=>r.length!==28).length)"`, []],
+  ];
+  it.each(table)('%s', (command, steps) => {
+    expect(writeStepsOf(command, '/work')).toEqual(steps);
   });
 });
 

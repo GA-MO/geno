@@ -42,8 +42,8 @@ describe('gcode serve: two chats in one engine', () => {
       PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     };
     const transport = routedTransport({
-      '[first]': [toolCall('Waiting.', [{ id: 'tu_slow', name: 'bash', input: { command: 'echo first > made.txt && sleep 2' } }], usage), answer('Done.', usage)],
-      '[second]': [toolCall('Writing.', [{ id: 'tu_fast', name: 'bash', input: { command: 'echo second > made.txt' } }], usage), answer('Done.', usage)],
+      '[first]': [toolCall('Waiting.', [{ id: 'tu_slow', name: 'bash', input: { command: 'pwd > made.txt && sleep 2' } }], usage), answer('Done.', usage)],
+      '[second]': [toolCall('Writing.', [{ id: 'tu_fast', name: 'bash', input: { command: 'pwd > made.txt' } }], usage), answer('Done.', usage)],
     });
     const io: Io = {
       env,
@@ -81,7 +81,7 @@ describe('gcode serve: two chats in one engine', () => {
     expect(firstTurn).toEqual({ status: 'fulfilled', value: expect.objectContaining({ stopReason: 'end_turn' }) });
     expect(toolResultOf(transport.requests('[second]')[1]!.body).is_error).toBeFalsy();
     expect(toolResultOf(transport.requests('[first]')[1]!.body).is_error).toBeFalsy();
-    expect(readFileSync(path.join(second, 'made.txt'), 'utf8')).toBe('second\n');
-    expect(readFileSync(path.join(first, 'made.txt'), 'utf8')).toBe('first\n');
+    expect(readFileSync(path.join(second, 'made.txt'), 'utf8')).toBe(`${second}\n`);
+    expect(readFileSync(path.join(first, 'made.txt'), 'utf8')).toBe(`${first}\n`);
   });
 });

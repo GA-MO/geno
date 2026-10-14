@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { simpleCommand, splitCommand, type SimpleCommand } from './approval.js';
 import { DEV_SCRIPTS } from './browser.js';
 
@@ -25,18 +26,22 @@ const OPERATORS: readonly (readonly [string, StepOperator])[] = [
   ['|', '|'],
   ['&', '&'],
 ];
-const REDIRECT = /^(?:&>>?|\d*(?:>>|>&|>\||>|<&|<))\s*(?:'[^']*'|"[^"]*"|[^\s;&|<>()]+)?/;
+const REDIRECT = /^(?:&>>?|\d*(?:<<<|>>|>&|>\||>|<&|<))\s*(?:'[^']*'|"[^"]*"|[^\s;&|<>()]+)?/;
+const HEREDOC = /^<<(-?)\s*(?:'([^']*)'|"([^"]*)"|([^\s;&|<>()]+))/;
 
 /**
- * The steps of a command line, split at the operators outside quotes, groups and substitutions; undefined for a line
- * with a heredoc or an open quote, which is left to the shell.
+ * The steps of a command line, split at the operators outside quotes, groups and substitutions. A heredoc is a
+ * redirection as written, such as <<'EOF', and its body is left out. Undefined for a line with an open quote or a
+ * heredoc with no end line, which is left to the shell.
  */
-export function stepsOf(command: string): Step[] | undefined {
+export function stepsOf(written: string): Step[] | undefined {
+  let command = written;
   const steps: Step[] = [];
   let text = '';
   let redirects: string[] = [];
   let grouped = false;
   let depth = 0;
+  let heredocs: { readonly word: string; readonly tabs: boolean }[] = [];
   const end = (then: StepOperator) => {
     if (text.trim() !== '' || redirects.length > 0) {
       const commands = splitCommand(text).map((words) => simpleCommand(words, undefined));
@@ -48,6 +53,21 @@ export function stepsOf(command: string): Step[] | undefined {
   };
   for (let i = 0; i < command.length; i++) {
     const ch = command[i]!;
+    if (ch === '\n' && heredocs.length > 0) {
+      // Cut the bodies out, so the newline that starts them ends the step and the line goes on after the last end line.
+      let at = i + 1;
+      for (const { word, tabs } of heredocs) {
+        for (;;) {
+          if (at > command.length) return undefined;
+          const newline = command.indexOf('\n', at);
+          const line = command.slice(at, newline === -1 ? undefined : newline);
+          at = newline === -1 ? command.length + 1 : newline + 1;
+          if ((tabs ? line.replace(/^\t+/, '') : line) === word) break;
+        }
+      }
+      command = command.slice(0, i + 1) + command.slice(at);
+      heredocs = [];
+    }
     if (ch === "'" || ch === '"') {
       let j = i + 1;
       while (j < command.length && command[j] !== ch) j += ch === '"' && command[j] === '\\' ? 2 : 1;
@@ -84,7 +104,14 @@ export function stepsOf(command: string): Step[] | undefined {
       text += ch;
       continue;
     }
-    if (command.startsWith('<<', i) && !command.startsWith('<<<', i)) return undefined;
+    const heredoc = ch === '<' && !command.startsWith('<<<', i) ? HEREDOC.exec(command.slice(i)) : null;
+    if (heredoc !== null) {
+      heredocs.push({ word: heredoc[2] ?? heredoc[3] ?? heredoc[4]!, tabs: heredoc[1] === '-' });
+      redirects.push(heredoc[0].replace(/\s+/g, ''));
+      text += ' ';
+      i += heredoc[0].length - 1;
+      continue;
+    }
     const fd = /(^|\s)\d$/.test(text) ? text.slice(-1) : '';
     const redirect = ch === '>' || ch === '<' || command.startsWith('&>', i) ? REDIRECT.exec(command.slice(i)) : null;
     if (redirect !== null) {
@@ -102,7 +129,7 @@ export function stepsOf(command: string): Step[] | undefined {
     }
     text += ch;
   }
-  if (depth > 0) return undefined;
+  if (depth > 0 || heredocs.length > 0) return undefined;
   end('end');
   return steps;
 }
@@ -229,18 +256,18 @@ function fileToolOf([head, ...rest]: readonly Step[]): FileTool | undefined {
 }
 
 /**
- * Each pipeline of a command line with the dedicated tool it stands in for, if any. A file step that runs only once a
- * program before it succeeded, as the ls in `npm run build && ls dist`, checks what the program did, which no dedicated
- * tool called in the same turn can do, so it is not one.
+ * The dedicated tool each pipeline stands in for, if any. A file step that runs only once a program before it
+ * succeeded, as the ls in `npm run build && ls dist`, checks what the program did, which no dedicated tool called in the
+ * same turn can do, so it is not one.
  */
-function pipelineTools(command: string): { readonly pipeline: Step[]; readonly tool: FileTool | undefined }[] {
+function pipelineTools(pipelines: readonly Step[][]): (FileTool | undefined)[] {
   let afterProgram = false;
-  return pipelinesOf(stepsOf(command) ?? []).map((pipeline, i, all) => {
-    if (all[i - 1]?.at(-1)!.then !== '&&') afterProgram = false;
+  return pipelines.map((pipeline, i) => {
+    if (pipelines[i - 1]?.at(-1)!.then !== '&&') afterProgram = false;
     const own = fileToolOf(pipeline);
     const tool = afterProgram ? undefined : own;
     if (own === undefined && !isLabel(pipeline) && !onlyLooks(pipeline)) afterProgram = true;
-    return { pipeline, tool };
+    return tool;
   });
 }
 
@@ -256,31 +283,116 @@ const onlyLooks = (pipeline: readonly Step[]): boolean =>
  * in `cat a.ts; npm test`. A pipeline led by any other program is not one, even one that pipes a file into it.
  */
 export function fileStepsOf(command: string): FileStep[] {
-  return pipelineTools(command).flatMap(({ pipeline, tool }) => (tool === undefined ? [] : [{ text: pipelineText(pipeline), tool }]));
+  const pipelines = pipelinesIn(command);
+  return pipelineTools(pipelines).flatMap((tool, i) => (tool === undefined ? [] : [{ text: pipelineText(pipelines[i]!), tool }]));
+}
+
+const pipelinesIn = (command: string): Step[][] => pipelinesOf(stepsOf(command) ?? []);
+
+/**
+ * A pipeline of a command line that only puts literal text into workspace files, which edit does, as written: the
+ * files as the line names them, and whether it appends to one.
+ */
+export type WriteStep = { readonly text: string; readonly files: readonly string[]; readonly append: boolean };
+
+/** A redirection of standard output to a file, as stepsOf keeps it, such as >a.txt, >>a.txt or &>a.txt. */
+const OUTPUT = /^(?:1?>>?|1?>\||&>>?)(?!&)(.+)$/;
+/** Redirections that change neither where text comes from nor where it goes: quiet stderr, text written in the line. */
+const HARMLESS = /^(?:2>\/dev\/null|2>&1|\d*>\/dev\/null|\d*>&\d|<<.*)$/;
+const unquote = (word: string): string => word.replace(/^(['"])(.*)\1$/, '$2');
+
+type Write = { readonly file: string; readonly append: boolean };
+
+/** The files a pipeline writes, when all it does is put literal text there: echo, printf or cat of a heredoc, into > or tee. */
+function literalWrites(pipeline: readonly Step[]): Write[] {
+  const writes: Write[] = [];
+  for (const [i, step] of pipeline.entries()) {
+    // A $ outside single quotes expands to text the line computes, which edit cannot write.
+    if (step.grouped || step.commands.length !== 1 || step.text.replace(/'[^']*'/g, '').includes('$')) return [];
+    const { program, args } = step.commands[0]!;
+    const text = i === 0 && (program === 'echo' || program === 'printf');
+    const stdin = program === 'cat' && args.every((arg) => arg === '-');
+    const tee = i > 0 && program === 'tee' ? operandsOf(args, { flags: 'a' }) : undefined;
+    if (!text && !stdin && tee === undefined) return [];
+    for (const file of tee ?? []) writes.push({ file, append: args.includes('-a') });
+    for (const redirect of step.redirects) {
+      const output = OUTPUT.exec(redirect);
+      if (output !== null) writes.push({ file: unquote(output[1]!), append: redirect.includes('>>') });
+      else if (!HARMLESS.test(redirect)) return [];
+    }
+  }
+  return writes.filter(({ file }) => file !== '/dev/null');
+}
+
+/**
+ * Where a file the line names lands, from the directory a cd before it left; undefined where the line does not say, as
+ * for $TMPDIR, ~ or a cd to a variable.
+ */
+const resolvedIn = (cwd: string | undefined, file: string): string | undefined => (cwd === undefined || /^[$~]/.test(file) ? undefined : path.resolve(cwd, file));
+
+const inside = (workspace: string, file: string | undefined): boolean => file !== undefined && (file === workspace || file.startsWith(`${workspace}${path.sep}`));
+
+/** The write step each pipeline is, if any, for a line that starts in `workspace`. */
+function pipelineWrites(pipelines: readonly Step[][], workspace: string): (WriteStep | undefined)[] {
+  let cwd: string | undefined = workspace;
+  return pipelines.map((pipeline) => {
+    const [only] = pipeline.length === 1 && !pipeline[0]!.grouped ? pipeline[0]!.commands : [];
+    if (only?.program === 'cd') {
+      cwd = only.args[0] === undefined || only.args[0] === '-' ? undefined : resolvedIn(cwd, only.args[0]);
+      return undefined;
+    }
+    const writes = literalWrites(pipeline).filter(({ file }) => inside(workspace, resolvedIn(cwd, file)));
+    if (writes.length === 0) return undefined;
+    return { text: pipelineText(pipeline), files: writes.map(({ file }) => file), append: writes.some(({ append }) => append) };
+  });
+}
+
+/**
+ * The pipelines of a command line that only put literal text into files in `workspace`, which edit does: echo, printf
+ * or cat of a heredoc or of standard input, redirected with > or >>, or fed to tee. A program's output written to a
+ * file, a copy such as `cat a > b`, and a file in $TMPDIR, /tmp or anywhere else outside the workspace are not.
+ */
+export function writeStepsOf(command: string, workspace: string): WriteStep[] {
+  return pipelineWrites(pipelinesIn(command), workspace).filter((write) => write !== undefined);
 }
 
 const listed = (items: readonly string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
-const isLabel = (pipeline: readonly Step[]): boolean => pipeline.length === 1 && pipeline[0]!.commands.length === 1 && LABELS.has(pipeline[0]!.commands[0]!.program);
+const isLabel = (pipeline: readonly Step[]): boolean =>
+  pipeline.length === 1 && pipeline[0]!.commands.length === 1 && LABELS.has(pipeline[0]!.commands[0]!.program) && pipeline[0]!.redirects.every((r) => QUIET.has(r));
 
 /**
- * The refusal of a command line with a file step in it, of which Geno runs nothing: it names each step's tool, and the
- * rest of the line to run alone. Undefined for a line with none.
+ * The refusal of a command line with a file step or a write step in it, of which Geno runs nothing: it names each
+ * step's tool, and the rest of the line to run alone. Undefined for a line with neither. Unlike a file step, a write
+ * step after `&&` is refused as well: writing literal text checks nothing the program before it did.
  */
-export function fileStepRefusal(command: string): string | undefined {
-  const steps = fileStepsOf(command);
-  if (steps.length === 0) return undefined;
+export function fileStepRefusal(command: string, workspace: string): string | undefined {
+  const pipelines = pipelinesIn(command);
+  const tools = pipelineTools(pipelines);
+  const writes = pipelineWrites(pipelines, workspace);
+  const jobs = pipelines.flatMap((pipeline, i) => {
+    const write = writes[i];
+    const how = write?.append === true ? 'read the file, then add the text' : 'create: true with the whole content';
+    if (write !== undefined) return [{ tool: 'edit', job: `\`${write.text}\` is the edit tool's job (${how})` }];
+    const tool = tools[i];
+    return tool === undefined ? [] : [{ tool, job: `\`${pipelineText(pipeline)}\` is the ${tool} tool's job` }];
+  });
+  if (jobs.length === 0) return undefined;
   // Labels stay beside a program, as a cd before it, and go when nothing else is left.
-  const others = pipelineTools(command).flatMap(({ pipeline, tool }) => (tool === undefined ? [pipeline] : []));
+  const others = pipelines.filter((_, i) => tools[i] === undefined && writes[i] === undefined);
   const kept = others.every(isLabel) ? [] : others;
   const rest = kept.map((pipeline, i) => {
     const then = pipeline.at(-1)!.then;
     return i === kept.length - 1 ? pipelineText(pipeline) : `${pipelineText(pipeline)}${then === ';' ? ';' : ` ${then}`}`;
   });
-  const jobs = listed(steps.map(({ text, tool }) => `\`${text}\` is the ${tool} tool's job`));
-  const tools = listed([...new Set(steps.map((step) => step.tool))]);
-  const then = rest.length === 0 ? `Call ${tools} instead; calls in one turn run at the same time.` : `Run \`${rest.join(' ')}\` alone in bash, and call ${tools} in the same turn; they run at the same time.`;
-  return `Geno ran nothing: ${jobs}. ${then}`;
+  const names = [...new Set(jobs.map(({ tool }) => tool))];
+  // Reads, lists and searches run beside each other; edits wait their turn.
+  const together = !names.includes('edit');
+  const then =
+    rest.length === 0
+      ? `Call ${listed(names)} instead${together ? '; calls in one turn run at the same time' : ''}.`
+      : `Run \`${rest.join(' ')}\` alone in bash, and call ${listed(names)}${together ? ' in the same turn; they run at the same time' : ''}.`;
+  return `Geno ran nothing: ${listed(jobs.map(({ job }) => job))}. ${then}`;
 }
 
 /** A package.json's scripts, by name. */
