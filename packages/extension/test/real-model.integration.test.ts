@@ -40,13 +40,14 @@ function mainCheckoutEnv(): Record<string, string | undefined> {
 
 /**
  * The provider the main checkout's .env names, Model Studio's qwen3.8-flash or Anthropic's Claude, with only its own key.
- * The panel takes the provider and model from its gcode.provider and gcode.model settings, and the key from this env.
+ * The panel takes the provider and model from its gcode.provider and gcode.model settings, and the key from this env. A
+ * GCODE_MODEL in the test's own environment picks another Claude model for one run.
  */
 function providerEnv(env: Record<string, string | undefined>): Record<string, string> {
   if (env['GCODE_PROVIDER'] === 'anthropic') {
     const key = env['ANTHROPIC_API_KEY'];
     if (!key) throw new Error('the main checkout .env needs ANTHROPIC_API_KEY');
-    return { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: env['GCODE_MODEL'] || 'claude-sonnet-5-5', ANTHROPIC_API_KEY: key };
+    return { GCODE_PROVIDER: 'anthropic', GCODE_MODEL: process.env['GCODE_MODEL'] || env['GCODE_MODEL'] || 'claude-sonnet-5-5', ANTHROPIC_API_KEY: key };
   }
   const key = env['DASHSCOPE_API_KEY'];
   const baseUrl = env['DASHSCOPE_BASE_URL'];
