@@ -48,6 +48,8 @@ describe('fileStepsOf', () => {
     ['ls src test; cat src/money.ts', [{ text: 'ls src test', tool: 'list' }, read('cat src/money.ts')]],
     ['npm run build && ls dist; cat a.ts', [read('cat a.ts')]],
     ['npm test || cat a.ts', [read('cat a.ts')]],
+    ['cd src/shop && wc -l *.ts && cat cart.ts', [read('cat cart.ts')]],
+    ['git status && cat a.ts', [read('cat a.ts')]],
     ['cd /work/repo && cat a.ts', [read('cat a.ts')]],
     ['(cd sub && make); cat a.ts', [read('cat a.ts')]],
 

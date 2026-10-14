@@ -136,7 +136,7 @@ describe('a turn end against AFTER_STOP and TURN_ENDS', () => {
     expect(tables.afterStop.get('end_turn')).toEqual({ kind: 'done', reason: 'end_turn' });
     expect(tables.afterStop.get('pause_turn')).toEqual({ kind: 'call-model', reason: undefined });
     expect(tables.turnEnds.get('max-turns')).toEqual({ task: 'failed', stop: 'max_turn_requests' });
-    expect(tables.goingOn).toEqual(new Set(['call-model', 'run-tools', 'answer-tools', 'nudge']));
+    expect(tables.goingOn).toEqual(new Set(['call-model', 'run-tools', 'answer-tools', 'nudge', 'remind-todo']));
   });
 
   test("the model's end_turn marked as a turn that continues fails, naming the task end TURN_ENDS gives it", () => {
