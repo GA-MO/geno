@@ -83,12 +83,16 @@ export async function run(): Promise<void> {
   check(JSON.stringify(await picker()) === JSON.stringify({ mode: 'auto', label: 'Auto', box: 'auto' }), 'a new chat starts in the mode gcode.approvalMode names', await picker());
 
   await send(PROMPTS.auto);
+  await waitFor('Auto to ask about the command the classifier is unsure of', async () => (await count('.permission-open')) === 1);
+  const unsure = await textOf('.permission-open .permission-classifier');
+  check(unsure === `Auto could not decide: ${REASONS.ask}.`, 'the card gives the classifier\'s reason', unsure);
+  await click('.permission-open button', 'Allow');
   await waitFor('the Auto turn to finish', async () => (await count('.turn-footer')) === 1);
-  check((await count('.permission-open')) === 0, 'Auto asks nobody when the classifier will not allow a command');
+  check((await count('.permission-open')) === 0, 'Auto asks nothing else: what the classifier allows or denies settles without a card');
 
   check((await note(COMMANDS.removeBuild)) === `Auto-approved${REASONS.allow}`, 'an auto-approved step shows its badge and the classifier\'s reason', await note(COMMANDS.removeBuild));
   check((await denied(COMMANDS.script)) === `Denied by Auto ${sentence(REASONS.deny)}`, 'an auto-denied step says Auto denied it, and why', await denied(COMMANDS.script));
-  check((await denied(COMMANDS.removeDist)) === `Denied by Auto ${sentence(REASONS.ask)}`, 'a step the classifier would not allow is blocked and shows its reason', await denied(COMMANDS.removeDist));
+  check((await denied(COMMANDS.removeDist)) === null, 'the step the user allowed ran', await denied(COMMANDS.removeDist));
   check((await count('.tool-row')) === 0, 'the badges show while the steps are folded');
   await screenshots('auto');
 
