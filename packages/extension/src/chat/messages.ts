@@ -393,6 +393,11 @@ export type HistoryHit = {
 /** What the extension tells the chat webview: transcript changes, answers to its requests, its style and header. */
 export type ToView =
   | Action
+  /**
+   * A send of the panel's that did not become a turn. Without `error`, a turn of the panel's had already started, so
+   * it waits as the queued follow-up; with one, it failed and goes back to the draft.
+   */
+  | { readonly type: 'unsent'; readonly text: string; readonly attachments: readonly OutgoingAttachment[]; readonly error?: string }
   | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] }
   | { readonly type: 'look'; readonly look: Look }
   /** Files the user picked or dropped from the explorer, read by the extension, for the composer to attach. */

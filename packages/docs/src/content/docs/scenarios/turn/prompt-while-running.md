@@ -112,11 +112,12 @@ scenario:
 
 engine ยอมให้แต่ละ session มี turn ได้ทีละหนึ่ง ทะเบียน `turns` ใน `serve.ts` คือตัวกั้น
 ภายในหน้าต่างเดียว ข้อความที่พิมพ์ระหว่าง turn ทำงานไม่มาถึงจุดนี้ เพราะแผงเก็บเป็นข้อความ Queued
-หรือส่งเป็น steer ด้วย Send now ดู [พิมพ์ข้อความถัดไปเข้าคิวขณะ turn ทำงาน](/scenarios/ctl/queued-followup/)
+หรือส่งเป็น steer ด้วย Send now ข้อความที่ส่งก่อนแผงได้ยินว่า turn ของตัวเองเริ่มก็ไม่มาถึงเช่นกัน extension host ส่งกลับไปเป็นข้อความ Queued
+ดู [พิมพ์ข้อความถัดไปเข้าคิวขณะ turn ทำงาน](/scenarios/ctl/queued-followup/)
 
 สิ่งที่ควรสังเกต
 
-- **มีตัวกั้นสองชั้น** `Chat.prompt` ใน extension โยน "a turn is already running; stop it first" เมื่อแผงเดียวกันถือ turn อยู่แล้ว
+- **มีตัวกั้นสองชั้น** `Chat.prompt` ใน extension โยน "a turn is already running; stop it first" เมื่อแผงเดียวกันถือ turn อยู่แล้วหรือกำลังเริ่ม turn
   เช่นเมื่อ Cmd-K เรียก `prompt()` ระหว่าง turn ส่วน engine กั้นทุก client ที่ต่อเข้ามา ไม่ว่าหน้าต่างไหนหรือ editor ACP ตัวไหน
 - **ไม่มีอะไรเข้า log** การปฏิเสธเกิดก่อน `openSessionLog` ข้อความที่ถูกปฏิเสธจึงไม่อยู่ในประวัติของแชต
   การ reload หน้าต่าง B จะไม่เห็นข้อความนั้นและไม่เห็นแถบ error

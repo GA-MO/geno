@@ -679,6 +679,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
   if (message.type === 'steered') return steered(message);
+  if (message.type === 'unsent') return unsent(message);
   if (message.type === 'usage-spend' || message.type === 'usage-failed') return spent(message);
   if (message.type === 'pr-status') return prStatus.show(message.line);
   if (message.type === 'rewind-state') return rewound(message.turn, message.state);
@@ -850,8 +851,17 @@ function sendQueued(ended: 'done' | 'stopped' | 'failed'): void {
 }
 
 function restoreFollowup(was: Followup): void {
-  if (input.value.trim() === '') edit(was.text, undefined);
+  const draft = input.value.trim();
+  if (was.text !== '') edit(draft === '' ? was.text : `${was.text}\n\n${draft}`, undefined);
   attachments.restore(was.attachments);
+}
+
+/** A send the host did not run: one the turn that just started refused waits in the queue, as if typed during it; anything else goes back to the draft. */
+function unsent({ text, attachments: attached, error }: Extract<ToView, { type: 'unsent' }>): void {
+  const was: Followup = { text, attachments: attached, state: 'queued' };
+  if (error === undefined && isRunning(transcript) && followup === undefined) followup = was;
+  else restoreFollowup(was);
+  schedule();
 }
 
 /** How a steer went: the chat's own settles its pill; a subagent's or a task's tells its field. */

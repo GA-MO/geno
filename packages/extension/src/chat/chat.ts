@@ -137,7 +137,7 @@ import { actionOf, diffOf, permissionAction, previewTag, replayedEnd, replayedTu
 import { RewindHost } from './rewind-host.js';
 import { UsageHost } from './usage-host.js';
 import { PrStatusHost } from './pr-status-host.js';
-import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
+import { childOf, emptyTranscript, isRunning, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { pageHost } from './page-host.js';
 import { editorActionRequest } from './editor-action-wire.js';
@@ -524,7 +524,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.steers = new SteerHost({
       running: () => this.turn,
       connection: () => this.engine.connection(),
-      send: (text) => this.send(text),
+      send: (text) => this.sendFromView(text),
       adopt: (text, response) => this.prompt(text, text, undefined, async () => [], [], undefined, response),
       post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
@@ -693,9 +693,34 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       await this.editorActions[routed.action](routed.args);
       return 'end_turn';
     }
+    return this.promptText(text, attachments, routed.command);
+  }
+
+  /**
+   * The panel's send. The panel queues what is typed while a turn runs, but it hears of a turn only after it starts:
+   * a send that comes meanwhile is refused here and goes back to wait as the panel's queued follow-up. Any other
+   * failure before a turn shows goes back to the draft, with its error; a turn's own failure shows in the turn.
+   */
+  private sendFromView(text: string, attachments: readonly OutgoingAttachment[] = []): void {
+    const unsent = (error?: unknown) => {
+      if (error !== undefined) void vscode.window.showErrorMessage(messageOf(error));
+      void this.view?.webview.postMessage({ type: 'unsent', text, attachments, ...(error === undefined ? {} : { error: messageOf(error) }) } satisfies ToView);
+    };
+    const routed = routeText(this.commands, text);
+    if (routed.kind === 'editor') return void this.editorActions[routed.action](routed.args).catch(unsent);
+    if (this.busy()) return unsent();
+    void this.promptText(text, attachments, routed.command).catch(() => {});
+  }
+
+  private promptText(text: string, attachments: readonly OutgoingAttachment[], command: SentCommand | undefined): Promise<acp.StopReason> {
     for (const a of attachments) if (a.path !== undefined) this.attachedPaths.add(a.path);
     const blocks = async () => [...(await this.mentions.blocks(text)), ...promptBlocks(attachments)];
-    return this.prompt(text, text, undefined, blocks, viewsOf(attachments), routed.command);
+    return this.prompt(text, text, undefined, blocks, viewsOf(attachments), command);
+  }
+
+  /** A turn of this panel's runs, or has started and is still reaching the engine. */
+  private busy(): boolean {
+    return this.turn !== undefined || isRunning(this.transcript);
   }
 
   /** What the editor's own `/` built-ins do: the same as the view's New Chat and History actions and the model button. */
@@ -741,7 +766,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     /** A steer's own answer, for the turn it runs as when the turn it was sent to ended first. */
     sent?: Promise<acp.PromptResponse>,
   ): Promise<acp.StopReason> {
-    if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
+    if (this.busy()) throw new Error('a turn is already running; stop it first');
     this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current, command });
     this.composer.turnStarted();
     // The turn this call runs; the panel may leave it for another session, and it then ends in the background.
@@ -1274,7 +1299,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         view.badge = needsYouBadge(this.needsYou);
         this.view = view;
       },
-      send: ({ text, attachments }) => void this.send(text, attachments).catch(() => {}),
+      send: ({ text, attachments }) => this.sendFromView(text, attachments),
       'attach-uris': ({ uris }) => void this.attach(view, droppedUris(uris)),
       'pick-files': () => void pickFiles().then((uris) => this.attach(view, uris)),
       open: ({ target }) => void openTarget(target, this.lastSession, new Set([...this.attachedPaths, ...shownPaths(this.transcript)])),
