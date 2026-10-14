@@ -314,7 +314,9 @@ describe('the web host', () => {
       await page.locator('textarea').waitFor();
       await page.locator('textarea').fill('Say hello again');
       await page.keyboard.press('Enter');
-      await page.getByText('Hello from the fake model.').last().waitFor({ timeout: 45_000 });
+      // The transcript already holds this answer from an earlier test, so the wait is for this prompt's turn, ended.
+      const asked = page.locator('article.turn[aria-busy="false"]', { has: page.locator('.request-bubble', { hasText: 'Say hello again' }) });
+      await asked.getByText('Hello from the fake model.').waitFor({ timeout: 45_000 });
       expect(await readFile(path.join(repo, 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
       await page.locator('textarea').fill('Edit b');
       await page.keyboard.press('Enter');
