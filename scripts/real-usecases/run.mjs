@@ -1,5 +1,5 @@
 // Layer A runner: one case at a time through the real engine on the real model, scored from the session log.
-// usage: node scripts/real-usecases/run.mjs (--case <id>)... | --all  [--run <n or label>] [--cap 2.80] [--cost-scale 1] [--effort high]
+// usage: node scripts/real-usecases/run.mjs (--case <id>)... | --all  [--run <n or label>] [--cap 2.80] [--cost-scale 1] [--effort high] [--model claude-opus-5-5]
 // --cost-scale multiplies each step's --max-cost, which is sized for qwen3.8-flash, for a pricier model.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ import { campaignEnv, ENGINE, REPO, runHome, SCRATCH } from './env.mjs';
 import { prepareHome } from './home.mjs';
 import { FIXTURES, SIBLINGS } from './fixtures.mjs';
 
-const { values } = parseArgs({ options: { case: { type: 'string', multiple: true }, all: { type: 'boolean' }, run: { type: 'string', default: '1' }, cap: { type: 'string', default: '2.80' }, 'cost-scale': { type: 'string', default: '1' }, effort: { type: 'string' } } });
+const { values } = parseArgs({ options: { case: { type: 'string', multiple: true }, all: { type: 'boolean' }, run: { type: 'string', default: '1' }, cap: { type: 'string', default: '2.80' }, 'cost-scale': { type: 'string', default: '1' }, effort: { type: 'string' }, model: { type: 'string' } } });
 const LEDGER = path.join(SCRATCH, 'ledger.jsonl');
 const RESULTS = path.join(SCRATCH, 'results.jsonl');
 const AGENT_TIMEOUT_MS = 20 * 60_000;
@@ -78,7 +78,7 @@ function runCase(spec, runNo) {
   for (const step of steps) {
     const mode = spec.mode === undefined ? ['--non-interactive'] : ['--mode', spec.mode];
     const args = ['agent', ...(session ? [] : ['--workspace', ws, ...(values.effort === undefined ? [] : ['--effort', values.effort])]), ...mode, '--max-turns', String(step.maxTurns ?? spec.maxTurns ?? 40), '--max-cost', String((spec.maxCost ?? 0.2) * Number(values['cost-scale'])), ...(session ? ['--session', session] : []), step.prompt];
-    const result = gcode(ws, args, { ...homeEnv, ...(spec.env ?? {}), GCODE_WIRE_LOG: path.join(SCRATCH, "wire", `${spec.id}-r${runNo}.jsonl`) }, (spec.timeoutMin ?? 20) * 60_000);
+    const result = gcode(ws, args, { ...homeEnv, ...(values.model === undefined ? {} : { GCODE_MODEL: values.model }), ...(spec.env ?? {}), GCODE_WIRE_LOG: path.join(SCRATCH, "wire", `${spec.id}-r${runNo}.jsonl`) }, (spec.timeoutMin ?? 20) * 60_000);
     appendFileSync(outFile, `$ gcode ${args.slice(0, -1).join(' ')} <prompt>\n${result.stdout}\n--- stderr ---\n${result.stderr}\n--- exit ${result.status} signal ${result.signal}\n\n`);
     session ??= /session: ([0-9a-f-]{36})/.exec(result.stdout)?.[1];
     if (session === undefined) break;
