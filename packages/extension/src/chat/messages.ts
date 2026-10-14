@@ -102,7 +102,7 @@ export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
 export type Usage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };
 
 /** What the assistant did in a turn, in the order it happened. */
-export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock | SteerBlock | CompactBlock;
+export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock | AlertBlock | SteerBlock | CompactBlock;
 
 export type TextBlock = { readonly kind: 'text'; readonly id: string; readonly text: string };
 
@@ -248,6 +248,9 @@ export type ErrorFix = { readonly label: string } & (
 /** `error` is the engine's kind of a turn's error, such as `max-turns`; undefined for one the panel raised itself. */
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string; readonly error?: TurnErrorKind | undefined; readonly fixes?: readonly ErrorFix[] | undefined };
 
+/** Something the user must fix that the engine told the turn once, such as a classifier that cannot judge anything; it stays, unlike a notice. */
+export type AlertBlock = { readonly kind: 'alert'; readonly id: string; readonly text: string };
+
 /** A message that joined the running turn where it landed: after the tool steps before it, before the model's next answer. */
 export type SteerBlock = { readonly kind: 'steer'; readonly id: string; readonly seq: number; readonly shown: SteerShown };
 
@@ -277,6 +280,7 @@ export type Action =
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
+  | { readonly type: 'alert'; readonly text: string }
   | { readonly type: 'progress'; readonly progress: CallProgress }
   /** The turn's model call waits, or its wait moved on; null once the call goes out. */
   | { readonly type: 'waiting'; readonly at: number; readonly waiting: Waiting | null }

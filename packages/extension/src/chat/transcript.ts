@@ -126,6 +126,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       return { ...turn, blocks: [...turn.blocks, { kind: 'text', id: nextId(turn), text }] };
     }),
   notice: (transcript, { text }) => onLast(transcript, (turn) => (turn.status !== 'streaming' || turn.notice === text ? turn : { ...turn, notice: text })),
+  alert: (transcript, { text }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'alert', id: nextId(turn), text }] })),
   // A new try going out, or bytes of one coming in, makes a retry's notice old news.
   progress: (transcript, { progress }) => onLast(transcript, (turn) => (turn.status !== 'streaming' ? turn : { ...turn, notice: undefined, progress })),
   waiting: (transcript, { at, waiting }) =>

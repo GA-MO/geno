@@ -12,6 +12,7 @@ import {
   DEFERRED_TOOLS_NOTE,
   toolRoster,
   webToolDefinitions,
+  ALERT_META,
   APPROVAL_META,
   ATTACHMENT_META,
   PROGRESS_META,
@@ -540,6 +541,28 @@ describe('gcode serve', () => {
       expect(results.get(call.id)).toContain(String(i + 1));
       expect(results.get(call.id)).not.toContain('denied');
     }
+  });
+
+  it('tells the user once, in the chat and on stderr, that Auto’s classifier cannot judge, and asks about each command it would have judged', async () => {
+    const gray = (n: number) => use('bash', { command: `node -e "console.log(${n})"` });
+    const calls = [gray(1), gray(2), gray(3)];
+    const { editor, transport, connect, stderr } = await setup(
+      [...calls.map((call) => toolCall('Building.', [call], usage)), answer('Done.', usage)],
+      { GCODE_CLASSIFIER_PROVIDER: 'anthropic' },
+    );
+    editor.answerPermission = { outcome: 'selected', optionId: 'allow' };
+
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Build it.' }] });
+    });
+
+    const notice = "Auto mode's classifier is not working (ANTHROPIC_API_KEY is not set; put your anthropic API key in it), so commands it would judge ask you instead.";
+    const alerts = editor.updates.filter((u) => u.sessionUpdate === 'notice' && u._meta?.[ALERT_META] === true);
+    expect(alerts).toEqual([expect.objectContaining({ severity: 'warning', title: notice })]);
+    expect(stderr.filter((line) => line === notice)).toHaveLength(1);
+    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual(calls.map((call) => call.id));
+    expect(transport.requests.filter((r) => r.url.includes('anthropic.com'))).toEqual([]);
   });
 
   it('keeps a mode switched during a turn when the engine stops before the turn ends', async () => {

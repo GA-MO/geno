@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
+  ALERT_META,
   afterLines,
   APPROVAL_META,
   BACKGROUND_META,
@@ -159,6 +160,7 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
   user_message_chunk: (update) => steerActionOf(update),
   agent_message_chunk: (update) => agentChunkAction(update),
   notice: ({ title, _meta }, at) => {
+    if (_meta != null && ALERT_META in _meta) return { type: 'alert', text: title };
     if (_meta != null && PROGRESS_META in _meta) {
       const progress = progressSchema.safeParse(_meta[PROGRESS_META]);
       return progress.success ? { type: 'progress', progress: progress.data } : undefined;
