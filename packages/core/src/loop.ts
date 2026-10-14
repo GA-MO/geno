@@ -16,6 +16,8 @@ export type LoopStep =
   | { readonly kind: 'answer-tools'; readonly answers: readonly ToolAnswer[] }
   /** A child ended its turn without calling report, or a model ended one with nothing to show: log the nudge, then call the model again. */
   | { readonly kind: 'nudge'; readonly empty?: true | undefined }
+  /** The model ended its turn with its todo list unfinished: log the reminder, then call the model again. */
+  | { readonly kind: 'remind-todo'; readonly todo: TodoReminder }
   | { readonly kind: 'done'; readonly reason: DoneReason };
 
 /** What a call the user turned down tells the model, as Claude Code's rejection does. */
@@ -54,6 +56,8 @@ export type Run = {
   readonly maxCostUsd: number;
   /** A subagent's run: a report call that went through ends it, and an end without one is nudged once. */
   readonly handback?: true | undefined;
+  /** The model can call the todo tool, so an end with the list unfinished is shown the list once. */
+  readonly todo?: true | undefined;
 };
 
 const CALL: LoopStep = { kind: 'call-model' };
@@ -212,6 +216,7 @@ export function lastCallDue(events: readonly TurnEvent[], run: Run): boolean {
 export const toldLastCall = (events: readonly TurnEvent[], run: Run): boolean => thisRun(events, run).some((e) => e.kind === 'notice' && e.last === true);
 
 const isTodoReminder = (event: TurnEvent): boolean => event.kind === 'notice' && event.todo !== undefined;
+const isEndingReminder = (event: TurnEvent): boolean => event.kind === 'notice' && event.todo?.why === 'ending';
 const isTypedPrompt = (event: TurnEvent | undefined): boolean => event?.kind === 'user' && event.from === undefined && event.steer !== true;
 
 /**
@@ -256,6 +261,18 @@ const beforeLast = (events: readonly TurnEvent[]): TurnEvent | undefined => even
 const nudgeDue = (events: readonly TurnEvent[], run: Run): boolean =>
   !thisRun(events, run).some((e) => e.kind === 'report-nudge') && limitReached(events, run) === undefined;
 
+/**
+ * The model ended its turn on its own in this run with work on its todo list under way and unfinished: the user's
+ * pinned list would show work as pending that may be done. A list all pending is a plan nobody started, as Plan mode
+ * writes it, so it stays. Once a run, and only while the next call is not the last, which goes out with the tools off.
+ */
+function endingReminder(events: readonly TurnEvent[], run: Run): TodoReminder | undefined {
+  if (run.todo !== true || limitReached(events, run) !== undefined || lastCallDue(events, run) || thisRun(events, run).some(isEndingReminder)) return undefined;
+  const list = todoOf(events);
+  const underway = list.some((item) => item.status !== 'pending') && list.some((item) => item.status !== 'done');
+  return underway ? { why: 'ending', list } : undefined;
+}
+
 export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   const last = lastLiveEvent(events, run);
   if (last.kind === 'error') return after(last);
@@ -277,6 +294,11 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
     const prior = beforeLast(events);
     if (prior?.kind === 'report-nudge' && prior.empty === true) return done('error');
     return limitReached(events, run) ?? { kind: 'nudge', empty: true };
+  }
+  if (last.kind === 'assistant' && last.seq >= run.firstSeq && step.kind === 'done' && step.reason === 'end_turn') {
+    if (newestTurn(events)!.after.some(isEndingReminder)) return CALL;
+    const todo = endingReminder(events, run);
+    if (todo !== undefined) return { kind: 'remind-todo', todo };
   }
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);

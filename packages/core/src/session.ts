@@ -461,7 +461,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
         place.push(...texts);
       }
     }
-    if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
+    // A todo reminder at the model's end of turn is what it answers next, as a Stop hook's block is.
+    if (event.kind === 'notice') (event.todo?.why === 'ending' ? prompts : notices).push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') {
       // A new message after a Stop, not a resume of the stopped one.
       if (stopped && event.from === undefined && event.steer !== true) prompts.push({ type: 'text', text: STOPPED_TURN_NOTE });

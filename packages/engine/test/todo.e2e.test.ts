@@ -82,7 +82,9 @@ describe('gcode serve: the todo list', () => {
       toolCall('Reading.', [todo('t2', reading), read('r1')], usage),
       toolCall('Changing.', [todo('t3', changing)], usage),
       answer('Half way.', usage),
+      answer('Half way; a.ts is next, once you say go.', usage),
       answer('Forked.', usage),
+      answer('Forked; the change is still to make.', usage),
       answer('Again.', usage),
     ]);
     const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: model.fetch };
