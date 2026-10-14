@@ -10,7 +10,7 @@ import type { LimitsSpec } from '../src/drive.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, handBack, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, handBack, offeredTools, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -369,6 +369,25 @@ describe('gcode serve: subagents', () => {
     const [child] = childrenOf(log.events);
     expect(child).toMatchObject({ start: 'fork', model: log.session.model });
     expect((await childLog(child!.child)).events.map((e) => e.kind)).toEqual(['session-start', 'user', 'assistant', 'tool-result', 'user', 'assistant']);
+  });
+
+  it('runs the web tools a fork is offered with its parent\'s, under the same web rules', async () => {
+    const { transport, log, childLog } = await runPrompt(
+      {
+        // The fork's second request starts with the parent's prompt and ends with its tool result, so it reaches the
+        // parent's route, between the parent's two calls.
+        '[parent]': {
+          replies: [toolCall('Forking.', [{ id: 'tu_k', name: 'agent', input: { agent: 'explore', task: '[fork-web] read the page', fork: true } }], usage), answer('Refused.', usage), answer('Done.', usage)],
+        },
+        '[fork-web]': { replies: [toolCall('Reading.', [{ id: 'tu_f', name: 'web_fetch', input: { url: 'file:///etc/hosts', question: 'q' } }], usage)], last: true },
+      },
+      '[parent] look at a page',
+    );
+    const [childCall] = transport.requests('[fork-web]');
+    expect(offeredTools(childCall!.body)).toContain('web_fetch');
+    const [child] = childrenOf(log.events);
+    const fetched = resultsOf((await childLog(child!.child)).events).find((e) => e.toolUseId === 'tu_f');
+    expect(fetched, "web_fetch's own refusal, not an unknown tool").toMatchObject({ status: 'denied', output: expect.stringContaining('web_fetch reads only http and https URLs, not file:') });
   });
 });
 

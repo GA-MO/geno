@@ -219,7 +219,8 @@ export const baseUrlOf = (spec: ProviderSpec, values: ProviderValues): string | 
 
 /**
  * Web search providers, for web_search. One row each; Brave Search answers a plain GET with a JSON body. The key is
- * a secret like a model provider's, and with no key web_search is not offered.
+ * a secret like a model provider's. With no key, web_search runs on the chat provider's own search where it has one
+ * (SERVER_SEARCH), and is not offered otherwise.
  */
 export const SEARCH_PROVIDERS = ['brave'] as const;
 export type SearchProviderName = (typeof SEARCH_PROVIDERS)[number];
@@ -239,13 +240,32 @@ export const SEARCH_PROVIDER_SPECS: { readonly [P in SearchProviderName]: Search
   brave: { id: 'brave', label: 'Brave Search', keyEnv: 'BRAVE_SEARCH_API_KEY', endpoint: 'https://api.search.brave.com/res/v1/web/search', signUp: 'https://brave.com/search/api/' },
 };
 
-/** The search provider web_search uses: the first with a key in `env`, or undefined, which leaves the tool out. */
-export type SearchConfig = { readonly provider: SearchProviderName; readonly key: string };
+/**
+ * The model providers whose API runs a web search for the model, and the server tool's type there. The basic version:
+ * web_search's helper calls it once, directly, so the dynamic filtering of later versions would only add a code
+ * execution step. Vertex takes only this version, and Bedrock has no web search.
+ */
+export const SERVER_SEARCH: Partial<Record<ProviderName, ServerSearchTool>> = { anthropic: 'web_search_20250305', vertex: 'web_search_20250305' };
+export type ServerSearchTool = 'web_search_20250305';
 
-export function searchConfigOf(env: Readonly<Record<string, string | undefined>>): SearchConfig | undefined {
+/**
+ * How web_search searches: a search provider's API with the user's key, which wins, or else the chat provider's own
+ * server-side search, which a helper model call on that provider runs. Undefined leaves the tool out.
+ */
+export type SearchConfig =
+  | { readonly kind: 'key'; readonly provider: SearchProviderName; readonly key: string }
+  | { readonly kind: 'server'; readonly provider: ProviderName; readonly tool: ServerSearchTool };
+
+export function searchConfigOf(env: Readonly<Record<string, string | undefined>>, chat: ProviderName): SearchConfig | undefined {
   const provider = SEARCH_PROVIDERS.find((id) => env[SEARCH_PROVIDER_SPECS[id].keyEnv]);
-  return provider === undefined ? undefined : { provider, key: env[SEARCH_PROVIDER_SPECS[provider].keyEnv]! };
+  if (provider !== undefined) return { kind: 'key', provider, key: env[SEARCH_PROVIDER_SPECS[provider].keyEnv]! };
+  const tool = SERVER_SEARCH[chat];
+  return tool === undefined ? undefined : { kind: 'server', provider: chat, tool };
 }
+
+/** The search's name for the user, as an approval question shows it. */
+export const searchLabelOf = (search: SearchConfig): string =>
+  search.kind === 'key' ? SEARCH_PROVIDER_SPECS[search.provider].label : `${PROVIDER_SPECS[search.provider].label} web search`;
 
 /** Every variable that holds a provider credential, so nothing hands one to a child process or an MCP server. */
 export const SECRET_ENV_NAMES: readonly string[] = [
