@@ -253,6 +253,7 @@ check ของ case ผ่านทั้งสามข้อ: คำสั่
 - **คำปฏิเสธจากผู้ใช้ทำให้ turn จบ** ใน `loopStep` บรรทัดก่อนเรียก model มีคอมเมนต์ว่า "A no from the user ends the turn;
   the model next hears from the user, as in Claude Code" model จะเห็นผลนี้ก็ต่อเมื่อคุณพิมพ์ข้อความถัดไป
   ส่วนการปฏิเสธจากกฎหรือ classifier ไม่จบ turn: model ได้ข้อความ "Do not retry it; find another way" แล้วทำต่อ
+  (คำปฏิเสธของ classifier ในโหมด Auto ใช้ถ้อยคำแบบ dontAsk ของ Claude Code แทน)
   ดูความต่างนี้ใน `refusalOf`
 - **คำตอบไม่มีทางเลือกที่สาม** ใน CLI ตัวถามคือ `terminalConfirm` ซึ่งรับแค่ y หรือ yes นอกนั้นคือไม่
   ในแผงแชตของ VS Code คำถามเดียวกันเป็นการ์ดที่มีปุ่ม Allow, Deny และ "No, and tell the agent…"
