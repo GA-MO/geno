@@ -31,7 +31,7 @@ To stop the server, press Ctrl+C.
 - **Reduced motion** makes the panel's stylesheet and its `matchMedia` checks answer as if the system asked for reduced motion.
 - **Tokens** opens the token panel.
 
-A red badge on a frame counts its problems: errors the page logged, CSP refusals, and elements that run past the panel edge. Hover the badge to read them.
+A red badge on a frame counts its problems: errors the page logged, CSP refusals, elements that run past the panel edge, and items of the composer's bottom row drawn over each other. Hover the badge to read them.
 
 ![The light grid](ui-gallery/grid-light.png)
 
@@ -66,7 +66,7 @@ Every state is one entry in `FIXTURES` in `packages/extension/test/gallery/fixtu
 
 `play` gets a `Stage`. `stage.host` is the `FakeHost` from `test/webview/host.ts`. Call `host.act` with the actions the extension dispatches, and `host.post` with any other message the extension sends, such as `show-settings` or `mcp`. The helpers in `test/webview/turns.ts` build the common actions. To answer a message the panel sends, register a handler with `host.on`, as the `history` state does for `list-sessions`. To act as the user, use `stage.click`, `stage.fill`, and `stage.reveal`. To wait for the panel, use `stage.shows`.
 
-The state then appears in the gallery and in `packages/extension/test/webview/gallery.webview.test.ts`. That test opens each state at 300 pixels in each of the four themes, and at 240 pixels in Dark Modern. It fails when the page logs an error or when anything runs past the panel edge. To run it alone:
+The state then appears in the gallery and in `packages/extension/test/webview/gallery.webview.test.ts`. That test opens each state at 300 pixels in each of the four themes, and at 240 pixels in Dark Modern, which it then widens to 420, 600 and 870 pixels. It fails when the page logs an error, when anything runs past the panel edge, or when two items of the composer's bottom row overlap. To run it alone:
 
 ```sh
 pnpm vitest run --project webview packages/extension/test/webview/gallery.webview.test.ts
