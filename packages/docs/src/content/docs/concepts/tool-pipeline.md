@@ -16,10 +16,12 @@ flowchart TD
   R -- "ไม่ติดธง" --> RUN["tool ทำงาน<br/>(shell ใน sandbox, ไฟล์ผ่าน buffer ของ editor)"]
   R -- "ติดธง" --> ST{"settle()"}
   ST -- "deny / non-interactive" --> PRH1["PermissionRequest hook (ถ้าตอบได้)"] --> DEN["ToolDenied (model ทำต่อ)"]
-  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, ล้มเหลว = ask"]
+  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที<br/>timeout / ไม่มี verdict ลองอีกครั้ง"]
   CL -- allow --> RUN
-  CL -- deny --> DEN
-  CL -- ask --> PRH2
+  CL -- "deny / ask / ประเมินไม่ได้" --> FB{"block ติดกัน 3 หรือรวม 20 แล้ว?<br/>autoFallsBack"}
+  FB -- "ยัง" --> DEN
+  FB -- "ถึงแล้ว" --> PRH2
+  CL -- "classifier ใช้ไม่ได้" --> PRH2
   ST -- "ask" --> PRH2["PermissionRequest hook"] --> CARD["การ์ดขออนุญาต<br/>session/request_permission"]
   CARD -- "Allow / session / workspace" --> RUN
   CARD -- "No + ข้อความ" --> DEN
@@ -40,8 +42,18 @@ flowchart TD
 | --- | --- | --- |
 | Plan | ปฏิเสธ | ปฏิเสธ (แสดงเป็นล้มเหลว) |
 | Ask (ค่าเริ่มต้น) | แสดงการ์ดถามผู้ใช้ | ไม่ถาม ผู้ใช้ตรวจทีหลัง |
-| Auto | ให้ classifier ตัดสิน ถ้าไม่แน่ใจก็ถามคุณ | ไม่ถาม |
+| Auto | รันใน sandbox โดยไม่ถาม classifier ถ้าไม่มีกฎอื่นติดธง ที่กฎอื่นติดธงให้ classifier ตัดสิน ถ้าไม่ผ่านก็ส่งเหตุผลกลับไปหา model | ไม่ถาม |
 | non-interactive | รันใน sandbox เพราะไม่มีใครให้ถาม | ไม่ถาม |
+
+ใน Auto คำสั่งที่มีแค่กฎ `unlisted` ติดธง เช่น `make build` หรือ `npm install` รันใน sandbox ตามกฎเลย
+เช่นเดียวกับ `git push` ธรรมดาไปยัง branch ของ repo เอง ส่วนกฎอื่น เช่น `curl`, `git reset --hard`, `rm -rf` ใน workspace,
+path นอก workspace, การค้น credential ด้วย `grep -rn password .` (`secret-search`), push ที่ force หรือไป branch deploy (`git-push-risky`)
+และ MCP tool ยังให้ classifier ตัดสิน ส่วนไหนของ pipe หรือ list ติดธง classifier ก็ตัดสินทั้งบรรทัด
+classifier ตอบ `deny` หรือ `ask` หรือประเมินไม่ได้ (timeout หรือไม่มี verdict ทั้งสองครั้ง หรือ request ล้มเหลว)
+call นั้นถูกปฏิเสธโดยไม่มีการ์ด เหตุผลกลับไปหา model ด้วยถ้อยคำแบบ dontAsk ของ Claude Code และ PermissionRequest hook ไม่ถูกถาม
+เมื่อ block ติดกันครบ 3 ครั้งหรือรวมครบ 20 ครั้งใน session (`autoBlocksOf` นับจาก log) block ถัดไปจึงขึ้นการ์ดให้คุณแทน
+call ที่ได้รัน call ไหนก็ตัดแถว block ที่ติดกัน ส่วน classifier ที่ใช้ไม่ได้เลย (ปิดอยู่ ไม่มี key หรือ provider ปฏิเสธ key หรือ model)
+ขึ้นการ์ดทุก call ไม่นับเป็น block และบอกคุณครั้งเดียว
 
 คำสั่งอันตราย เช่น `rm -rf` ของ workspace หรือ `.git` ยังถามเสมอแม้ใน Auto และกฎ allow ครอบคลุมไม่ได้
 การอนุญาตไม่ได้ยกเว้น sandbox: shell ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต

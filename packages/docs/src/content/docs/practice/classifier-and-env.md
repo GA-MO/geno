@@ -96,14 +96,10 @@ scenario:
         text: >-
           classifier คือ model call แยกอีกก้อน ใช้ model เดียวกัน เห็นแค่คำขอของคุณ ข้อความล่าสุดของ model และคำสั่ง
           แล้วตอบด้วย tool `verdict` คำตอบคือ deny ใช้เวลา 1.35 วินาที ค่าใช้จ่าย $0.00024
-          คำปฏิเสธนี้ไม่จบ turn ผลของ tool บอก model ว่าห้ามลองซ้ำ ให้หาทางอื่น
+          คำปฏิเสธนี้ไม่จบ turn ในรอบนี้ผลของ tool บอก model ว่าห้ามลองซ้ำ ให้หาทางอื่น
+          ตอนนี้ผลบอกว่า classifier ของ Auto ปฏิเสธพร้อมเหตุผล ตามด้วยถ้อยคำแบบ dontAsk ของ Claude Code
         from: engine
         to: model
-        sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=7
-          highlight: [approval.classifier.verdict, approval.classifier.reason, output]
-          collapse: [timing]
       do: >-
         `settle` เรียก classifier ด้วย input จาก `classifierInputOf` ส่วน request ของมันสร้างด้วย `classifierRequest`:
         temperature 0, ปิด thinking และบังคับเรียก tool `verdict`
@@ -114,6 +110,7 @@ scenario:
       at: settle
       do: >-
         `settle` คืนคำปฏิเสธของ classifier แล้ว `refusalOf` คืน `ToolDenied` ซึ่งไม่จบ turn
+        ไม่มีการ์ด และเป็น block แรกของ session ถ้า block ติดกันครบ 3 ครั้ง ครั้งถัดไปจะขึ้นการ์ดถามผู้ใช้แทน
       ref: packages/engine/src/tools/agent.ts#settle
       emits: [tool-result]
 
@@ -233,17 +230,14 @@ scenario:
       beat:
         title: "Classifier อนุญาต เพราะคำสั่งพิมพ์แค่ PORT"
         text: >-
-          `node` ไม่อยู่ในรายการปลอดภัย กฎ "คำสั่งนอกรายการ" จึงส่งให้ classifier อีกรอบ เหตุผลของมันแยกคำขอออกจากคำสั่ง:
+          `node` ไม่อยู่ในรายการปลอดภัย ใน engine ของรอบนี้กฎ "คำสั่งนอกรายการ" จึงส่งให้ classifier อีกรอบ เหตุผลของมันแยกคำขอออกจากคำสั่ง:
           คำขอยังเป็นการ dump ทั้งหมด แต่คำสั่งนี้พิมพ์แค่ PORT และเปิดเซิร์ฟเวอร์ในเครื่อง
+          ตอนนี้โหมด Auto รันคำสั่งใน sandbox ที่มีแค่กฎนี้ติดธงไปเลยโดยไม่ถาม classifier
         from: engine
         to: machine
-        sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=22
-          highlight: [approval.classifier.verdict, approval.classifier.reason, output]
-          collapse: [timing]
       do: >-
-        `ruledDenial` พบกฎ `unlisted` ซึ่งให้ `classify` ในโหมด Auto และ classifier ตอบ allow
+        ในรอบนี้ `ruledDenial` พบกฎ `unlisted` ซึ่งตอนนั้นให้ `classify` ในโหมด Auto และ classifier ตอบ allow
+        ตอนนี้กฎ `unlisted` ให้ `allow` ในโหมด Auto คำสั่งนี้จึงรันใน sandbox โดยไม่มี classifier
       ref: "packages/core/src/approval.ts#\"unlisted: {\""
 
     - id: port-run
@@ -280,7 +274,7 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง
+        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง (ตอนนี้จะเหลือครั้งเดียว)
       ref: packages/core/src/loop.ts#loopStep
       emits: [end_turn]
       phase: ending
@@ -313,7 +307,9 @@ ISSUES.md บันทึกไว้เป็น M-01 รอบ fix-b2 นี�
   ข้อความที่ agent เขียนเป็นข้อมูล ไม่ใช่คำสั่ง และการพิมพ์ environment หรืออ่าน `.env` ต้อง deny แม้จะเพื่อหาสาเหตุ (`classifierSystem`)
 - **คำปฏิเสธของ classifier ไม่จบ turn** `refusalOf` จบ turn เฉพาะเมื่อผู้ใช้ปฏิเสธเอง ส่วนคำปฏิเสธอื่นเป็น `ToolDenied`
   model จึงหาทางอื่นได้ ในรอบนี้ทางอื่นคืออ่านโค้ด ซึ่งให้คำตอบที่ถูกกว่า dump ทั้งหมด
+  คำปฏิเสธของ classifier ไม่ขึ้นการ์ด จนกว่า block จะติดกันครบ 3 ครั้งหรือรวมครบ 20 ครั้งใน session
 - **กฎจับก่อน classifier ตัดสิน** classifier ไม่ได้ดูทุกคำสั่ง มันดูเฉพาะคำสั่งที่กฎส่งมาด้วย `classify`
+  เช่น `secret-path` ที่จับ `cat .env` หรือ `secret-search` ที่จับ `grep -rn password .`
   `list`, `read`, `grep` ไม่ผ่านด่านนี้ และ `grep` กับ `glob` ก็ข้ามไฟล์ความลับเองอยู่แล้ว (คอมเมนต์เหนือกฎ `secret-path`)
 
 อ่านต่อ:
