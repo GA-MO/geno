@@ -114,11 +114,10 @@ export async function run(): Promise<void> {
   }
   check(/^Delegat/.test((await textOf('.step-agent .step-verb'))!), 'the agent step says it delegated', await textOf('.step-agent .step-verb'));
 
-  // The row's one pill counts the running children, and the label names the latest step.
+  // The row's one pill counts the running children; the transcript shows their steps, so no label does.
   await waitFor('the pill', async () => (await pillText()) === '2 running', 30_000);
   check((await count('.activity-pill')) === 1, 'one pill');
-  await waitFor('a label for the latest step', async () => /^explore: /.test((await textOf('.activity-label')) ?? ''), 30_000);
-  check(!(await shown('.activity-label')), 'at 420px the label gives its room to the pill');
+  check(!(await shown('.activity-label')) && ((await textOf('.activity-label')) ?? '') === '', 'no label repeats a step the transcript shows', await textOf('.activity-label'));
   const wide = await rowFits();
   check(wide.fits, 'the running row fits at 420px with the pill', wide);
   await click('.activity-pill');
@@ -134,7 +133,7 @@ export async function run(): Promise<void> {
   const fits = await rowFits();
   check(fits.fits, `the bottom row fits at ${narrow}px with the pill`, fits);
   check(await shown('.activity-pill'), 'the pill still shows when narrow');
-  check(!(await shown('.activity-label')), 'the label goes before the pill does');
+  check(!(await shown('.activity-label')), 'still no label when narrow');
   await screenshots('narrow-300');
   await panelWidth(420);
 

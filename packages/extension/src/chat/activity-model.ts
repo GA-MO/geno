@@ -3,15 +3,12 @@ import { isLive, isWaking, placeTasks, type NeedsYouReason, type PlacedTask } fr
 import { waitsForText } from '@g-code/core/wake';
 import { clockOf } from './format.js';
 import type { SeenMarkers } from './lanes-model.js';
-import type { ToolBlock, Transcript } from './messages.js';
+import type { Transcript } from './messages.js';
 import { runningChildren } from './transcript.js';
-import { TODO_TOOL } from '@g-code/core/todo';
-import { AGENT_CALL, todoListOf } from './rail.js';
-import { verbOf } from './verbs.js';
 
 /**
  * The composer row's one pill and one label, as Claude Code's running line has them: how much runs beside this chat
- * and how much waits on the user, then the one thing most worth a look. The webview bundles this file, so it imports
+ * and how much waits on the user, then a label only for what the transcript above does not show: the top task of Needs you, or what this chat waits on to be woken. The webview bundles this file, so it imports
  * only types and other pure webview modules.
  */
 
@@ -27,7 +24,7 @@ export type ActivityView = {
   readonly needsYou: number;
   /** The pill's words, such as "3 running · 1 needs you". */
   readonly text: string;
-  /** Undefined when nothing stands out. `tone` is `needs-you` for the top task of Needs you. */
+  /** Undefined when nothing stands out. `tone` is `needs-you` for the top task of Needs you, `working` for what this chat waits on to be woken. */
   readonly label: { readonly text: string; readonly tone: 'needs-you' | 'working' } | undefined;
 };
 
@@ -44,42 +41,6 @@ const NEEDS_YOU_LABELS: { readonly [R in NeedsYouReason]: (where: string) => str
   limited: (where) => `Held at a rate limit in ${where}`,
   paused: (where) => `Wake-ups paused in ${where}`,
 };
-
-const runningTool = (blocks: Transcript['turns'][number]['blocks']): ToolBlock | undefined =>
-  blocks.findLast((block): block is ToolBlock => block.kind === 'tool' && block.status === 'running');
-
-const stepText = (tool: ToolBlock): string => {
-  const verb = verbOf(tool.name, true);
-  return tool.target === '' ? verb : `${verb} ${tool.target}`;
-};
-
-/**
- * The step this chat's turn or one of its subagents started last, as "Reading a.ts" or "explore: reading a.ts". A
- * subagent between calls reads as thinking; the turn's own agent call is its children's steps.
- */
-function latestStep(transcript: Transcript): string | undefined {
-  const turn = transcript.turns.at(-1);
-  if (turn === undefined || turn.status !== 'streaming') return undefined;
-  const own = runningTool(turn.blocks);
-  const steps = [
-    ...(own === undefined || own.name === AGENT_CALL || own.name === TODO_TOOL ? [] : [{ at: own.startedAt, text: stepText(own) }]),
-    ...runningChildren(transcript).map((child) => {
-      const tool = runningTool(child.turn.blocks);
-      const step = tool === undefined ? 'thinking' : stepText(tool);
-      return { at: tool?.startedAt ?? child.startedAt, text: `${child.role}: ${step.charAt(0).toLowerCase()}${step.slice(1)}` };
-    }),
-  ];
-  return steps.toSorted((a, b) => b.at - a.at)[0]?.text;
-}
-
-/** The todo item this chat's running turn works on, the user's own words for where it is; an earlier turn's list is not. */
-function inProgress(transcript: Transcript): string | undefined {
-  const turn = transcript.turns.at(-1);
-  if (turn?.status !== 'streaming') return undefined;
-  return todoListOf(turn)?.find((item) => item.status === 'in_progress')?.text;
-}
-
-const workingLabel = (text: string | undefined): ActivityView['label'] => (text === undefined ? undefined : { text, tone: 'working' });
 
 /** A session whose turn ended and that waits for its background work to wake it, which counts as running. */
 const waitsToWake = (task: TaskRecord): boolean => !isLive(task.status) && isWaking(task.wake);
@@ -101,6 +62,8 @@ export function activityOf(transcript: Transcript, { tasks, seen, shown }: Backg
   const label: ActivityView['label'] =
     top?.attention.kind === 'needs-you'
       ? { text: NEEDS_YOU_LABELS[top.attention.reason](whereOf(top.task, shown)), tone: 'needs-you' }
-      : workingLabel(inProgress(transcript) ?? latestStep(transcript) ?? (here !== undefined ? waitsForText(here.task.wake!.waitsFor, clockOf) : others[0] === undefined ? undefined : `${whereOf(others[0].task, shown)}: running`));
+      : here !== undefined
+        ? { text: waitsForText(here.task.wake!.waitsFor, clockOf), tone: 'working' }
+        : undefined;
   return { running, needsYou: asking.length, text, label };
 }

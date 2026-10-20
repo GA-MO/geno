@@ -112,24 +112,24 @@ describe('the row\'s pill and label', () => {
   it('counts this chat\'s running subagents, and leaves the pill out while only the chat itself runs', () => {
     expect(view(run(parent)).activity).toBeUndefined();
     const one = run([...parent, startChild('c_a', 'tu_a')]);
-    expect(view(one).activity).toMatchObject({ running: 1, needsYou: 0, text: '1 running', label: { text: 'explore: thinking', tone: 'working' } });
+    expect(view(one).activity).toMatchObject({ running: 1, needsYou: 0, text: '1 running', label: undefined });
     const two = run([startChild('c_b', 'tu_b')], one);
     expect(view(two).activity?.text).toBe('2 running');
     const none = run(['c_a', 'c_b'].map((id): Action => ({ type: 'child-end', id, at: T0 + 3000, end: { kind: 'done' }, turns: 1, costUsd: 0 })), two);
     expect(view(none).activity).toBeUndefined();
   });
 
-  it('labels the latest step of the chat or its subagents', () => {
+  it('leaves the latest step of the chat or its subagents to the transcript', () => {
     const reading = run([...parent, startChild('c_a', 'tu_a'), { type: 'child', id: 'c_a', action: { type: 'tool', id: 'r1', at: T0 + 30, name: 'read', target: 'a.ts', toolKind: 'read', status: 'running' } }]);
-    expect(view(reading).activity?.label).toEqual({ text: 'explore: reading a.ts', tone: 'working' });
+    expect(view(reading).activity).toMatchObject({ text: '1 running', label: undefined });
     const own = run([{ type: 'tool', id: 'e1', at: T0 + 40, name: 'edit', target: 'b.ts', toolKind: 'edit', status: 'running' }], reading);
-    expect(view(own).activity?.label?.text).toBe('Editing b.ts');
+    expect(view(own).activity?.label).toBeUndefined();
   });
 
-  it('adds other sessions and lanes, and shows them while this chat is idle', () => {
+  it('adds other sessions and lanes to the pill while this chat is idle, with no label', () => {
     const idle = emptyTranscript('qwen3.8-flash');
     const background: Background = { tasks: [task({ sessionId: 'lane', lane: 'fix-header' }), task({ sessionId: 'done', status: 'done', endedAt: T0 + 1 })], seen: { done: T0 + 2 }, shown: 'here' };
-    expect(view(idle, background).activity).toEqual({ running: 1, needsYou: 0, text: '1 running', label: { text: 'fix-header: running', tone: 'working' } });
+    expect(view(idle, background).activity).toEqual({ running: 1, needsYou: 0, text: '1 running', label: undefined });
     expect(view(idle, { ...background, shown: 'lane' }).activity, 'the shown chat is not beside itself').toBeUndefined();
   });
 
