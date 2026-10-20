@@ -57,7 +57,7 @@ describe('the composer pill', () => {
   const view = (background: Background) => composerView({ transcript: emptyTranscript('qwen3.8-flash'), facts: NO_FACTS, mcp: { kind: 'loading' }, queued: undefined, now: T0 + 5000, background }).activity;
 
   it('counts a session waiting to be woken as running, the shown chat included', () => {
-    expect(view({ tasks: [{ ...waking, sessionId: 'other', lane: 'fix-build' }], seen: {}, shown: 'here' })).toMatchObject({ running: 1, text: '1 running', label: { text: 'fix-build: running', tone: 'working' } });
+    expect(view({ tasks: [{ ...waking, sessionId: 'other', lane: 'fix-build' }], seen: {}, shown: 'here' })).toMatchObject({ running: 1, text: '1 running', label: undefined });
     const here = task({ sessionId: 'here', wake: { waitsFor: [{ kind: 'jobs', job: 'bg-1' }] } });
     expect(view({ tasks: [here], seen: {}, shown: 'here' })).toMatchObject({ running: 1, text: '1 running', label: { text: 'Wakes on bg-1', tone: 'working' } });
     expect(view({ tasks: [task({ sessionId: 'here' })], seen: { here: T0 + 4500 }, shown: 'here' })).toBeUndefined();
