@@ -46,3 +46,25 @@ export function overflowing(doc: Document = document): string[] {
   if (page !== null && page.scrollWidth > page.clientWidth) lines.push(`the page scrolls sideways by ${page.scrollWidth - page.clientWidth}px`);
   return lines;
 }
+
+/**
+ * Every two items of the composer's bottom row drawn over each other, as `tag.class` and by how much. The run status
+ * and the activity pill count as their parts, since a part a squeezed group cannot hold is drawn past it, over its
+ * neighbour. Self-contained for the same reason as `overflowing`.
+ */
+export function overlapping(doc: Document = document): string[] {
+  const ITEMS = '.input-toolbar :is(.toolbar-left, .toolbar-right, .run-status, .run-activity) > :not(.run-status, .run-activity)';
+  const name = (e: Element) => `${e.tagName.toLowerCase()}${typeof e.className === 'string' && e.className.trim() !== '' ? `.${e.className.trim().split(/\s+/).join('.')}` : ''}`;
+  const drawn = [...doc.querySelectorAll(ITEMS)]
+    .map((e) => ({ e, box: e.getBoundingClientRect() }))
+    .filter(({ e, box }) => e.getClientRects().length > 0 && box.width > 0 && box.height > 0 && doc.defaultView!.getComputedStyle(e).visibility !== 'hidden');
+  const lines: string[] = [];
+  for (const [i, a] of drawn.entries()) {
+    for (const b of drawn.slice(i + 1)) {
+      const across = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+      const down = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+      if (across > 0.5 && down > 0.5) lines.push(`${name(a.e)} and ${name(b.e)} overlap by ${Math.round(across)}px`);
+    }
+  }
+  return lines;
+}

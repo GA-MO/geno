@@ -1118,6 +1118,33 @@ export const FIXTURES: readonly Fixture[] = [
     play: async ({ host }) => subagent(host, 'running'),
   },
   {
+    id: 'subagent-long-step',
+    group: 'Subagents and lanes',
+    title: 'A subagent call beside the clock and cost',
+    play: async ({ host }) => {
+      await host.post({
+        type: 'composer',
+        facts: {
+          provider: 'modelstudio',
+          effort: { current: 'high', options: ['low', 'medium', 'high'].map((value) => ({ value, name: value.charAt(0).toUpperCase() + value.slice(1) })) },
+          models: [{ provider: 'modelstudio', providerLabel: 'Alibaba Model Studio', model: MODEL }],
+          backends: [],
+          agentModels: undefined,
+          context: { used: 41_000, window: 262_144 },
+          turnCostUsd: 0.7382,
+          bahtPerUsd: 33,
+        },
+      });
+      await host.act(started('t0', 'Check the report page in the browser', { mode: 'auto', at: Date.now() - 67_000 }), { type: 'tool', id: 'tu_agent', at: Date.now(), name: 'agent', target: 'worker', toolKind: 'other', status: 'running' });
+      await host.act({ type: 'child-start', id: 'c1', toolId: 'tu_agent', role: 'worker', task: 'Read the totals off the report page.', model: MODEL, at: Date.now() - 20_000 });
+      await host.act({
+        type: 'child',
+        id: 'c1',
+        action: { type: 'tool', id: 'c1_e', at: Date.now(), name: 'evaluate_script', target: '{"pageId":3,"function":"async () => {\\n  const rows = [...document.querySelectorAll(\'tr.total\')];\\n  return rows.map((r) => r.textContent);\\n}"}', toolKind: 'other', status: 'running' },
+      });
+    },
+  },
+  {
     id: 'subagent-done',
     group: 'Subagents and lanes',
     title: 'Subagent done',
