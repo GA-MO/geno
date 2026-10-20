@@ -442,10 +442,11 @@ function asksInAsk(rule: ApprovalRuleId): boolean {
 
 /**
  * Whether a PermissionRequest hook may answer `denial`: where a card shows, or where a run nobody can answer refuses
- * only because nobody can. A refusal that holds whoever answers, such as a deny rule's or Plan's, is never asked.
+ * only because nobody can. A refusal that holds whoever answers, such as a deny rule's or Plan's, is never asked, and
+ * neither is a command that would run outside the sandbox, which only the user approves.
  */
 export const hookMayAnswer = (denial: Denial, mode: ApprovalMode): boolean =>
-  denial.verdict !== 'deny' || (mode === 'non-interactive' && asksInAsk(denial.rule));
+  denial.rule !== 'unsandboxed' && (denial.verdict !== 'deny' || (mode === 'non-interactive' && asksInAsk(denial.rule)));
 
 /** What a prompt's UserPromptSubmit hooks decided: block it, with the reason for the user, or send it with their notes. */
 export type PromptDecision = { readonly kind: 'block'; readonly reason: string } | { readonly kind: 'go'; readonly notes: readonly HookNote[] };
@@ -537,12 +538,12 @@ const CLAUDE_SHAPES: Readonly<Record<string, ClaudeShape>> = {
   bash: {
     // Geno's command output is one stream, stdout and stderr as they came, so it all goes in stdout.
     response: (_claude, text) => ({ stdout: text, stderr: '', interrupted: false, isImage: false, noOutputExpected: false }),
-    claude: ({ command, description, timeout_seconds, run_in_background }) => ({
+    claude: ({ command, description, timeout_seconds, run_in_background, dangerouslyDisableSandbox }) => ({
       name: 'Bash',
-      input: defined({ command, description, timeout: numberOf(timeout_seconds) === undefined ? undefined : (timeout_seconds as number) * 1000, run_in_background }),
+      input: defined({ command, description, timeout: numberOf(timeout_seconds) === undefined ? undefined : (timeout_seconds as number) * 1000, run_in_background, dangerouslyDisableSandbox }),
     }),
-    geno: ({ command, description, timeout, run_in_background }) =>
-      defined({ command, description, timeout_seconds: numberOf(timeout) === undefined ? undefined : Math.ceil((timeout as number) / 1000), run_in_background }),
+    geno: ({ command, description, timeout, run_in_background, dangerouslyDisableSandbox }) =>
+      defined({ command, description, timeout_seconds: numberOf(timeout) === undefined ? undefined : Math.ceil((timeout as number) / 1000), run_in_background, dangerouslyDisableSandbox }),
   },
   read: {
     claude: ({ path: file, start_line, end_line, pages, cells }, workspace) => {

@@ -26,6 +26,7 @@ import {
   lastResponseText,
   permissionRequestDecision,
   permissionSuggestions,
+  unsandboxedDenial,
   type Denial,
   type HookEntry,
   type HookOrigin,
@@ -346,6 +347,7 @@ describe("Claude Code's tool calls", () => {
       tool_name: 'Bash',
       tool_input: { command: 'ls', description: 'List', timeout: 5000, run_in_background: true },
     });
+    expect(claudeToolCall('bash', { command: 'git init', dangerouslyDisableSandbox: true }, '/ws')).toEqual({ tool_name: 'Bash', tool_input: { command: 'git init', dangerouslyDisableSandbox: true } });
     expect(claudeToolCall('read', { path: 'src/a.ts', start_line: 3, end_line: 7 }, '/ws')).toEqual({ tool_name: 'Read', tool_input: { file_path: '/ws/src/a.ts', offset: 3, limit: 5 } });
     expect(claudeToolCall('edit', { path: 'src/payload-types.ts', old_str: 'a', new_str: 'b', replace_all: true }, '/ws')).toEqual({
       tool_name: 'Edit',
@@ -362,6 +364,7 @@ describe("Claude Code's tool calls", () => {
 
   it("reads a hook's updatedInput back into Geno's input", () => {
     expect(genoToolInput('bash', { command: 'ls -la', timeout: 2500 })).toEqual({ command: 'ls -la', timeout_seconds: 3 });
+    expect(genoToolInput('bash', { command: 'gh pr list', dangerouslyDisableSandbox: true })).toEqual({ command: 'gh pr list', dangerouslyDisableSandbox: true });
     expect(genoToolInput('read', { file_path: '/ws/a.ts', offset: 3, limit: 5 })).toEqual({ path: '/ws/a.ts', start_line: 3, end_line: 7 });
     expect(genoToolInput('read', { file_path: '/ws/a.ts', limit: 5 })).toEqual({ path: '/ws/a.ts', start_line: 1, end_line: 5 });
     expect(genoToolInput('edit', { file_path: '/ws/a.ts', old_string: 'a', new_string: 'b' })).toEqual({ path: '/ws/a.ts', old_str: 'a', new_str: 'b' });
@@ -544,6 +547,12 @@ describe('PermissionRequest', () => {
     expect(hookMayAnswer({ rule: 'web-refused-url', reason: 'a URL web_fetch may not fetch', command: 'fetch file:///etc', verdict: 'deny' }, 'non-interactive')).toBe(false);
     expect(hookMayAnswer({ rule: 'hook-ask', reason: 'A PreToolUse hook asks first.', command: 'ls', verdict: 'ask' }, 'non-interactive')).toBe(true);
     expect(hookMayAnswer({ rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl delete ns', verdict: 'deny' }, 'auto'), 'a refusal in a mode with someone to ask is firm').toBe(false);
+  });
+
+  it('is never asked about a command that would run outside the sandbox, which only the user approves', () => {
+    for (const mode of ['ask', 'auto', 'non-interactive'] as const) {
+      expect(hookMayAnswer(unsandboxedDenial('git init', mode, undefined), mode)).toBe(false);
+    }
   });
 });
 
