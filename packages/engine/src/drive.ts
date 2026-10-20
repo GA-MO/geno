@@ -31,6 +31,8 @@ export type Mode = {
   readonly forced?: string;
   /** Real paths the read tools may see outside the workspace, read-only. */
   readonly readRoots?: readonly string[];
+  /** Real paths outside the workspace the tools may write files in, such as the session's scratchpad. */
+  readonly writeRoots?: readonly string[];
   /** An event to log before each model call, such as a checkpoint. */
   readonly beforeCall?: (events: readonly TurnEvent[]) => Promise<TurnEvent>;
   /** How each call's effort follows from the session's; undefined uses the default policy. */
@@ -258,6 +260,7 @@ export async function drive(
     spillDir: path.join(store.spillDir, session.id),
     spillChars: capabilitiesOf(session.provider, session.model).spillChars,
     readRoots: mode.readRoots ?? [],
+    writeRoots: mode.writeRoots ?? [],
     credentialPlaces: await credentialPlacesOf(io.env['HOME'] || homedir()),
     attachmentsDir: attachmentsDir(store, session.id),
     rg: io.env['GCODE_RG'] || 'rg',

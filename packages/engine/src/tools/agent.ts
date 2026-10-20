@@ -680,7 +680,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   /** An edit may also write in the directories the user added as writable. */
   const withWriteRoots = (inner: Executor): Executor => ({
     ...inner,
-    run: (raw, ctx) => inner.run(raw, { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()], writeRoots: tools.directories.writable() }),
+    run: (raw, ctx) => inner.run(raw, { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()], writeRoots: [...(ctx.writeRoots ?? []), ...tools.directories.writable()] }),
   });
 
   // The process groups of commands that left something running, which a kill may stop as the background jobs' may.

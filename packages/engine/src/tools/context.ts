@@ -20,7 +20,10 @@ export type ToolContext = {
    * them as credentials files wherever they are reached from, an added `~` included.
    */
   readonly credentialPlaces: readonly string[];
-  /** Real paths beyond the workspace an edit may write: the directories the user added as writable. Absent is none. */
+  /**
+   * Real paths beyond the workspace a tool may write a file in: the session's scratchpad, and for edit the directories
+   * the user added as writable. Absent is none.
+   */
   readonly writeRoots?: readonly string[] | undefined;
   /** This session's attachments folder, where an image a tool returns is stored by its hash. */
   readonly attachmentsDir: string;
@@ -189,12 +192,14 @@ export async function resolveInside(ctx: ToolContext, raw: string): Promise<stri
   throw outside;
 }
 
-/** The real path to write for `raw`, which may not exist yet; rejected unless it lands inside the workspace or a writable root. */
+/**
+ * The real path to write for `raw`, which may not exist yet; rejected unless it lands inside the workspace or a writable
+ * root. Judged by real path alone, so `/tmp/x` reaches a root at `/private/tmp/x` and a link out of a root is caught.
+ */
 export async function resolveWritable(ctx: ToolContext, raw: string): Promise<string> {
   const target = path.resolve(ctx.workspace, raw);
   const outside = new ToolError(`${raw} is outside the workspace`);
   const roots = [ctx.workspace, ...(ctx.writeRoots ?? [])];
-  if (!roots.some((root) => within(root, target))) throw outside;
   let existing = target;
   let real: string | undefined;
   while ((real = await realOrUndefined(existing)) === undefined) existing = path.dirname(existing);

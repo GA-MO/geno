@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { GIT_COMMITS, GIT_STATUS_LINES, KEY_PACKAGES, KEY_SCRIPTS, LANE_ROOT, type Environment, type GitSnapshot, type LanePlace, type ProjectFacts } from '@g-code/core';
+import { GIT_COMMITS, GIT_STATUS_LINES, KEY_PACKAGES, KEY_SCRIPTS, LANE_ROOT, type Environment, type GitSnapshot, type LanePlace, type ProjectFacts, type TurnEvent } from '@g-code/core';
 import { laneAt } from './lanes.js';
 
 const exec = promisify(execFile);
@@ -71,6 +71,12 @@ export async function scratchpadOf(sessionId: string, { tmp = '/tmp', uid = proc
     }
   }
   return path.join(await realpath(os.tmpdir()), 'gcode-sessions', sessionId);
+}
+
+/** The scratchpad a session's environment names; undefined in a log from before sessions had one. */
+export function recordedScratchpad(events: readonly TurnEvent[]): string | undefined {
+  const head = events[0];
+  return head?.kind === 'session-start' ? head.environment?.scratchpad : undefined;
 }
 
 /**
