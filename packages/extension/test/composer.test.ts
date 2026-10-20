@@ -119,11 +119,11 @@ describe('composerView, the context ring', () => {
 describe('composerView, the tray', () => {
   it('shows the browser while it runs, at the host it last opened', () => {
     const transcript = transcriptOf(start, browse('b1', 'http://localhost:5173/'), browse('b2', 'http://localhost:3000/about'));
-    expect(composerView(input({ transcript, mcp: browser('ready') })).browser).toEqual({ label: 'Browser · localhost:3000', title: 'The browser is open at http://localhost:3000/about' });
+    expect(composerView(input({ transcript, mcp: browser('ready') })).browser).toEqual({ label: 'Browser · localhost:3000', title: 'Open http://localhost:3000/about in your browser', href: 'http://localhost:3000/about' });
   });
 
   it('names the browser alone before it opened a page, and hides it while stopped', () => {
-    expect(composerView(input({ mcp: browser('ready') })).browser).toEqual({ label: 'Browser', title: 'The browser is running' });
+    expect(composerView(input({ mcp: browser('ready') })).browser).toEqual({ label: 'Browser', title: 'The browser is running', href: undefined });
     expect(composerView(input({ transcript: transcriptOf(start, browse('b1', 'http://localhost:3000/')), mcp: browser('stopped') })).browser).toBeUndefined();
   });
 

@@ -65,6 +65,27 @@
   color: var(--ok);
 }
 
+.browser-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.browser-open:disabled {
+  cursor: default;
+}
+
+.browser-open:not(:disabled):hover .tray-label {
+  text-decoration: underline;
+}
+
 .queued-chip {
   color: var(--muted);
 }

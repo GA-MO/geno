@@ -48,7 +48,9 @@ export type ComposerFromView =
   | { readonly type: 'set-model'; readonly provider: string; readonly model: string }
   | { readonly type: 'set-agent-model'; readonly value: string }
   /** Starts a new chat on `backend`, which a session keeps for its life. */
-  | { readonly type: 'set-backend'; readonly backend: BackendId };
+  | { readonly type: 'set-backend'; readonly backend: BackendId }
+  /** Opens the page the session's browser is at in the user's own browser. */
+  | { readonly type: 'open-browser-page'; readonly href: string };
 
 export const NO_FACTS: ComposerFacts = { provider: '', effort: undefined, models: [], backends: [], agentModels: undefined, context: undefined, turnCostUsd: undefined, bahtPerUsd: 0 };
 
@@ -123,8 +125,8 @@ export type RunningView = {
 
 export type ComposerView = {
   readonly placeholder: string;
-  /** The tray's browser chip, while the session's browser runs. */
-  readonly browser: { readonly label: string; readonly title: string } | undefined;
+  /** The tray's browser chip, while the session's browser runs; `href` is the web page a click opens in the user's browser. */
+  readonly browser: { readonly label: string; readonly title: string; readonly href: string | undefined } | undefined;
   readonly queued: string | undefined;
   readonly ring: RingView;
   /** `backend` names the external agent the session runs on. */
@@ -146,6 +148,9 @@ const EFFORT_NOTES: Readonly<Record<string, string>> = {
 
 /** The browser tools that open a URL, whose `url` argument says where the browser is. */
 const NAVIGATIONS = new Set(['mcp__browser__navigate_page', 'mcp__browser__new_page']);
+
+/** The pages a click on the browser chip may open: a file: or data: page stays in the session's browser. */
+export const WEB = new Set(['http:', 'https:']);
 
 const count = (n: number): string => n.toLocaleString('en-US');
 
@@ -182,7 +187,9 @@ function browserChip(mcp: McpListing, transcript: Transcript): ComposerView['bro
   const server = mcp.kind === 'loaded' ? mcp.servers.find((s) => s.name === 'browser') : undefined;
   if (server?.state.status !== 'ready') return undefined;
   const url = browserUrl(transcript);
-  return url === undefined ? { label: 'Browser', title: 'The browser is running' } : { label: `Browser · ${url.host}`, title: `The browser is open at ${url.href}` };
+  if (url === undefined) return { label: 'Browser', title: 'The browser is running', href: undefined };
+  const web = WEB.has(url.protocol);
+  return { label: `Browser · ${url.host}`, title: web ? `Open ${url.href} in your browser` : `The browser is open at ${url.href}`, href: web ? url.href : undefined };
 }
 
 export function formatElapsed(ms: number): string {

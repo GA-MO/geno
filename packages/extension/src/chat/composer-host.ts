@@ -2,7 +2,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import { MODEL_CONFIG_ID, PRICES, TURN_USAGE_META, type BackendId, type BackendInfo, type ContextUse, type ProviderName } from '@g-code/core';
 import { z } from 'zod';
-import type { ComposerFacts, ComposerFromView, ComposerToView, ModelChoice, SelectChoice } from './composer-model.js';
+import { WEB, type ComposerFacts, type ComposerFromView, type ComposerToView, type ModelChoice, type SelectChoice } from './composer-model.js';
 import type { Connection } from './engine.js';
 import type { SettingsListing } from './settings-model.js';
 
@@ -139,6 +139,10 @@ export class ComposerHost implements vscode.Disposable {
     'set-backend': ({ backend }) => {
       const ready = backend === 'geno' || this.facts.backends.some((b) => b.id === backend && b.availability.kind === 'ready');
       if (ready) void this.startOn(backend).catch(warn);
+    },
+    'open-browser-page': ({ href }) => {
+      const uri = vscode.Uri.parse(href, true);
+      if (WEB.has(`${uri.scheme}:`)) void vscode.env.openExternal(uri);
     },
   };
 

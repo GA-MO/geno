@@ -205,11 +205,17 @@ export function composerControls(
   hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly openTasks: () => void; readonly unqueue: () => void; readonly compact: () => void },
 ) {
   const browserLabel = h('span', { class: 'tray-label' });
+  let browserHref: string | undefined;
+  const browserOpen = h(
+    'button',
+    { type: 'button', class: 'browser-open', onclick: () => browserHref !== undefined && post({ type: 'open-browser-page', href: browserHref }) },
+    icon('globe', 'browser-globe'),
+    browserLabel,
+  );
   const browser = h(
     'div',
     { class: 'tray-chip browser-chip', role: 'listitem', hidden: true },
-    icon('globe', 'browser-globe'),
-    browserLabel,
+    browserOpen,
     h('button', { type: 'button', class: 'chip-remove', 'aria-label': 'Turn the browser off', title: 'Turn the browser off', onclick: () => post({ type: 'mcp-enable', name: 'browser', enabled: false }) }, icon('close')),
   );
   const queuedLabel = h('span', { class: 'tray-label' });
@@ -273,7 +279,9 @@ export function composerControls(
     show(view: ComposerView): void {
       browser.hidden = view.browser === undefined;
       browserLabel.textContent = view.browser?.label ?? '';
-      browser.title = view.browser?.title ?? '';
+      browserHref = view.browser?.href;
+      browserOpen.disabled = browserHref === undefined;
+      browserOpen.title = view.browser?.title ?? '';
       queued.hidden = view.queued === undefined;
       queuedLabel.textContent = view.queued ?? '';
       ring.show(view.ring);

@@ -214,6 +214,8 @@ export async function run(): Promise<void> {
   const host = process.env['GCODE_PAGE_HOST']!;
   await waitFor('the browser chip', async () => (await textOf('.browser-chip:not([hidden]) .tray-label')) === `Browser · ${host}`);
   check((await panel<boolean>(`getComputedStyle(doc.querySelector('.browser-globe')).color !== getComputedStyle(doc.querySelector('.browser-chip')).color`)), 'the globe is green');
+  const opens = await panel<{ disabled: boolean; title: string }>(`(() => { const b = doc.querySelector('.browser-open'); return { disabled: b.disabled, title: b.title }; })()`);
+  check(!opens.disabled && opens.title.startsWith(`Open http://${host}/`) && opens.title.endsWith(' in your browser'), 'the chip opens the page in the user’s browser', opens);
   check((await attr('.context-ring', 'aria-label')) === 'Context: 1,042 of 1,000,000 tokens (0%)', 'the ring gives the context after the last call', await attr('.context-ring', 'aria-label'));
   await paste('Screenshot 1.png', await screenshotPng(), 'image/png');
   await dropUris([vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0]!.uri, 'notes.md').toString()]);
