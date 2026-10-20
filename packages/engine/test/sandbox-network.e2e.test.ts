@@ -25,11 +25,11 @@ describe('the sandbox network allowlist', () => {
     expect(system).toContain(`it reaches the network only at these hosts, where *. covers subdomains: ${PACKAGE_HOSTS.join(', ')}.`);
   });
 
-  it('still asks before an install in Ask, lets the classifier judge it in Auto, and refuses it in Plan', () => {
+  it('still asks before an install in Ask, runs it in the sandbox in Auto, and refuses it in Plan', () => {
     const scope = { workspace: '/w', tempDir: '/t', home: '/h' };
     for (const command of ['npm install dayjs', 'pnpm add dayjs', 'pip install --target ./py six', 'git clone --depth 1 https://github.com/jonschlinkert/is-odd.git']) {
       expect(denialFor(command, scope, 'ask'), command).toMatchObject({ verdict: 'ask' });
-      expect(denialFor(command, scope, 'auto'), command).toMatchObject({ verdict: 'classify' });
+      expect(denialFor(command, scope, 'auto'), command).toBeUndefined();
       expect(denialFor(command, scope, 'plan'), command).toMatchObject({ verdict: 'deny' });
     }
   });
