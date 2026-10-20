@@ -715,7 +715,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
 
   /**
    * The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal
-   * throws. A command to run `unsandboxed` always waits for the user's yes, whatever the rules allow.
+   * throws. A command to run `unsandboxed` is judged whatever the rules allow: by the user, or in Auto by the classifier
+   * (`unsandboxedDenial`).
    */
   const approveCommand = async (command: string, ctx: ToolContext, background: boolean, unsandboxed = false): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
@@ -728,7 +729,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const ruled = ruledDenial(command, judged, mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
     const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, judged, 'ask', rules)?.offer;
-    const denial = unsandboxed ? unsandboxedDenial(command, mode, ruled) : ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
+    const denial = unsandboxed ? unsandboxedDenial(command, judged, mode, ruled) : ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };

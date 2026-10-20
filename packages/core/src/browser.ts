@@ -118,6 +118,10 @@ export const BROWSER_TOOL_KINDS: Readonly<Record<string, BrowserToolKind>> = {
   take_snapshot: 'reads-unless-file',
 };
 
+/** Arguments the server reads files at, and those it writes files at. */
+export const BROWSER_READ_PATHS = ['filePaths'] as const;
+export const BROWSER_WRITE_PATHS = ['filePath', 'requestFilePath', 'responseFilePath', 'outputDirPath'] as const;
+
 /** One call to a browser tool. `tool` is the server's name for it; `readOnly` is the pinned server's readOnlyHint. */
 export type BrowserCall = { readonly name: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>>; readonly readOnly: boolean };
 
@@ -155,7 +159,7 @@ function ruleDenial(rule: BrowserRuleId, mode: ApprovalMode, command: string, re
  * What settles one browser call before it runs, or undefined when it runs. A navigation is judged by its URL alone,
  * plus the risky-tool rule when it carries an init script. Any other call that changes a page another host serves,
  * which nobody approved, asks, or goes to the classifier in Auto. Then the risky tools do the same every time; the
- * rest follow the MCP rules.
+ * rest follow the MCP rules. On a local page Auto runs both without the classifier, unless the call names a file.
  */
 export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
   const target = navigationTarget(call);
@@ -175,6 +179,8 @@ function navigationDenial(call: BrowserCall, url: BrowserUrl, mode: ApprovalMode
   return ruleDenial(URL_RULES[url.kind], mode, command, reason) ?? risky();
 }
 
+const namesFile = (call: BrowserCall): boolean => [...BROWSER_READ_PATHS, ...BROWSER_WRITE_PATHS].some((key) => call.args[key] !== undefined && call.args[key] !== null);
+
 function pageDenial(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
   const readOnly = effectivelyReadOnly(call);
   const page = ctx.page;
@@ -182,8 +188,12 @@ function pageDenial(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext):
     const denial = ruleDenial('browser-remote-page', mode, `${call.tool} on ${page.url.url}`, `acting on ${page.url.url}, a page from another host the user did not approve`);
     if (denial !== undefined) return denial;
   }
-  if (BROWSER_TOOL_KINDS[call.tool] === 'risky') return ruleDenial('browser-risky-tool', mode, call.name);
-  return mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly, args: call.args }, mode, ctx.allowedForSession, ctx.rules ?? []);
+  const mcp = mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly, args: call.args }, mode, ctx.allowedForSession, ctx.rules ?? []);
+  const denial = BROWSER_TOOL_KINDS[call.tool] === 'risky' ? ruleDenial('browser-risky-tool', mode, call.name) : mcp;
+  if (denial?.verdict !== 'classify' || page?.url.kind !== 'local' || namesFile(call)) return denial;
+  // Auto runs on a page this machine serves what it would send to the classifier, as it opens such a page unasked. A
+  // file the call reads or writes is still judged, and a workspace rule's question or refusal on the tool still holds.
+  return mcp?.verdict === 'classify' ? undefined : mcp;
 }
 
 /** The package.json scripts that start a dev server by name. */

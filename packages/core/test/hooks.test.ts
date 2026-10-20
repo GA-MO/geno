@@ -549,9 +549,9 @@ describe('PermissionRequest', () => {
     expect(hookMayAnswer({ rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl delete ns', verdict: 'deny' }, 'auto'), 'a refusal in a mode with someone to ask is firm').toBe(false);
   });
 
-  it('is never asked about a command that would run outside the sandbox, which only the user approves', () => {
+  it("is never asked about a command that would run outside the sandbox, which only the user or Auto's classifier approves", () => {
     for (const mode of ['ask', 'auto', 'non-interactive'] as const) {
-      expect(hookMayAnswer(unsandboxedDenial('git init', mode, undefined), mode)).toBe(false);
+      expect(hookMayAnswer(unsandboxedDenial('git init', { workspace: '/ws', tempDir: '/tmp/t', home: '/home/me' }, mode, undefined), mode)).toBe(false);
     }
   });
 });

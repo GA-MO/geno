@@ -409,8 +409,9 @@ const CODE_VARIABLES = /^(?:PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|BASH_ENV
 // Where a project or a home keeps credentials, as a whole path segment, globs included.
 const SECRET_PATH =
   /(?:^|[/=@])(?:\.env[^/]*|\.npmrc|\.yarnrc(?:\.yml)?|\.netrc|\.pgpass|\.git-credentials|\.ssh|\.aws|\.gnupg|\.kube|\.docker|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|credentials?(?:\.[^/]*)?|secrets?(?:\.[^/]*)?)(?:\/|$)/i;
-// A glob over hidden names can reach any of them, such as `.e*`.
-const HIDDEN_GLOB = /(?:^|\/)\.[^/]*[*?[]/;
+// A glob over hidden names can reach any of them, such as `.e*`. A bracket that holds only an index, a slice or a
+// quoted key, as in the jq paths `.items[0]`, `.sha[0:7]` and `.["key"]`, is no glob.
+const HIDDEN_GLOB = /(?:^|\/)\.[^/]*(?:[*?]|\[(?!(?:-?\d*(?::-?\d*)?|"[^"]*")\]))/;
 
 /** Whether a `/`-separated path, or a glob, names a credentials file or a path inside a credentials directory. */
 export const isSecretPath = (file: string): boolean => SECRET_PATH.test(file);
@@ -566,7 +567,7 @@ export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; 
 export const SANDBOX_RULE_IDS = ['unsandboxed'] as const;
 export type SandboxRuleId = (typeof SANDBOX_RULE_IDS)[number];
 export const SANDBOX_RULES: Readonly<Record<SandboxRuleId, { readonly reason: string; readonly verdicts: { readonly [M in ApprovalMode]: Exclude<Verdicts[M], 'allow'> } }>> = {
-  unsandboxed: { reason: 'no sandbox, which lets it read and change anything your account can', verdicts: ALWAYS_ASK },
+  unsandboxed: { reason: 'no sandbox, which lets it read and change anything your account can', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' } },
 };
 /** A user's PreToolUse hook that asked before a call or denied it (hooks.ts). */
 export const HOOK_RULE_IDS = ['hook-ask', 'hook-deny'] as const;
@@ -1035,15 +1036,16 @@ export function denialFor(command: string, scope: CommandScope, mode: ApprovalMo
 
 /**
  * The question a command meets when it asks to run outside the sandbox, given what the rules made of it in `mode`
- * (`ruled`). Plan and a run nobody can answer refuse it. In Ask and Auto a rule's refusal still wins; anything else,
- * the safe list's commands included, asks the user, with a rule's question merged in and no rule to keep, since a yes
- * covers only this call.
+ * (`ruled`). Plan and a run nobody can answer refuse it. In Ask and Auto a rule's refusal still wins. Ask asks the user
+ * about anything else, the safe list's commands included. Auto lets the classifier judge the rest, except what stays
+ * the user's (`staysWithUser`). A rule's question is merged in and no rule is offered to keep, since a yes covers only
+ * this call.
  */
-export function unsandboxedDenial(command: string, mode: ApprovalMode, ruled: Denial | undefined): Denial {
+export function unsandboxedDenial(command: string, scope: CommandScope, mode: ApprovalMode, ruled: Denial | undefined): Denial {
   const { reason, verdicts } = SANDBOX_RULES.unsandboxed;
-  const verdict = verdicts[mode];
-  if (ruled?.verdict === 'deny' && verdict !== 'deny') return ruled;
+  if (ruled?.verdict === 'deny' && verdicts[mode] !== 'deny') return ruled;
   const asked = ruled?.verdict === 'deny' ? undefined : ruled;
+  const verdict = verdicts[mode] === 'classify' && (asked?.verdict === 'ask' || staysWithUser(command, scope)) ? 'ask' : verdicts[mode];
   return {
     rule: 'unsandboxed',
     reason: asked === undefined ? reason : `${reason}; ${asked.reason}`,
@@ -1051,6 +1053,21 @@ export function unsandboxedDenial(command: string, mode: ApprovalMode, ruled: De
     ...(asked?.line === undefined ? {} : { line: asked.line }),
     verdict,
   };
+}
+
+/**
+ * What only the user may run outside the sandbox, whatever the classifier says: what no workspace rule may pre-allow
+ * (`isHardAsk`), a path in one of the home's credential places, which the sandbox would have kept from it, and a line
+ * Geno cannot read word by word.
+ */
+function staysWithUser(command: string, scope: CommandScope): boolean {
+  if (lineRuleOf(command) !== undefined) return true;
+  const places = credentialPlaces(scope.home);
+  const reachesCredentials = (word: string): boolean => {
+    const target = pathOf(word, scope);
+    return target !== undefined && inCredentialPlace(places, target);
+  };
+  return parseCommandLine(command, scope).some(({ variants }) => variants.some((simple) => isHardAsk(simple, scope) || simple.words.some(reachesCredentials)));
 }
 
 /** The denial with the whole line beside it, when it names one simple command of several. */
