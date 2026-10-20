@@ -151,6 +151,31 @@ describe("Auto's classifier blocks", () => {
     expect(asked).toHaveLength(1);
   });
 
+  it('refuses a call the classifier could not evaluate, and counts it as a block', async () => {
+    const timedOut: Verdict = { verdict: 'ask', reason: 'the classifier timed out after 8s', failure: 'unevaluated' };
+    const { bash, asked } = session('auto', { verdict: timedOut });
+    for (let i = 0; i < 3; i++) {
+      const run = await bash(BLOCKED);
+      expect(run.status).toBe('denied');
+      expect(run.text).toContain(`Auto mode could not evaluate \`${BLOCKED}\` (the classifier timed out after 8s), so it did not run.`);
+      expect(run.approval).toMatchObject({ decidedBy: 'classifier', verdict: 'deny', classifier: { failure: 'unevaluated' } });
+    }
+    expect(asked).toEqual([]);
+    expect((await bash(BLOCKED)).status).toBe('rejected');
+    expect(asked).toHaveLength(1);
+  });
+
+  it('shows the card at once when the classifier cannot judge anything, so work goes on, and counts nothing', async () => {
+    const broken: Verdict = { verdict: 'ask', reason: 'the classifier is not set up: DASHSCOPE_API_KEY is not set', failure: 'unavailable' };
+    const { bash, asked } = session('auto', { verdict: broken, answers: ['allow', 'allow', 'allow', 'allow'] });
+    for (let i = 0; i < 4; i++) {
+      const run = await bash(BLOCKED);
+      expect(run.approval).toMatchObject({ decidedBy: 'user', verdict: 'allow', classifier: { failure: 'unavailable' } });
+    }
+    expect(asked).toHaveLength(4);
+    expect((await bash(BLOCKED, { verdict: 'deny', reason: 'it sends data out of the machine' })).status).toBe('denied');
+  });
+
   it('leaves Ask as it was: the card, and no classifier', async () => {
     const { bash, asked, classified } = session('ask');
     expect((await bash(BLOCKED)).status).toBe('rejected');

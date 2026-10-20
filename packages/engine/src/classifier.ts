@@ -22,7 +22,8 @@ import type { Wire } from './wire-shape.js';
 
 /**
  * Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask` whose `failure` says how it
- * failed. A call that timed out or gave no verdict is tried once more first; a real `ask` or `deny` is not.
+ * failed, which Auto refuses as a block or, for a classifier that cannot judge anything, asks the user about. A call
+ * that timed out or gave no verdict is tried once more first; a real `ask` or `deny` is not.
  */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
 
