@@ -114,6 +114,9 @@ const HARD_ASKS: readonly Row[] = [
   ['auto', 'pnpm vitest run --outputFile=.git/hooks/pre-push', [allow('pnpm vitest run')], 'classifies'],
   ['auto', 'pnpm vitest run .env', [allow('pnpm vitest run')], 'classifies'],
   ['auto', 'pnpm vitest run .e*', [allow('pnpm vitest run')], 'classifies'],
+  ['ask', 'gh api repos/o/r/commits/main --jq .commit[0:7]', [allow('gh api')], 'runs'],
+  ['ask', `gh api repos/o/r/pulls --jq '.[0].title'`, [allow('gh api')], 'runs'],
+  ['ask', 'gh api repos/o/r --jq .e*', [allow('gh api')], 'asks'],
   ['auto', 'bash -c "rm -rf ~/x"', [allow('bash')], 'classifies'],
   ['auto', 'python3 -c "import os"', [allow('python3 -c')], 'classifies'],
 ];

@@ -443,7 +443,7 @@ function asksInAsk(rule: ApprovalRuleId): boolean {
 /**
  * Whether a PermissionRequest hook may answer `denial`: where a card shows, or where a run nobody can answer refuses
  * only because nobody can. A refusal that holds whoever answers, such as a deny rule's or Plan's, is never asked, and
- * neither is a command that would run outside the sandbox, which only the user approves.
+ * neither is a command that would run outside the sandbox, which only the user, or Auto's classifier, approves.
  */
 export const hookMayAnswer = (denial: Denial, mode: ApprovalMode): boolean =>
   denial.rule !== 'unsandboxed' && (denial.verdict !== 'deny' || (mode === 'non-interactive' && asksInAsk(denial.rule)));

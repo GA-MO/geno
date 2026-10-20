@@ -45,7 +45,7 @@ flowchart TD
 
 คำสั่งอันตราย เช่น `rm -rf` ของ workspace หรือ `.git` ยังถามเสมอแม้ใน Auto และกฎ allow ครอบคลุมไม่ได้
 การอนุญาตไม่ได้ยกเว้น sandbox: shell ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต
-ทางเดียวที่คำสั่งออกนอก sandbox คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วคุณกดอนุญาตการ์ดของคำสั่งนั้น
-การ์ดนี้ขึ้นทุกครั้งแม้ใน Auto ไม่มี classifier, hook หรือกฎ allow ตอบแทนคุณ และ Plan กับ run ที่ไม่มีใครให้ถามปฏิเสธเสมอ
+ทางเดียวที่คำสั่งออกนอก sandbox คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วได้รับอนุญาต
+ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่คำสั่งที่แตะที่เก็บ credential หรือ `rm -rf` นอก workspace ยังขึ้นการ์ด hook และกฎ allow ไม่ตอบแทนคุณ และ Plan กับ run ที่ไม่มีใครให้ถามปฏิเสธเสมอ
 
 เดินดูการ์ดและทางแยกทั้งสี่ได้ใน [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)
