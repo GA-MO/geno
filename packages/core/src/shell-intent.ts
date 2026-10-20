@@ -511,7 +511,7 @@ export function serverRefusal({ server, background, rest }: ServerStart, { monit
     `Blocked: \`${server}\` starts a server, and ${why}. Start it on its own instead: call bash with {"command": ${JSON.stringify(server.replace(/^nohup\s+/, ''))}, "run_in_background": true}. That returns a job id such as bg-1 at once, and Geno stops the job when the session ends.`,
     wait,
     ...(rest === '' ? [] : [`Run the rest of this line, \`${rest}\`, after that, without the & job and its sleep or kill.`]),
-    'Stop the server with task_stop when you are done.',
+    'If the user will open the server, leave it running and give its URL in your report; otherwise stop it with task_stop when you are done.',
     ...(launchFile === undefined ? [] : [`Or start it with preview_start (load it with tool_search first), which reads ${launchFile} and waits until the server answers.`]),
   ].join(' ');
 }
