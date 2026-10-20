@@ -161,9 +161,9 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
 }
 
 /**
- * The row's one pill and its label, as Claude Code's running line has them: "2 running · 1 needs you", then the one
- * thing most worth a look. The pill opens Tasks at Needs you. Both are in the row only while they show, so an idle
- * row with nothing beside it is as U36 left it.
+ * The row's one pill and its label: "2 running · 1 needs you", then a label only for what the transcript does not
+ * show, what needs the user or what this chat waits on to be woken. The pill opens Tasks at Needs you. Both are in the
+ * row only while they show, so an idle row with nothing beside it is as U36 left it.
  */
 function activityPill(openTasks: () => void) {
   const running = h('span', { class: 'pill-part pill-running' }, h('span', { class: 'pill-count' }), h('span', { class: 'pill-noun' }, ' running'));

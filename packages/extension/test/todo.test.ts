@@ -81,12 +81,10 @@ describe('the list from the engine', () => {
 
 describe("the composer's label", () => {
   const busy: Background = { ...NO_BACKGROUND, shown: 'here', tasks: [{ sessionId: 'lane', title: 'Fix the header', workspace: '/repo', lane: 'fix-header', status: 'running', startedAt: 1, endedAt: null }] };
-  it('names the item in progress while the chat runs and nothing needs the user', () => {
+  it('says nothing of the item in progress or the latest step, which the transcript above already shows', () => {
     const t = run([start('t1'), todoCall('d1', list('done', 'in_progress', 'pending')), call('g1', 'grep', 'running')]);
-    expect(activityOf(t, busy)?.label).toEqual({ text: 'Write tests', tone: 'working' });
-    const later = run([start('t1'), todoCall('d1', list('done', 'in_progress', 'pending')), end, start('t2'), call('g1', 'grep', 'running')]);
-    expect(activityOf(later, busy)?.label?.text, "an earlier turn's item is not what this turn works on").toMatch(/^Searching for/);
+    expect(activityOf(t, busy)).toMatchObject({ text: '1 running', label: undefined });
     const none = run([start('t1'), call('g1', 'grep', 'running')]);
-    expect(activityOf(none, busy)?.label?.text, 'with no list it names the latest step').toMatch(/^Searching for/);
+    expect(activityOf(none, busy)?.label).toBeUndefined();
   });
 });
