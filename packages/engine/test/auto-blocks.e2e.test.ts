@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -116,6 +117,41 @@ describe('Auto in the sandbox', () => {
     expect((await bash('make build', undefined, { dangerouslyDisableSandbox: true })).status).toBe('denied');
     expect(classified.map((judged) => judged.flagged.rule)).toEqual(['network-download', 'unsandboxed']);
     expect(asked).toEqual([]);
+  });
+});
+
+describe('Auto and git push', () => {
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' } }).trim();
+
+  it("pushes the repository's own branch by rule, the default branch included, and sends a force push or a deploy branch to the classifier", async () => {
+    const remote = path.join(tempDir, 'remote.git');
+    git(tempDir, 'init', '-q', '--bare', '-b', 'main', remote);
+    git(workspace, 'init', '-q', '-b', 'main');
+    git(workspace, 'remote', 'add', 'origin', remote);
+    await writeFile(path.join(workspace, 'a.txt'), 'a\n');
+    git(workspace, 'add', 'a.txt');
+    git(workspace, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'a');
+    const { bash, asked, classified } = session('auto');
+
+    const pushed = await bash('git push origin main');
+    expect([pushed.status, pushed.approval, classified, asked]).toEqual(['ok', undefined, [], []]);
+    expect(git(remote, 'rev-parse', 'main')).toBe(git(workspace, 'rev-parse', 'HEAD'));
+
+    expect((await bash('git push --force origin main')).status).toBe('denied');
+    expect((await bash('git push origin main:gh-pages')).status).toBe('denied');
+    expect(classified.map((judged) => [judged.command, judged.flagged.rule])).toEqual([
+      ['git push --force origin main', 'git-push-risky'],
+      ['git push origin main:gh-pages', 'git-push-risky'],
+    ]);
+    expect(() => git(remote, 'rev-parse', '--verify', 'gh-pages')).toThrow();
+    expect(asked).toEqual([]);
+  });
+
+  it('leaves Ask as it was: the card for a plain push, and no classifier', async () => {
+    const { bash, asked, classified } = session('ask');
+    expect((await bash('git push origin main')).status).toBe('rejected');
+    expect(classified).toEqual([]);
+    expect(asked).toEqual([expect.objectContaining({ rule: 'git-push', reason: 'git push', verdict: 'ask' })]);
   });
 });
 

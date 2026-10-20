@@ -17,6 +17,7 @@ export const DENY_RULE_IDS = [
   'rm-rf-outside-workspace',
   'rm-rf-in-workspace',
   'git-push',
+  'git-push-risky',
   'git-reset-hard',
   'git-discard',
   'path-outside-workspace',
@@ -278,6 +279,38 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 
 const always = () => true;
 
+/** Branches a push to which can ship or publish, as deploy pipelines name them; a branch under one, such as release/1.2, counts too. */
+export const DEPLOY_BRANCHES = ['production', 'prod', 'release', 'gh-pages', 'deploy', 'live'] as const;
+
+const isDeployBranch = (branch: string): boolean => {
+  const name = branch.replace(/^refs\/heads\//, '').toLowerCase();
+  return DEPLOY_BRANCHES.some((deploy) => name === deploy || name.startsWith(`${deploy}/`));
+};
+
+// Push options that only report, check or set the upstream; any other may force, delete, mirror or run a program.
+const PLAIN_PUSH_OPTIONS = new Set(['-u', '--set-upstream', '-v', '--verbose', '-q', '--quiet', '-n', '--dry-run', '--porcelain', '--progress', '--no-progress', '--atomic']);
+// A remote's name, which git looks up in the repository's own config; a path or a URL is no remote.
+const REMOTE_NAME = /^\w[\w.-]*$/;
+
+/**
+ * A push of branches to one of the repository's own remotes: git's options before `push` only `-C` and `--no-pager`,
+ * no wrapper or variable that changes what runs, only options that report or set the upstream, a remote named, and
+ * no refspec that forces (`+`), deletes (`:branch`), globs or names a deploy branch as its destination.
+ */
+function plainPush({ prefix, args }: SimpleCommand): boolean {
+  if (prefix.some((word) => (isAssignment(word) ? CODE_VARIABLES.test(word) : !SAFE_PREFIXES.has(path.basename(word))))) return false;
+  let i = 0;
+  for (; args[i] !== 'push'; i++) {
+    if (args[i] === '-C') i++;
+    else if (args[i] !== '--no-pager') return false;
+  }
+  const rest = args.slice(i + 1);
+  if (rest.some((arg) => /[$`*]/.test(arg) || (arg.startsWith('-') && !PLAIN_PUSH_OPTIONS.has(arg)))) return false;
+  const [remote, ...refspecs] = rest.filter((arg) => !arg.startsWith('-'));
+  if (remote !== undefined && !REMOTE_NAME.test(remote)) return false;
+  return refspecs.every((refspec) => !/^[+:]/.test(refspec) && !isDeployBranch(refspec.slice(refspec.lastIndexOf(':') + 1)));
+}
+
 /**
  * What a kill sends its signal to: the words after its signal option, or undefined for `kill -l`, which only lists
  * signals, and `kill -0`, which only checks a process is there. After the signal, `-123` names a process group.
@@ -473,10 +506,17 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command, scope) => removes(command, scope, 'workspace'),
   },
+  // Auto runs a push of the repository's own branches, as Claude Code's auto mode does; git-push-risky keeps the rest.
   'git-push': {
     reason: 'git push',
-    verdicts: ASK_OR_CLASSIFY,
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'deny' },
     matches: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
+  },
+  // Every other mode asks about or refuses every push under git-push.
+  'git-push-risky': {
+    reason: 'a git push that forces, deletes, mirrors or runs a program, or goes to a deploy branch or an address',
+    verdicts: AUTO_ONLY,
+    matches: (command) => command.program === 'git' && gitSubcommand(command.args).name === 'push' && !plainPush(command),
   },
   'git-reset-hard': {
     reason: 'git reset --hard',
