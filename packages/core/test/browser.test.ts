@@ -191,7 +191,7 @@ describe('the browser approval table', () => {
 describe('the browser server flags', () => {
   it('always isolates the profile and never names a profile, a running Chrome or the user data dir', () => {
     for (const headless of [true, false]) {
-      const args = browserServerArgs({ headless }, WORKSPACE);
+      const args = browserServerArgs({ headless }, [WORKSPACE]);
       expect(args).toContain('--isolated');
       expect(args.some((arg) => /^--(?:user-?data-?dir|autoConnect|auto-connect|browserUrl|browser-url|wsEndpoint|ws-endpoint|channel|executablePath|config)\b/i.test(arg))).toBe(false);
       expect(args.includes('--headless')).toBe(headless);

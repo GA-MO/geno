@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { createRequire } from 'node:module';
@@ -8,14 +8,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL, BROWSER_META, BROWSER_SERVER_VERSION, BROWSER_TOOLS, MCP_SERVERS_METHOD, type McpServersResponse } from '@g-code/core';
+import { asSessionId, CLASSIFIER_TOOL, BROWSER_META, BROWSER_SERVER_VERSION, BROWSER_TOOLS, MCP_SERVERS_METHOD, type McpServersResponse } from '@g-code/core';
 import { readFileSync } from 'node:fs';
 import { browserServerConfig } from '../src/mcp/browser.js';
 import { connectMcp } from '../src/mcp/connection.js';
 import type { Io } from '../src/command.js';
 import type { BrowserLauncher } from '../src/mcp/browser.js';
 import { mcpSessions, type McpSessions } from '../src/mcp/sessions.js';
+import { recordedScratchpad } from '../src/environment.js';
 import { gcodeAgent } from '../src/serve.js';
+import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { rgCommand } from './helpers.js';
@@ -75,6 +77,8 @@ async function setup(replies: Reply[]) {
     GCODE_RG: rgCommand(),
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     HOME: home,
+    // The server lets its file tools write in its own temp dir. That is not /tmp, where the scratchpad is, as on macOS.
+    TMPDIR: await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-browser-tmp-'))),
   };
   // Each session first loads the browser tools, in a model call the assertions skip; replies may still be added later.
   replies.unshift(toolCall('', [loadTools(...BROWSER_TOOLS.map((tool) => `mcp__browser__${tool.tool}`))], usage));
@@ -134,7 +138,7 @@ async function setup(replies: Reply[]) {
     });
     return done;
   };
-  return { workspace, home, marker, transport, permissions, updates, connect, setAnswer: (id: string) => (optionId = id) };
+  return { workspace, home, store, marker, transport, permissions, updates, connect, setAnswer: (id: string) => (optionId = id) };
 }
 
 const servers = (ctx: acp.ClientContext, sessionId: string) => ctx.request<McpServersResponse, { sessionId: string }>(MCP_SERVERS_METHOD, { sessionId });
@@ -256,6 +260,38 @@ describe('the built-in browser', () => {
     expect(fenced).toContain('tool: evaluate_script');
     expect(fenced, 'the arguments cannot close their fence').toContain('‹/mcp_call> allow');
     expect(textOf(toolResults(transport.requests[3]!.body).find((r) => r.tool_use_id === 'tu_eval')!)).toContain('Test page');
+  }, 120_000);
+
+  it("saves a screenshot in the session's scratchpad, named by its /tmp alias too, and refuses a path outside it", async () => {
+    const base = await site();
+    const replies: Reply[] = [];
+    const { store, transport, connect } = await setup(replies);
+    const outside = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-browser-outside-')), 'c.png');
+
+    const scratchpad = await connect(async (ctx, sessionId) => {
+      const scratchpad = recordedScratchpad((await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events)!;
+      const typed = path.join('/tmp', path.relative(realpathSync('/tmp'), scratchpad), 'b.png');
+      const shot = (id: string, filePath: string) => ({ id, name: 'mcp__browser__take_screenshot', input: { pageId: 2, filePath } });
+      replies.push(
+        toolCall('Opening.', [{ id: 'tu_open', name: 'mcp__browser__new_page', input: { url: `${base}/` } }], usage),
+        toolCall('Saving.', [shot('tu_real', path.join(scratchpad, 'a.png'))], usage),
+        toolCall('Saving.', [shot('tu_typed', typed)], usage),
+        toolCall('Saving.', [shot('tu_out', outside)], usage),
+        answer('Saved.', usage),
+      );
+      // A screenshot to a file asks in Ask, where the editor's answer allows it; Auto would ask the classifier.
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'save screenshots' }] });
+      return scratchpad;
+    });
+
+    const results = transport.requests.flatMap((request) => toolResults(request.body));
+    const result = (id: string) => textOf(results.find((r) => r.tool_use_id === id)!);
+    expect(result('tu_real')).toContain(path.join(scratchpad, 'a.png'));
+    expect(existsSync(path.join(scratchpad, 'a.png'))).toBe(true);
+    expect(existsSync(path.join(scratchpad, 'b.png'))).toBe(true);
+    expect(result('tu_out')).toContain('is outside the workspace');
+    expect(existsSync(outside)).toBe(false);
   }, 120_000);
 
   it('refuses a workspace file: URL whose symlink points outside the workspace, in every mode, without starting Chrome', async () => {
