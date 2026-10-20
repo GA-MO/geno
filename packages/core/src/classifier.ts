@@ -53,11 +53,20 @@ export type McpCallInput = { readonly server: string; readonly tool: string; rea
 
 export type ClassifierVerdict = { readonly verdict: Verdict; readonly reason: string };
 
-/** One classifier call. A failed call is an `ask` whose reason says what failed, so it fails closed. */
+/**
+ * Why a classifier call gave no verdict of its own: `unevaluated` when it timed out, answered without a verdict or
+ * failed, and `unavailable` when it cannot judge anything: it is off or not set up, or the provider refused its key
+ * or model.
+ */
+export const CLASSIFIER_FAILURES = ['unevaluated', 'unavailable'] as const;
+export type ClassifierFailure = (typeof CLASSIFIER_FAILURES)[number];
+
+/** One classifier call. A failed call is an `ask` whose reason says what failed and whose `failure` says how, so it fails closed. */
 export type ClassifierRun = ClassifierVerdict & {
   readonly model: string;
   readonly latencyMs: number;
   readonly costUsd: number | null;
+  readonly failure?: ClassifierFailure | undefined;
 };
 
 /** How a flagged command was settled, logged on its tool result. */
@@ -80,6 +89,35 @@ export type ApprovalRecord = {
   readonly message?: string | undefined;
   readonly interrupt?: true | undefined;
 };
+
+/**
+ * The calls of a session that Auto's classifier kept from running, which went back to the model in place of a card:
+ * how many in a row since a call last ran, and how many in all.
+ */
+export type AutoBlocks = { readonly consecutive: number; readonly total: number };
+
+/** Once either count reaches its limit, Auto's next block shows the user the card instead, as Claude Code's auto mode does. */
+export const AUTO_BLOCK_LIMITS: AutoBlocks = { consecutive: 3, total: 20 };
+
+/** A call the classifier kept from running, as its tool result logs it. */
+const isAutoBlock = (record: ApprovalRecord | undefined): boolean => record?.decidedBy === 'classifier' && record.verdict === 'deny';
+
+/** The session's Auto blocks, read from its log: any call that ran, whatever its outcome, ends a run of blocks. */
+export function autoBlocksOf(events: readonly TurnEvent[]): AutoBlocks {
+  let consecutive = 0;
+  let total = 0;
+  for (const event of events) {
+    if (event.kind !== 'tool-result') continue;
+    if (isAutoBlock(event.approval)) {
+      consecutive++;
+      total++;
+    } else if (event.status === 'ok' || event.status === 'error') consecutive = 0;
+  }
+  return { consecutive, total };
+}
+
+/** Whether Auto's next block goes to the user's card rather than back to the model. */
+export const autoFallsBack = ({ consecutive, total }: AutoBlocks): boolean => consecutive >= AUTO_BLOCK_LIMITS.consecutive || total >= AUTO_BLOCK_LIMITS.total;
 
 /** The question the user answers before a flagged command runs, with the classifier's reason when it asked. */
 export const approvalQuestion = (denial: Denial, classifier: ClassifierVerdict | undefined): string =>

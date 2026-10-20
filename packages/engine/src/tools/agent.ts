@@ -3,6 +3,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
+  autoBlocksOf,
+  autoFallsBack,
   baseOf,
   CELL_EDIT_MODES,
   CELL_TYPES,
@@ -142,10 +144,10 @@ export const NON_INTERACTIVE: Approval = { kind: 'non-interactive' };
 export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
 /**
- * The call a question is about: its signal, its PermissionRequest hooks, which answer a card before the user, and the
- * workspace's rules, whose allowed hosts the classifier is told.
+ * The call a question is about: its signal, its PermissionRequest hooks, which answer a card before the user, the
+ * workspace's rules, whose allowed hosts the classifier is told, and the session's log, which counts Auto's blocks.
  */
-export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest' | 'permissions'>;
+export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest' | 'permissions' | 'events'>;
 
 async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInput>, call: CallScope): Promise<ClassifierInput> {
   const domains = trustedDomains((await call.permissions?.list()) ?? []);
@@ -154,10 +156,11 @@ async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInp
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
- * In Auto the classifier's allow runs the command and its deny refuses it; its ask, or a failed call, puts the card
- * to the user. `keep` runs, and is awaited, when the user's yes outlives the call. Where the card would show, or where
- * a run nobody can answer would refuse only for that, the call's PermissionRequest hooks answer first; a refusal that
- * holds whoever answers never reaches them.
+ * In Auto the classifier's allow runs the command. Its deny or ask refuses it, with its reason going back to the
+ * model, until the session has had too many such blocks in a row or in all (`autoFallsBack`): then the user's card
+ * decides. A classifier call that failed puts the card to the user. `keep` runs, and is awaited, when the user's yes
+ * outlives the call. Where the card would show, or where a run nobody can answer would refuse only for that, the
+ * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them.
  */
 export async function settle(
   approval: Approval,
@@ -178,7 +181,8 @@ export async function settle(
   };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
   const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
-  if (classifier !== undefined && classifier.verdict !== 'ask') return { ...record, classifier, decidedBy: 'classifier', verdict: classifier.verdict };
+  if (classifier?.verdict === 'allow') return { ...record, classifier, decidedBy: 'classifier', verdict: 'allow' };
+  if (classifier !== undefined && classifier.failure === undefined && !autoFallsBack(autoBlocksOf(call.events()))) return { ...record, classifier, decidedBy: 'classifier', verdict: 'deny' };
   const byHook = await hooked();
   if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
   const answer = await approval.approve(denial, classifier);
@@ -193,6 +197,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   if (decidedBy === 'hook') {
     const why = message === undefined ? '' : `: ${message.replace(/\.$/, '')}`;
     return `denied: \`${command}\` did not run. A PermissionRequest hook answered for the user and refused it${why}. ${interrupt === true ? STOP_AND_WAIT : 'Do not retry it; find another way, or say in your answer what you need the user to allow.'}`;
+  }
+  // As Claude Code's auto mode words it: the model may take another route, or ask the user in its answer.
+  if (decidedBy === 'classifier') {
+    return `denied: Auto mode's safety classifier refused \`${command}\`, so it did not run: ${classifier?.reason.replace(/\.$/, '')}. ${DONT_ASK}`;
   }
   if (rule === 'hook-ask') {
     return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. ${DONT_ASK}`;
@@ -213,13 +221,7 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
     return `denied: \`${command}\` uses ${reason}, which needs the user's approval, and nobody can answer here. Do not reach that path another way; say in your answer what you need to read.`;
   }
   if (mode === 'non-interactive' && decidedBy === 'rule') return `denied: \`${command}\` uses ${reason}, which needs the user's approval, and nobody can answer here. ${DONT_ASK}`;
-  return `denied: \`${command}\` ${
-    decidedBy === 'classifier'
-      ? `was refused by the safety classifier: ${classifier?.reason}`
-      : MODE_REFUSALS[mode] === undefined
-        ? `uses ${reason}, which needs the user's approval`
-        : `uses ${reason}. ${MODE_REFUSALS[mode]}`
-  }. Do not retry it; find another way.`;
+  return `denied: \`${command}\` ${MODE_REFUSALS[mode] === undefined ? `uses ${reason}, which needs the user's approval` : `uses ${reason}. ${MODE_REFUSALS[mode]}`}. Do not retry it; find another way.`;
 }
 
 /**

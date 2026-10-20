@@ -506,9 +506,9 @@ describe('gcode serve', () => {
     expect(turns).toEqual(['plan', 'ask']);
   });
 
-  it('asks in Ask, then after a switch to Auto runs what the classifier allows and puts every classifier ask to the user as a card', async () => {
+  it('asks in Ask, then after a switch to Auto runs what the classifier allows, sends its asks back to the model, and shows the card for the one after three in a row', async () => {
     const outside = (n: number) => use('bash', { command: `cd ~ && du -d 1 .gcode-test-missing-${n}` });
-    const gray = (n: number) => use('bash', { command: `node -e "console.log(${n})"` });
+    const gray = (n: number) => use('bash', { command: `rm -rf out-${n}` });
     const verdict = (answer: 'allow' | 'ask', reason: string) => toolCall('', [use(CLASSIFIER_TOOL.name, { verdict: answer, reason })], usage);
     const asked = outside(0);
     const allowed = [outside(1), outside(2)];
@@ -517,7 +517,7 @@ describe('gcode serve', () => {
       toolCall('Measuring.', [asked], usage),
       answer('Measured.', usage),
       ...allowed.flatMap((call) => [toolCall('Measuring.', [call], usage), verdict('allow', 'measures disk use the user asked about')]),
-      ...prompted.flatMap((call) => [toolCall('Building.', [call], usage), verdict('ask', 'unclear why this is needed')]),
+      ...prompted.flatMap((call) => [toolCall('Cleaning.', [call], usage), verdict('ask', 'unclear why this is needed')]),
       answer('Done.', usage),
     ]);
     editor.answerPermission = { outcome: 'selected', optionId: 'allow' };
@@ -528,19 +528,17 @@ describe('gcode serve', () => {
       await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Clean it up.' }] });
     });
 
-    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, ...prompted.map((call) => call.id)]);
+    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, prompted[3]!.id]);
     expect(editor.permissions[0]!.toolCall.title).toBe(`Allow \`cd ~\` in \`cd ~ && du -d 1 .gcode-test-missing-0\`? It uses a path outside the workspace.`);
-    expect(editor.permissions[1]!.toolCall.title).toBe('Allow `node -e console.log(1)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.');
+    expect(editor.permissions[1]!.toolCall.title).toBe('Allow `rm -rf out-4`? It uses rm -rf of a path inside the workspace. The classifier says: unclear why this is needed.');
     const results = new Map(
       transport.requests.flatMap((r) =>
         (r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: string }[]).flatMap((b) => (b.type === 'tool_result' ? [[b.tool_use_id!, b.content!] as const] : [])),
       ),
     );
     for (const call of allowed) expect(results.get(call.id)).not.toContain('denied');
-    for (const [i, call] of prompted.entries()) {
-      expect(results.get(call.id)).toContain(String(i + 1));
-      expect(results.get(call.id)).not.toContain('denied');
-    }
+    for (const call of prompted.slice(0, 3)) expect(results.get(call.id)).toContain("Auto mode's safety classifier refused `rm -rf out-");
+    expect(results.get(prompted[3]!.id)).not.toContain('denied');
   });
 
   it('tells the user once, in the chat and on stderr, that Auto’s classifier cannot judge, and asks about each command it would have judged', async () => {
