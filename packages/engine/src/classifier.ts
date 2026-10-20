@@ -19,7 +19,10 @@ import { sandboxDomainsOf } from './sandbox.js';
 import { wireFor } from './wire.js';
 import type { Wire } from './wire-shape.js';
 
-/** Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`, which goes to the user. */
+/**
+ * Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`, which goes to the user. A call
+ * that timed out or gave no verdict is tried once more first; a real `ask` or `deny` is not.
+ */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
 
 export type ClassifierOptions = {
@@ -38,13 +41,25 @@ export const brokenClassifierNotice = (problem: string): string =>
 
 const answerSchema = z.strictObject({ reason: z.string().trim().min(1), verdict: z.enum(['allow', 'ask', 'deny']) });
 
-export function classifierVerdictOf(content: readonly ContentBlock[]): ClassifierVerdict {
+/** What the classifier's answer holds: a verdict, or why it holds none. */
+export type ClassifierAnswer = { readonly kind: 'verdict'; readonly verdict: ClassifierVerdict } | { readonly kind: 'no-verdict'; readonly reason: string };
+
+export function classifierAnswerOf(content: readonly ContentBlock[]): ClassifierAnswer {
   const uses = content.filter((block) => block.type === 'tool_use');
   const [use] = uses;
-  if (uses.length !== 1 || use?.name !== CLASSIFIER_TOOL.name) return { verdict: 'ask', reason: 'the classifier gave no verdict' };
+  if (uses.length !== 1 || use?.name !== CLASSIFIER_TOOL.name) return { kind: 'no-verdict', reason: 'the classifier gave no verdict' };
   const parsed = answerSchema.safeParse(use.input);
-  return parsed.success ? { verdict: parsed.data.verdict, reason: parsed.data.reason } : { verdict: 'ask', reason: 'the classifier gave a malformed verdict' };
+  return parsed.success ? { kind: 'verdict', verdict: { verdict: parsed.data.verdict, reason: parsed.data.reason } } : { kind: 'no-verdict', reason: 'the classifier gave a malformed verdict' };
 }
+
+/**
+ * One call to the classifier. `transient` is a timeout or an answer with no verdict, which another call may not repeat.
+ * `failed` is every other error, such as a refused key, a server error or a stopped turn, and is not tried again.
+ */
+type Attempt = { readonly kind: 'verdict' | 'transient' | 'failed'; readonly run: ClassifierRun };
+
+// A timed-out call has no usage, so its cost is unknown rather than zero; the total is unknown only when both are.
+const addCosts = (a: number | null, b: number | null): number | null => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -71,7 +86,7 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { t
     return broken(messagesOf(error).join(': '));
   }
 
-  return async (input, signal) => {
+  const attempt = async (input: ClassifierInput, signal: AbortSignal): Promise<Attempt> => {
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
     const timeout = AbortSignal.timeout(timeoutMs);
@@ -79,13 +94,23 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { t
       const message = await wire.stream(classifierRequest(input, model, sandboxHosts, capabilitiesOf(provider, model)), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
       const costUsd = costOf(provider, model, usageOf(message));
       // Claude refuses to judge a command it reads as an attack, such as one that sends .env out, so a refusal is a deny.
-      if (message.stop_reason === 'refusal') return { verdict: 'deny', reason: 'the classifier refused to judge the command as harmful', model, latencyMs: elapsed(), costUsd };
-      return { ...classifierVerdictOf(message.content), model, latencyMs: elapsed(), costUsd };
+      if (message.stop_reason === 'refusal') return { kind: 'verdict', run: { verdict: 'deny', reason: 'the classifier refused to judge the command as harmful', model, latencyMs: elapsed(), costUsd } };
+      const answer = classifierAnswerOf(message.content);
+      return answer.kind === 'verdict'
+        ? { kind: 'verdict', run: { ...answer.verdict, model, latencyMs: elapsed(), costUsd } }
+        : { kind: 'transient', run: asks(answer.reason, elapsed(), costUsd) };
     } catch (error) {
-      if (timeout.aborted) return asks(`the classifier timed out after ${timeoutMs / 1000}s`, elapsed());
+      if (timeout.aborted) return { kind: 'transient', run: asks(`the classifier timed out after ${timeoutMs / 1000}s`, elapsed()) };
       const message = wire.redact(messagesOf(error).join(': '));
       if (!signal.aborted && persists(error, message)) onBroken(`${provider} ${model}: ${message.slice(0, 200)}`);
-      return asks(`the classifier failed: ${message}`, elapsed());
+      return { kind: 'failed', run: asks(`the classifier failed: ${message}`, elapsed()) };
     }
+  };
+
+  return async (input, signal) => {
+    const first = await attempt(input, signal);
+    if (first.kind !== 'transient' || signal.aborted) return first.run;
+    const { run } = await attempt(input, signal);
+    return { ...run, latencyMs: first.run.latencyMs + run.latencyMs, costUsd: addCosts(first.run.costUsd, run.costUsd) };
   };
 }
