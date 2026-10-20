@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CLASSIFIER_TOOL, costOf, denialFor, PACKAGE_HOSTS, type ClassifierInput } from '@g-code/core';
 import { DANGEROUS_CASES } from '../src/classifier-cases.js';
 import { caseInput } from '../src/classifier-eval.js';
-import { classifierVerdictOf, commandClassifier } from '../src/classifier.js';
+import { classifierAnswerOf, commandClassifier } from '../src/classifier.js';
 import { fakeTransport, httpError, toolCall, type Reply } from './fake-transport.js';
 
 const usage = { input: 400, cacheRead: 0, cacheWrite: 0 };
@@ -43,8 +43,8 @@ const verdictUse = (raw: unknown, name = CLASSIFIER_TOOL.name): ContentBlock =>
 
 describe('the classifier answer', () => {
   it('takes the verdict and reason from the verdict tool', () => {
-    expect(classifierVerdictOf([verdictUse({ verdict: 'allow', reason: 'build output only' })])).toEqual({ verdict: 'allow', reason: 'build output only' });
-    expect(classifierVerdictOf([verdictUse({ reason: 'deletes the source', verdict: 'deny' })])).toEqual({ verdict: 'deny', reason: 'deletes the source' });
+    expect(classifierAnswerOf([verdictUse({ verdict: 'allow', reason: 'build output only' })])).toEqual({ kind: 'verdict', verdict: { verdict: 'allow', reason: 'build output only' } });
+    expect(classifierAnswerOf([verdictUse({ reason: 'deletes the source', verdict: 'deny' })])).toEqual({ kind: 'verdict', verdict: { verdict: 'deny', reason: 'deletes the source' } });
   });
 
   const MALFORMED: readonly [string, ContentBlock[]][] = [
@@ -59,8 +59,8 @@ describe('the classifier answer', () => {
     ['two verdicts', [verdictUse({ verdict: 'allow', reason: 'x' }), verdictUse({ verdict: 'deny', reason: 'y' })]],
   ];
 
-  it.each(MALFORMED)('asks on an answer with %s', (_name, content) => {
-    expect(classifierVerdictOf(content).verdict).toBe('ask');
+  it.each(MALFORMED)('finds no verdict in an answer with %s', (_name, content) => {
+    expect(classifierAnswerOf(content).kind).toBe('no-verdict');
   });
 });
 
@@ -90,20 +90,52 @@ describe('the command classifier', () => {
     expect(transport.requests[0]!.body.model).toBe('qwen3.7-plus');
   });
 
-  it('asks when the model does not answer before the timeout', async () => {
+  const stalled: Reply = { ...verdict({ verdict: 'allow', reason: 'late' }), stallAfter: 1 };
+
+  it('asks when the model does not answer before the timeout on both tries', async () => {
     const started = performance.now();
-    const { run } = await classify([{ ...verdict({ verdict: 'allow', reason: 'late' }), stallAfter: 1 }], 50);
+    const { run, transport } = await classify([stalled, stalled], 50);
     expect(run.verdict).toBe('ask');
     expect(run.reason).toMatch(/timed out/);
+    expect(transport.requests).toHaveLength(2);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  it('asks on a malformed answer', async () => {
-    const { run } = await classify([verdict({ verdict: 'sure', reason: 'x' })]);
-    expect(run.verdict).toBe('ask');
+  it('takes the second try\'s verdict when the first times out', async () => {
+    const { run, transport } = await classify([stalled, verdict({ verdict: 'allow', reason: 'only build output' })], 50);
+    expect(run).toMatchObject({ verdict: 'allow', reason: 'only build output' });
+    expect(run.latencyMs).toBeGreaterThanOrEqual(50);
+    expect(transport.requests).toHaveLength(2);
   });
 
-  it('asks on a gateway error, without retrying', async () => {
+  it('asks on two malformed answers, and takes the verdict a retry gives after one', async () => {
+    const twice = await classify([verdict({ verdict: 'sure', reason: 'x' }), verdict({ verdict: 'sure', reason: 'x' })]);
+    expect(twice.run.verdict).toBe('ask');
+    expect(twice.transport.requests).toHaveLength(2);
+    const once = await classify([verdict({ verdict: 'sure', reason: 'x' }), verdict({ verdict: 'allow', reason: 'only build output' })]);
+    expect(once.run.verdict).toBe('allow');
+    expect(once.run.costUsd).toBeCloseTo(2 * costOf('modelstudio', 'qwen3.8-flash', { ...usage, output: 30 })!, 12);
+  });
+
+  it.each(['ask', 'deny'] as const)('does not retry a real %s', async (said) => {
+    const { run, transport } = await classify([verdict({ verdict: said, reason: 'unclear' }), verdict({ verdict: 'allow', reason: 'x' })]);
+    expect(run.verdict).toBe(said);
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it('does not retry when the turn stops during the first try', async () => {
+    const transport = fakeTransport([stalled, verdict({ verdict: 'allow', reason: 'x' })]);
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 20);
+    const run = await commandClassifier(env, transport.fetch, { timeoutMs: 8000 })(input, stop.signal);
+    expect(run.verdict).toBe('ask');
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it('asks on a gateway error or a rejected key, without retrying', async () => {
+    const rejected = await classify([httpError(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }), verdict({ verdict: 'allow', reason: 'x' })]);
+    expect(rejected.run.verdict).toBe('ask');
+    expect(rejected.transport.requests).toHaveLength(1);
     const { run, transport } = await classify([httpError(500, { error: { type: 'api_error', message: 'internal error' } }), verdict({ verdict: 'allow', reason: 'x' })]);
     expect(run.verdict).toBe('ask');
     expect(run.reason).toMatch(/internal error/);
@@ -146,7 +178,7 @@ describe('the command classifier', () => {
     const onBroken = (problem: string) => problems.push(problem);
     const run = (reply: Reply, timeoutMs = 8000) => commandClassifier(env, fakeTransport([reply]).fetch, { timeoutMs, onBroken })(input, new AbortController().signal);
     await run(httpError(500, { error: { type: 'api_error', message: 'internal error' } }));
-    await run({ ...verdict({ verdict: 'allow', reason: 'late' }), stallAfter: 1 }, 50);
+    await commandClassifier(env, fakeTransport([stalled, stalled]).fetch, { timeoutMs: 50, onBroken })(input, new AbortController().signal);
     expect(problems).toEqual([]);
     await run(httpError(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
     await run(httpError(404, { error: { type: 'not_found_error', message: 'model: qwen3.8-flash' } }));
