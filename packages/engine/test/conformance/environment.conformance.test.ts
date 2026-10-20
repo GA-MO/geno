@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ENVIRONMENT_HEADING, type TurnEvent } from '@g-code/core';
@@ -52,5 +53,34 @@ describe.each(WIRES)('permissions on the %s wire', (wire) => {
     expect(questions).toEqual([]);
     expect(run.seen().at(-1)!.results[0]).toEqual({ id: 'tu_note', error: false, text: 'noted\n[exit code 0]' });
     expect(existsSync(note) && readFileSync(note, 'utf8')).toBe('noted');
+  });
+
+  it('T-PERM-08 edit creates a file in the scratchpad without a question, by its /tmp name too, and still refuses one outside it', async () => {
+    const run = await scripted(wire, [say('Ready.')]);
+    const started = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Get ready.']);
+    const scratchpad = scratchpadOf(await run.log(started.stdout));
+    const real = path.join(scratchpad, 'note.md');
+    // The model may name the scratchpad by the alias of its real path, as /tmp is on macOS.
+    const typed = path.join('/tmp', path.relative(realpathSync('/tmp'), real));
+    const outside = path.join(mkdtempSync(path.join(tmpdir(), 'gcode-outside-')), 'note.md');
+    run.more(
+      call('', [{ id: 'tu_real', name: 'edit', input: { path: real, create: true, new_str: 'real\n' } }]),
+      call('', [{ id: 'tu_typed', name: 'edit', input: { path: typed.replace('note.md', 'typed.md'), create: true, new_str: 'typed\n' } }]),
+      call('', [{ id: 'tu_out', name: 'edit', input: { path: outside, create: true, new_str: 'out\n' } }]),
+      say('Noted.'),
+    );
+
+    const questions: string[] = [];
+    const asked = await run.cli(['agent', '--session', sessionIdOf(started.stdout), '--mode', 'ask', 'Write notes.'], {
+      confirm: (question) => (questions.push(question), true),
+    });
+    expect(asked.code).toBe(0);
+    expect(questions).toEqual([]);
+    const results = run.seen().slice(-3).map((seen) => seen.results[0]!);
+    expect(results.map((result) => [result.id, result.error])).toEqual([['tu_real', false], ['tu_typed', false], ['tu_out', true]]);
+    expect(results[2]!.text).toContain('is outside the workspace');
+    expect(readFileSync(real, 'utf8')).toBe('real\n');
+    expect(readFileSync(path.join(scratchpad, 'typed.md'), 'utf8')).toBe('typed\n');
+    expect(existsSync(outside)).toBe(false);
   });
 });
