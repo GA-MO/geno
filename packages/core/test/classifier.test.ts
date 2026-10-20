@@ -65,6 +65,23 @@ describe('P31 the sandbox network the classifier is told', () => {
   });
 });
 
+describe('a command the agent asked to run outside the sandbox', () => {
+  const outside = input({ command: 'git push origin main', flagged: { rule: 'unsandboxed', reason: 'no sandbox, which lets it read and change anything your account can; git push', command: 'git push origin main' } });
+
+  it("tells the classifier it runs with the user's full access, in place of the sandbox's limits", () => {
+    const system = systemText(classifierRequest(outside, 'm', ['registry.npmjs.org']));
+    expect(system).toContain("The command runs OUTSIDE the sandbox: the agent asked to run it without one, usually because the sandbox stopped it. It has the user's full access");
+    expect(system).not.toContain('The command runs in a sandbox.');
+    expect(system).not.toContain('registry.npmjs.org');
+  });
+
+  it('leaves every other command the request it always had', () => {
+    const system = systemText(classifierRequest(input(), 'm'));
+    expect(system).toContain('The command runs in a sandbox. It can write only inside the project and a temp directory, and it has no network, so a push or a download fails there. It can read files outside the project. Fixed rules');
+    expect(system).not.toContain('OUTSIDE the sandbox');
+  });
+});
+
 describe('P31 the directories the sandbox writes that the classifier is told', () => {
   it('says commands write only in the project and a temp directory when none are writable, in the bytes it always sent', () => {
     expect(classifierRequest(input({ writableDirectories: [] }), 'm')).toEqual(classifierRequest(input(), 'm'));

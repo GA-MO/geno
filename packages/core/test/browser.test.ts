@@ -188,6 +188,41 @@ describe('the browser approval table', () => {
   });
 });
 
+describe('acting on a page on this machine in Auto', () => {
+  const localPage = { url: browserUrlOf('http://localhost:8765/?theme=ai', WORKSPACE), approved: false };
+  const approvedRemote = { url: browserUrlOf('https://example.com/', WORKSPACE), approved: true };
+
+  it('runs a script, a form or any other tool without the classifier, and leaves Ask, Plan and a run nobody can ask as they were', () => {
+    for (const tool of ['evaluate_script', 'fill_form', 'upload_file']) {
+      expect([tool, verdicts(call(tool, { function: '() => 1' }), ctx({ page: localPage }))]).toEqual([tool, { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' }]);
+    }
+    for (const tool of ['click', 'emulate', 'navigate_page', 'press_key']) {
+      expect([tool, verdicts(call(tool, { pageId: 1 }), ctx({ page: localPage }))]).toEqual([tool, { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' }]);
+    }
+    for (const url of ['about:blank', `file://${WORKSPACE}/index.html`, 'http://app.localhost:3000/']) {
+      expect(browserDenialFor(call('evaluate_script'), 'auto', ctx({ page: { url: browserUrlOf(url, WORKSPACE), approved: false } }))).toBeUndefined();
+    }
+  });
+
+  it('still sends a page of another host to the classifier, approved or not', () => {
+    expect(browserDenialFor(call('evaluate_script'), 'auto', ctx({ page: approvedRemote }))).toMatchObject({ rule: 'browser-risky-tool', verdict: 'classify' });
+    expect(browserDenialFor(call('click'), 'auto', ctx({ page: approvedRemote }))).toMatchObject({ rule: 'mcp-tool', verdict: 'classify' });
+    expect(browserDenialFor(call('evaluate_script'), 'auto', ctx({ page: remotePage }))).toMatchObject({ rule: 'browser-remote-page', verdict: 'classify' });
+    expect(browserDenialFor(call('evaluate_script'), 'auto', ctx())).toMatchObject({ rule: 'browser-risky-tool', verdict: 'classify' });
+  });
+
+  it('still judges a call that reads or writes a file, a script that rides a navigation, and a workspace rule', () => {
+    for (const [tool, args] of [['take_screenshot', { filePath: 'shot.png' }], ['take_snapshot', { filePath: 'snap.txt' }], ['evaluate_script', { filePath: 'out.json' }], ['upload_file', { filePaths: ['a.png'] }], ['get_network_request', { responseFilePath: 'r.json' }], ['lighthouse_audit', { outputDirPath: 'lh' }]] as const) {
+      expect([tool, browserDenialFor(call(tool, args), 'auto', ctx({ page: localPage }))?.verdict]).toEqual([tool, 'classify']);
+    }
+    expect(browserDenialFor(call('navigate_page', { url: 'http://localhost:8765/', initScript: 'x()' }), 'auto', ctx({ page: localPage }))).toMatchObject({ rule: 'browser-risky-tool', verdict: 'classify' });
+    for (const tool of ['click', 'evaluate_script']) {
+      expect(browserDenialFor(call(tool), 'auto', ctx({ page: localPage, rules: rulesOf({ effect: 'ask', mcp: `mcp__browser__${tool}` }) }))).toMatchObject({ rule: 'workspace-ask', verdict: 'ask' });
+      expect(browserDenialFor(call(tool), 'auto', ctx({ page: localPage, rules: rulesOf({ effect: 'deny', mcp: `mcp__browser__${tool}` }) }))).toMatchObject({ rule: 'workspace-deny', verdict: 'deny' });
+    }
+  });
+});
+
 describe('the browser server flags', () => {
   it('always isolates the profile and never names a profile, a running Chrome or the user data dir', () => {
     for (const headless of [true, false]) {

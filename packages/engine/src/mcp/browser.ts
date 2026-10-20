@@ -5,10 +5,12 @@ import { z } from 'zod';
 import {
   BROWSER_META,
   BROWSER_PACKAGE,
+  BROWSER_READ_PATHS,
   DEFAULT_BROWSER_SETTINGS,
   BROWSER_SERVER,
   BROWSER_SERVER_ENV,
   BROWSER_SERVER_VERSION,
+  BROWSER_WRITE_PATHS,
   browserDenialFor,
   browserServerArgs,
   browserUrlOf,
@@ -123,14 +125,11 @@ async function canonical(raw: string): Promise<string> {
   }
 }
 
-/** Arguments the server reads or writes files at. They must be where the file tools may read or write, and go to the server absolute. */
-const READ_PATHS = ['filePaths'] as const;
-const WRITE_PATHS = ['filePath', 'requestFilePath', 'responseFilePath', 'outputDirPath'] as const;
-
+/** The arguments the server reads or writes files at must be where the file tools may read or write, and go to the server absolute. */
 async function withWorkspacePaths(args: Record<string, unknown>, ctx: ToolContext): Promise<Record<string, unknown>> {
   const out = { ...args };
-  for (const key of WRITE_PATHS) if (typeof out[key] === 'string') out[key] = await resolveWritable(ctx, out[key]);
-  for (const key of READ_PATHS) {
+  for (const key of BROWSER_WRITE_PATHS) if (typeof out[key] === 'string') out[key] = await resolveWritable(ctx, out[key]);
+  for (const key of BROWSER_READ_PATHS) {
     const value = out[key];
     if (Array.isArray(value)) out[key] = await Promise.all(value.map((file) => (typeof file === 'string' ? resolveInside(ctx, file) : file)));
   }
