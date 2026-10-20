@@ -14,9 +14,9 @@ import { openMcpHub, type McpHub, type McpToolset } from './hub.js';
 export type McpSessions = {
   /**
    * Records what session/new, session/load or session/resume said, and starts the session's servers. The browser
-   * waits for its first call.
+   * waits for its first call, and its file tools may write in the workspace and the session's scratchpad.
    */
-  register(sessionId: string, workspace: string, servers: readonly acp.McpServer[], browser: BrowserSettings | undefined): void;
+  register(sessionId: string, workspace: string, servers: readonly acp.McpServer[], browser: SessionBrowser | undefined): void;
   toolset(sessionId: string, approval: Approval, grant?: McpGrant): Promise<McpToolset | undefined>;
   servers(sessionId: string): Promise<McpServersResponse>;
   trust(sessionId: string, name: string, hash: string): Promise<McpServersResponse>;
@@ -28,6 +28,9 @@ export type McpSessions = {
   stopAll(): Promise<void>;
 };
 
+/** The editor's browser settings for a session, and the scratchpad its environment names, if it has one. */
+export type SessionBrowser = { readonly settings: BrowserSettings; readonly scratchpad: string | undefined };
+
 /** The access token for one HTTP server of a session, from the editor that shows it. */
 export type McpSessionTokens = (sessionId: string, server: { readonly name: string; readonly url: string }, rejected: boolean) => Promise<string | undefined>;
 
@@ -38,7 +41,7 @@ export function mcpSessions(
   launcher: BrowserLauncher = NPX_LAUNCHER,
   tokens?: McpSessionTokens,
 ): McpSessions {
-  const pending = new Map<string, { readonly workspace: string; readonly servers: readonly acp.McpServer[]; readonly browser: BrowserSettings | undefined }>();
+  const pending = new Map<string, { readonly workspace: string; readonly servers: readonly acp.McpServer[]; readonly browser: SessionBrowser | undefined }>();
   const hubs = new Map<string, Promise<McpHub>>();
   const hubOf = (sessionId: string): Promise<McpHub> => {
     const open = hubs.get(sessionId);
@@ -49,7 +52,7 @@ export function mcpSessions(
       env,
       workspace,
       acp: servers,
-      browser: browser === undefined ? undefined : { settings: browser, launcher, home: homeOf(store) },
+      browser: browser === undefined ? undefined : { ...browser, launcher, home: homeOf(store) },
       tokens: tokens === undefined ? undefined : (server, rejected) => tokens(sessionId, server, rejected),
     });
     // A hub that failed to open, such as for a malformed trust file, is retried at the next need.

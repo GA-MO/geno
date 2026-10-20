@@ -47,8 +47,8 @@ export const browserLauncherOf = (env: Readonly<Record<string, string | undefine
   return { command: process.execPath, args: [bin], ...(process.versions.electron === undefined ? {} : { env: { ELECTRON_RUN_AS_NODE: '1' } }) };
 };
 
-/** A session's browser: the editor's settings and how to start the server. */
-export type BrowserOptions = { readonly settings: BrowserSettings; readonly launcher: BrowserLauncher; readonly home: string };
+/** A session's browser: the editor's settings, how to start the server, and the session's scratchpad, if it has one. */
+export type BrowserOptions = { readonly settings: BrowserSettings; readonly launcher: BrowserLauncher; readonly home: string; readonly scratchpad?: string | undefined };
 
 const settingsSchema = z.object({ enabled: z.boolean(), headless: z.boolean().default(true) });
 
@@ -67,13 +67,13 @@ export function browserSettingsOf(meta: Readonly<Record<string, unknown>> | null
  * The built-in server. It runs in the app home rather than the workspace, so a repository's `.npmrc` cannot choose
  * where npx fetches it from.
  */
-export const browserServerConfig = ({ settings, launcher, home }: BrowserOptions, workspace: string): McpServerConfig => ({
+export const browserServerConfig = ({ settings, launcher, home, scratchpad }: BrowserOptions, workspace: string): McpServerConfig => ({
   name: BROWSER_SERVER,
   source: 'builtin',
   transport: {
     kind: 'stdio',
     command: launcher.command,
-    args: [...launcher.args, ...browserServerArgs(settings, workspace)],
+    args: [...launcher.args, ...browserServerArgs(settings, [workspace, ...(scratchpad === undefined ? [] : [scratchpad])])],
     env: { ...launcher.env, ...BROWSER_SERVER_ENV },
     cwd: home,
   },
@@ -123,7 +123,7 @@ async function canonical(raw: string): Promise<string> {
   }
 }
 
-/** Arguments the server reads or writes files at. They must be in the workspace, and go to the server absolute. */
+/** Arguments the server reads or writes files at. They must be where the file tools may read or write, and go to the server absolute. */
 const READ_PATHS = ['filePaths'] as const;
 const WRITE_PATHS = ['filePath', 'requestFilePath', 'responseFilePath', 'outputDirPath'] as const;
 

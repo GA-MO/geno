@@ -298,7 +298,8 @@ import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, forkSession, rewindPreview, rewindSession, rewindTo } from './rewind.js';
 import { browserSettingsOf } from './mcp/browser.js';
-import { mcpSessions, type McpSessions, type McpSessionTokens } from './mcp/sessions.js';
+import { recordedScratchpad } from './environment.js';
+import { mcpSessions, type McpSessions, type McpSessionTokens, type SessionBrowser } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
@@ -1243,6 +1244,12 @@ const turnResponse = (end: TurnEnd, spent: Pick<acp.PromptResponse, 'usage' | '_
 /** A turn's end, and ACP's answer for it. */
 type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
 
+/** The browser the editor's `_meta` asks for, with the scratchpad its file tools may write in. */
+function sessionBrowser(meta: Readonly<Record<string, unknown>> | null | undefined, events: readonly TurnEvent[]): SessionBrowser | undefined {
+  const settings = browserSettingsOf(meta);
+  return settings === undefined ? undefined : { settings, scratchpad: recordedScratchpad(events) };
+}
+
 /**
  * The engine as an ACP agent, for one editor connection. Each prompt runs `gcode agent`'s loop on the session's log,
  * or a one-shot inline edit, or a lane apply. `shared` is the process's, so a turn started over one connection goes on
@@ -2012,7 +2019,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
       modes.set(id, DEFAULT_SESSION_MODE);
       viewers.show(id, self());
       commands.attach(client, id, workspace);
-      mcp.register(id, workspace, params.mcpServers, browserSettingsOf(params._meta));
+      mcp.register(id, workspace, params.mcpServers, sessionBrowser(params._meta, opened.log.events));
       io.err(`session: ${id} log: ${opened.log.file}`);
       return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE), configOptions: effortConfigOptions(opened.log.session.effort) };
     })
@@ -2023,7 +2030,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       viewers.show(id, self());
       commands.attach(client, id, log.session.workspace);
-      mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
+      mcp.register(id, log.session.workspace, params.mcpServers ?? [], sessionBrowser(params._meta, log.events));
       const context = lastContextUse(log.session, log.events);
       if (context !== undefined && log.session.backend === undefined) await client.notify(acp.methods.client.session.update, { sessionId: id, update: usageUpdate(context) });
       io.err(`session: ${id} resumed, log: ${log.file}`);
@@ -2043,7 +2050,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
-      mcp.register(id, log.session.workspace, params.mcpServers, browserSettingsOf(params._meta));
+      mcp.register(id, log.session.workspace, params.mcpServers, sessionBrowser(params._meta, log.events));
       const notify = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
       // One step, with no await between: what the running turn logged so far is replayed, and what it sends from now on
       // waits behind the replay, so the editor sees each update once and in order.
@@ -2356,7 +2363,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
       const mode = sessionModeOf(log.events);
       turns.set(id, undefined);
       modes.set(id, mode);
-      mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
+      mcp.register(id, log.session.workspace, params.mcpServers ?? [], sessionBrowser(params._meta, log.events));
       io.err(`session: ${id} forked from ${sessionId} at ${turnSeq}, log: ${log.file}`);
       return { sessionId: id, modes: modeState(mode), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
     })

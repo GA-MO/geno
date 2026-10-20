@@ -20,8 +20,9 @@ export const DEFAULT_BROWSER_SETTINGS: BrowserSettings = { enabled: false, headl
  * closes, so the user's cookies and logins are never reachable; without it the server keeps a profile under the home
  * folder. Usage statistics and the CrUX lookup would send page URLs to Google. Structured content is how the engine
  * learns where each page went. The performance and memory tools are left out: they write traces and heap snapshots.
+ * `roots` are the folders its file tools may write in: the workspace and the session's scratchpad.
  */
-export const browserServerArgs = ({ headless }: Pick<BrowserSettings, 'headless'>, workspace: string): string[] => [
+export const browserServerArgs = ({ headless }: Pick<BrowserSettings, 'headless'>, roots: readonly string[]): string[] => [
   '--isolated',
   ...(headless ? ['--headless'] : []),
   '--no-usage-statistics',
@@ -31,7 +32,7 @@ export const browserServerArgs = ({ headless }: Pick<BrowserSettings, 'headless'
   '--categoryMemory=false',
   `--screenshotMaxWidth=${MAX_LONG_SIDE}`,
   `--screenshotMaxHeight=${MAX_LONG_SIDE}`,
-  `--filesystemRoot=${workspace}`,
+  ...roots.map((root) => `--filesystemRoot=${root}`),
 ];
 
 /** Turns off the server's own calls home: the usage statistics and the npm check for a newer version. */
