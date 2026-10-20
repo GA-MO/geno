@@ -212,6 +212,7 @@ export type SubagentEnv = {
   /** The parent's tools and system prompt, which a fork reuses so that it shares the parent's cached prefix. */
   readonly parentMode: () => Pick<Mode, 'tools' | 'system'>;
   readonly readRoots: readonly string[];
+  readonly writeRoots: readonly string[];
   /** Where a child on an external agent runs its process; undefined starts one for that child alone. */
   readonly externals?: ExternalAgents | undefined;
   readonly keyOf?: KeyOf | undefined;
@@ -643,12 +644,13 @@ export function subagents(env: SubagentEnv): Subagents {
     const mcp = start === 'fork' || session.backend !== undefined || !grantsMcp(agent.mcp) ? undefined : await env.mcp?.(childApproval, agent.mcp);
     const mode: Mode =
       start === 'fork'
-        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals, toolHooks, stop }
+        ? { ...env.parentMode(), executors, readRoots: env.readRoots, writeRoots: env.writeRoots, arrivals, toolHooks, stop }
         : {
             toolHooks,
             stop,
             ...freshOffer(agent, [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION], { ...executors, [REPORT_TOOL]: reportExecutor }, mcp),
             readRoots: env.readRoots,
+            writeRoots: env.writeRoots,
             arrivals,
             handback: true,
           };

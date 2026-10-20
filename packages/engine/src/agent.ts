@@ -1,5 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -73,7 +73,7 @@ import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
-import { reopenScratchpad } from './environment.js';
+import { recordedScratchpad, reopenScratchpad } from './environment.js';
 import { openMcpHub, type McpTools } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
@@ -226,7 +226,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const head = opened.log.events[0];
   // The scratchpad the session's environment names, which outlives the run; a log from before sessions had one gets a
   // temp dir for this run only.
-  const recorded = head?.kind === 'session-start' ? head.environment?.scratchpad : undefined;
+  const recorded = recordedScratchpad(opened.log.events);
   const scratchpad = recorded !== undefined && (await reopenScratchpad(recorded)) ? recorded : undefined;
   if (recorded !== undefined && scratchpad === undefined) io.err(`scratchpad: ${recorded} is no longer in a private folder of this user, so this run uses a temp dir of its own`);
   const tempDir = scratchpad ?? (await mkdtemp(path.join(tmpdir(), 'gcode-agent-')));
@@ -354,7 +354,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const agentTool = options.agentTool ?? (settings.geno.agentTool?.value ?? agentToolModes(session.provider, session.model)).includes(startMode);
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     // The session's temp dir is its own: the environment text offers it for scratch files, and bash's TMPDIR is it.
-    const readRoots = [tempDir, ...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
+    const scratch = await realpath(tempDir);
+    const writeRoots = [scratch];
+    const readRoots = [scratch, ...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const scan = await loadAgents(workspace, homes, plugins, subagentModelsOf(io.env));
     for (const problem of scan.problems) io.err(`agents: ${problem}`);
     // A prompt logged before the run, with its attachments, is the newest event.
@@ -386,6 +388,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
             },
       parentMode: () => ({ tools: mode.tools, system: mode.system }),
       readRoots,
+      writeRoots,
       externals: options.externals,
       keyOf: options.keyOf,
       steers,
@@ -429,6 +432,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       }),
       system,
       readRoots,
+      writeRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       arrivals: () => steers.inbox.take(session.id),
       notice: async (events: readonly TurnEvent[]) =>
