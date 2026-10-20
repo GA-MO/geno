@@ -46,6 +46,7 @@ import {
   trackedFiles,
   trustedDomains,
   ruleDenial,
+  unsandboxedDenial,
   userRuleDenial,
   type AgentToolName,
   type ApprovalMode,
@@ -196,6 +197,11 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   if (rule === 'hook-ask') {
     return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. ${DONT_ASK}`;
   }
+  if (rule === 'unsandboxed' && decidedBy === 'rule') {
+    return mode === 'non-interactive'
+      ? `denied: \`${command}\` would run outside the sandbox, which only the user can approve, and nobody can answer here. ${DONT_ASK}`
+      : `denied: \`${command}\` would run outside the sandbox. ${MODE_REFUSALS[mode] ?? 'Only the user can approve that'}. Do not retry it; find another way.`;
+  }
   if (rule === 'workspace-deny') {
     return `denied: \`${command}\` matches ${reason}. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
@@ -305,6 +311,8 @@ async function scriptsOf(workspace: string): Promise<Scripts> {
   }
 }
 
+const UNSANDBOXED_BACKGROUND = 'dangerouslyDisableSandbox runs a command in the foreground only, not with run_in_background. Run it in the foreground, or in the background without the flag.';
+const UNSANDBOXED_IN_LANE = 'dangerouslyDisableSandbox is not available in a lane: its sandbox is what keeps commands out of the main checkout. Run the command in the sandbox, or say in your answer what it needs.';
 const LINGERING = '[Geno] A process this command started is still running. Geno stops it when this run ends.';
 // The sandbox lets a command signal only processes of its own call, so a kill of a background job fails.
 const SIGNAL_REFUSED = /not permitted|No such process/;
@@ -705,8 +713,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       : ` To stop a background command Geno started, call task_stop with its id: ${jobs.map((job) => `${job.id} (\`${job.command}\`)`).join(', ')}.`;
   };
 
-  /** The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal throws. */
-  const approveCommand = async (command: string, ctx: ToolContext, background: boolean): Promise<ApprovalRecord | undefined> => {
+  /**
+   * The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal
+   * throws. A command to run `unsandboxed` always waits for the user's yes, whatever the rules allow.
+   */
+  const approveCommand = async (command: string, ctx: ToolContext, background: boolean, unsandboxed = false): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
     if (background && mode === 'plan') throw new ToolError(`background commands are not available: ${MODE_REFUSALS.plan}. Do not retry it.`);
     const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
@@ -717,7 +728,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const ruled = ruledDenial(command, judged, mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
     const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, judged, 'ask', rules)?.offer;
-    const denial = ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
+    const denial = unsandboxed ? unsandboxedDenial(command, mode, ruled) : ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
@@ -756,9 +767,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       description: optional(z.string()),
       timeout_seconds: optional(z.number().int().positive().max(MAX_BASH_TIMEOUT_SECONDS)),
       run_in_background: optional(z.boolean()),
+      dangerouslyDisableSandbox: optional(z.boolean()),
     }),
     describe: ({ command }) => `bash ${command}`,
-    async run({ command, description, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS, run_in_background = false }, ctx) {
+    async run({ command, description, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS, run_in_background = false, dangerouslyDisableSandbox: outside = false }, ctx) {
+      if (outside && run_in_background) throw new ToolError(UNSANDBOXED_BACKGROUND);
+      // A lane's sandbox is what keeps its commands out of the main checkout.
+      if (outside && tools.lane !== undefined) throw new ToolError(UNSANDBOXED_IN_LANE);
       const background = run_in_background ? tools.background : undefined;
       if (run_in_background && background === undefined) throw new ToolError(NO_BACKGROUND);
       // Only where run_in_background and monitor exist to wait with instead; a subagent may still sleep.
@@ -772,7 +787,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       // Before the approval, so a line that runs nothing asks nobody.
       const fileSteps = fileStepRefusal(command, ctx.workspace);
       if (fileSteps !== undefined) throw new ToolError(fileSteps);
-      const approval = await approveCommand(command, ctx, background !== undefined);
+      const approval = await approveCommand(command, ctx, background !== undefined, outside);
       if (background !== undefined) {
         const { text } = await startInBackground(background, command, description, ctx);
         return approval === undefined ? text : { text, approval };
@@ -782,6 +797,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         env: tools.env,
         timeoutMs: timeout_seconds * 1000,
         signal: ctx.signal,
+        ...(outside ? { outside: true } : {}),
       });
       if (result.lingering !== undefined) leftRunning.add(result.lingering);
       const killedAfter = result.timedOut ? timeout_seconds : undefined;
