@@ -441,7 +441,12 @@ const GRAY = [
 ];
 
 // Credentials, which the read, grep and glob tools refuse: Ask asks before a command names one.
-const SECRET = ['cat .env', 'cat .env.local', 'grep -r "API_KEY" .env*', 'cat .e*', 'head config/secrets.json', 'grep -r password config/credentials', 'cat id_rsa', 'cp .env.example .env'];
+const SECRET = [
+  'cat .env', 'cat .env.local', 'grep -r "API_KEY" .env*', 'cat .e*', 'head config/secrets.json', 'grep -r password config/credentials', 'cat id_rsa', 'cp .env.example .env',
+  'cat .npmrc', 'cat .netrc', 'cat .[!.]*', 'cat .??*', 'cat src/.e[n]v', 'cat .[a-z]*',
+];
+// jq and JSON paths, whose brackets index rather than glob.
+const JSON_PATHS = ["jq '.commit[0:7]' a.json", "jq '.items[0]' a.json", 'jq .name a.json', "jq '.[] | .id' a.json", "jq '.[0].name' a.json", `jq '.data["key"]' a.json`, "jq '.list[-1]' a.json", "jq '.list[2:]' a.json"];
 
 describe('auto mode', () => {
   it.each(MODE_TABLE)('gives %s (%s) its verdict in each mode', (rule, command, expected) => {
@@ -530,6 +535,10 @@ describe('auto mode', () => {
     expect(denialFor(command, scope, 'auto')?.verdict).toBe('classify');
     expect(denialFor(command, scope, 'plan')?.verdict).toBe('deny');
     expect(denialFor(command, scope, 'non-interactive')).toMatchObject({ rule: 'secret-path', verdict: 'deny' });
+  });
+
+  it.each(JSON_PATHS)('names no credentials file in %s', (command) => {
+    expect(denialFor(command, scope, 'ask')).toBeUndefined();
   });
 
   it('asks about the whole line when one part asks and another would go to the classifier', () => {
@@ -662,16 +671,31 @@ describe('P31 directories beyond the workspace', () => {
   });
 });
 
-// What each mode does with a command that asks to run outside the sandbox, whatever the line holds.
+// What each mode does with a command that asks to run outside the sandbox: Ask always asks, Auto lets the classifier judge.
 const SANDBOX_MODE_TABLE: readonly [SandboxRuleId, string, Record<ApprovalMode, RuleVerdict>][] = [
-  ['unsandboxed', 'ls', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
-  ['unsandboxed', 'git init', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['unsandboxed', 'ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['unsandboxed', 'git init', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['unsandboxed', 'gh api repos/GA-MO/trip/pages/builds/latest --jq .commit[0:7]', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['unsandboxed', 'open http://localhost:8765/?theme=ai', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+];
+
+// What stays the user's outside the sandbox in Auto, however the classifier would answer.
+const UNSANDBOXED_ASKS = [
+  'cat ~/.ssh/id_rsa',
+  'cat $HOME/.config/gh/hosts.yml',
+  'tar czf /tmp/k.tgz /Users/me/.aws',
+  'cat .env',
+  'ls .e*',
+  'rm -rf ~/Documents',
+  'git push --force origin main',
+  'echo hi > .git/hooks/pre-commit',
+  'echo "open quote',
 ];
 
 describe('a command to run outside the sandbox', () => {
-  it.each(SANDBOX_MODE_TABLE)('gives %s (%s) its verdict in each mode: the user answers it, never the classifier, even on the safe list', (rule, command, expected) => {
+  it.each(SANDBOX_MODE_TABLE)('gives %s (%s) its verdict in each mode: Ask asks even on the safe list, Auto classifies', (rule, command, expected) => {
     for (const mode of APPROVAL_MODES) {
-      expect([mode, unsandboxedDenial(command, mode, denialFor(command, scope, mode))]).toEqual([mode, { rule, reason: expect.any(String), command, verdict: expected[mode] }]);
+      expect([mode, unsandboxedDenial(command, scope, mode, denialFor(command, scope, mode))]).toEqual([mode, { rule, reason: expect.any(String), command, verdict: expected[mode] }]);
     }
   });
 
@@ -679,17 +703,30 @@ describe('a command to run outside the sandbox', () => {
     expect(new Set(SANDBOX_MODE_TABLE.map(([rule]) => rule))).toEqual(new Set(SANDBOX_RULE_IDS));
   });
 
+  it.each(UNSANDBOXED_ASKS)('asks the user in Auto, never the classifier, about %s', (command) => {
+    expect(unsandboxedDenial(command, scope, 'auto', denialFor(command, scope, 'auto'))).toMatchObject({ rule: 'unsandboxed', verdict: 'ask' });
+    expect(unsandboxedDenial(command, scope, 'ask', denialFor(command, scope, 'ask'))).toMatchObject({ rule: 'unsandboxed', verdict: 'ask' });
+  });
+
+  it('asks in Auto where a rule asks, such as a workspace ask rule', () => {
+    const ruled: Denial = { rule: 'workspace-ask', reason: 'the workspace rule that asks before `pnpm publish`', command: 'pnpm publish', verdict: 'ask' };
+    expect(unsandboxedDenial('pnpm publish', scope, 'auto', ruled)).toMatchObject({ rule: 'unsandboxed', verdict: 'ask' });
+  });
+
   it("puts a rule's question on the same card, with the whole line, and offers no rule to keep", () => {
     const ruled: Denial = { rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl get pods', line: 'pnpm build && kubectl get pods', verdict: 'classify', offer: ['kubectl', 'get'] };
-    const denial = unsandboxedDenial('pnpm build && kubectl get pods', 'auto', ruled);
-    expect(denial).toEqual({ rule: 'unsandboxed', reason: expect.stringContaining('a cloud CLI'), command: 'kubectl get pods', line: 'pnpm build && kubectl get pods', verdict: 'ask' });
-    expect(denial.reason).toMatch(/^no sandbox/);
+    for (const mode of ['ask', 'auto'] as const) {
+      const denial = unsandboxedDenial('pnpm build && kubectl get pods', scope, mode, ruled);
+      expect(denial).toEqual({ rule: 'unsandboxed', reason: expect.stringContaining('a cloud CLI'), command: 'kubectl get pods', line: 'pnpm build && kubectl get pods', verdict: mode === 'ask' ? 'ask' : 'classify' });
+      expect(denial.reason).toMatch(/^no sandbox/);
+    }
   });
 
   it("keeps a rule's refusal where someone could answer, and refuses for the sandbox where nobody can", () => {
     const denied: Denial = { rule: 'workspace-deny', reason: 'the workspace rule that denies `pnpm publish`', command: 'pnpm publish', verdict: 'deny' };
-    expect(unsandboxedDenial('pnpm publish', 'ask', denied)).toEqual(denied);
-    expect(unsandboxedDenial('pnpm publish', 'auto', denied)).toEqual(denied);
-    expect(unsandboxedDenial('git push', 'non-interactive', denialFor('git push', scope, 'non-interactive'))).toMatchObject({ rule: 'unsandboxed', command: 'git push', verdict: 'deny' });
+    expect(unsandboxedDenial('pnpm publish', scope, 'ask', denied)).toEqual(denied);
+    expect(unsandboxedDenial('pnpm publish', scope, 'auto', denied)).toEqual(denied);
+    expect(unsandboxedDenial('git push', scope, 'non-interactive', denialFor('git push', scope, 'non-interactive'))).toMatchObject({ rule: 'unsandboxed', command: 'git push', verdict: 'deny' });
+    expect(unsandboxedDenial('git push', scope, 'plan', denialFor('git push', scope, 'plan'))).toMatchObject({ rule: 'unsandboxed', command: 'git push', verdict: 'deny' });
   });
 });
