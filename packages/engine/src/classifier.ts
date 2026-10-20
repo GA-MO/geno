@@ -11,6 +11,7 @@ import {
   costOf,
   isProviderName,
   type ClassifierInput,
+  type ClassifierFailure,
   type ClassifierRun,
   type ClassifierVerdict,
 } from '@g-code/core';
@@ -20,8 +21,8 @@ import { wireFor } from './wire.js';
 import type { Wire } from './wire-shape.js';
 
 /**
- * Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`, which goes to the user. A call
- * that timed out or gave no verdict is tried once more first; a real `ask` or `deny` is not.
+ * Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask` whose `failure` says how it
+ * failed. A call that timed out or gave no verdict is tried once more first; a real `ask` or `deny` is not.
  */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
 
@@ -69,14 +70,14 @@ const persists = (error: unknown, message: string): boolean =>
 
 export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { timeoutMs = CLASSIFIER_TIMEOUT_MS, onBroken = () => {} }: ClassifierOptions = {}): Classify {
   const { provider, model } = classifierChoiceOf(env);
-  const asks = (reason: string, latencyMs = 0, costUsd: number | null = null): ClassifierRun => ({ verdict: 'ask', reason, model: model ?? 'none', latencyMs, costUsd });
+  const asks = (failure: ClassifierFailure, reason: string, latencyMs = 0, costUsd: number | null = null): ClassifierRun => ({ verdict: 'ask', reason, model: model ?? 'none', latencyMs, costUsd, failure });
   const broken = (problem: string): Classify => async () => {
     onBroken(problem);
-    return asks(`the classifier is not set up: ${problem}`);
+    return asks('unavailable', `the classifier is not set up: ${problem}`);
   };
   const sandboxHosts = sandboxDomainsOf(env);
 
-  if (model === 'off') return async () => asks('the classifier is off');
+  if (model === 'off') return async () => asks('unavailable', 'the classifier is off');
   if (!isProviderName(provider)) return broken(`unknown classifier provider ${provider}`);
   if (model === undefined) return broken(`${provider} has no default model, so name one in gcode.roles.classifier.model or GCODE_CLASSIFIER_MODEL`);
   let wire: Wire;
@@ -98,12 +99,13 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, { t
       const answer = classifierAnswerOf(message.content);
       return answer.kind === 'verdict'
         ? { kind: 'verdict', run: { ...answer.verdict, model, latencyMs: elapsed(), costUsd } }
-        : { kind: 'transient', run: asks(answer.reason, elapsed(), costUsd) };
+        : { kind: 'transient', run: asks('unevaluated', answer.reason, elapsed(), costUsd) };
     } catch (error) {
-      if (timeout.aborted) return { kind: 'transient', run: asks(`the classifier timed out after ${timeoutMs / 1000}s`, elapsed()) };
+      if (timeout.aborted) return { kind: 'transient', run: asks('unevaluated', `the classifier timed out after ${timeoutMs / 1000}s`, elapsed()) };
       const message = wire.redact(messagesOf(error).join(': '));
-      if (!signal.aborted && persists(error, message)) onBroken(`${provider} ${model}: ${message.slice(0, 200)}`);
-      return { kind: 'failed', run: asks(`the classifier failed: ${message}`, elapsed()) };
+      const lasting = !signal.aborted && persists(error, message);
+      if (lasting) onBroken(`${provider} ${model}: ${message.slice(0, 200)}`);
+      return { kind: 'failed', run: asks(lasting ? 'unavailable' : 'unevaluated', `the classifier failed: ${message}`, elapsed()) };
     }
   };
 
