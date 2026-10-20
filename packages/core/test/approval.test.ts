@@ -8,11 +8,15 @@ import {
   filesRun,
   credentialPlaces,
   inCredentialPlace,
+  SANDBOX_RULE_IDS,
   splitCommand,
+  unsandboxedDenial,
   type ApprovalMode,
   type CommandScope,
+  type Denial,
   type DenyRuleId,
   type RuleVerdict,
+  type SandboxRuleId,
 } from '../src/approval.js';
 
 const scope: CommandScope = { workspace: '/Users/me/ws', tempDir: '/private/var/folders/x/T/gcode-tmp', home: '/Users/me' };
@@ -655,5 +659,37 @@ describe('P31 directories beyond the workspace', () => {
     expect(outsideReadDenial('read /Users/me/.Azure/token', '/Users/me/.Azure/token', '/Users/me/.Azure', 'ask', places)?.directory).toBeUndefined();
     expect(outsideReadDenial('read /Users/me/.config/other/a', '/Users/me/.config/other/a', '/Users/me/.config/other', 'ask', places)?.directory).toBe('/Users/me/.config/other');
     expect(inCredentialPlace(places, '/Users/me/.config/ghost')).toBe(false);
+  });
+});
+
+// What each mode does with a command that asks to run outside the sandbox, whatever the line holds.
+const SANDBOX_MODE_TABLE: readonly [SandboxRuleId, string, Record<ApprovalMode, RuleVerdict>][] = [
+  ['unsandboxed', 'ls', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['unsandboxed', 'git init', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+];
+
+describe('a command to run outside the sandbox', () => {
+  it.each(SANDBOX_MODE_TABLE)('gives %s (%s) its verdict in each mode: the user answers it, never the classifier, even on the safe list', (rule, command, expected) => {
+    for (const mode of APPROVAL_MODES) {
+      expect([mode, unsandboxedDenial(command, mode, denialFor(command, scope, mode))]).toEqual([mode, { rule, reason: expect.any(String), command, verdict: expected[mode] }]);
+    }
+  });
+
+  it('covers every sandbox rule in its mode table', () => {
+    expect(new Set(SANDBOX_MODE_TABLE.map(([rule]) => rule))).toEqual(new Set(SANDBOX_RULE_IDS));
+  });
+
+  it("puts a rule's question on the same card, with the whole line, and offers no rule to keep", () => {
+    const ruled: Denial = { rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl get pods', line: 'pnpm build && kubectl get pods', verdict: 'classify', offer: ['kubectl', 'get'] };
+    const denial = unsandboxedDenial('pnpm build && kubectl get pods', 'auto', ruled);
+    expect(denial).toEqual({ rule: 'unsandboxed', reason: expect.stringContaining('a cloud CLI'), command: 'kubectl get pods', line: 'pnpm build && kubectl get pods', verdict: 'ask' });
+    expect(denial.reason).toMatch(/^no sandbox/);
+  });
+
+  it("keeps a rule's refusal where someone could answer, and refuses for the sandbox where nobody can", () => {
+    const denied: Denial = { rule: 'workspace-deny', reason: 'the workspace rule that denies `pnpm publish`', command: 'pnpm publish', verdict: 'deny' };
+    expect(unsandboxedDenial('pnpm publish', 'ask', denied)).toEqual(denied);
+    expect(unsandboxedDenial('pnpm publish', 'auto', denied)).toEqual(denied);
+    expect(unsandboxedDenial('git push', 'non-interactive', denialFor('git push', scope, 'non-interactive'))).toMatchObject({ rule: 'unsandboxed', command: 'git push', verdict: 'deny' });
   });
 });

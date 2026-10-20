@@ -136,6 +136,32 @@ describe('two sandboxes open at once', () => {
     }
   });
 
+  it('runs a command outside with its own TMPDIR but not its caches, and stops what it left running when it closes', async () => {
+    const a = await chat('chat-outside');
+    const target = path.join(outside, 'from-outside.txt');
+    const running = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let pid = 0;
+    try {
+      const command = `echo out > '${target}' && echo "tmp=$TMPDIR npm=$npm_config_cache"; sleep 60 >/dev/null 2>&1 & echo "pid=$!"`;
+      const result = await a.sandbox.run(command, { cwd: a.ws, env: childEnv(process.env), timeoutMs: 30_000, outside: true });
+      expect(await readFile(target, 'utf8')).toBe('out\n');
+      expect(result.output).toContain(`tmp=${a.tempDir} `);
+      expect(result.output).not.toContain(path.join(a.tempDir, 'npm-cache'));
+      pid = Number(/pid=(\d+)/.exec(result.output)?.[1]);
+      expect(running(pid)).toBe(true);
+    } finally {
+      await a.sandbox.close();
+    }
+    await expect.poll(() => running(pid)).toBe(false);
+  });
+
   it("each writes its own workspace and never the other's", async () => {
     const a = await chat('chat-a');
     const b = await chat('chat-b');

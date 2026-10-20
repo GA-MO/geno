@@ -72,7 +72,7 @@ scenario:
       do: >-
         `approveCommand` ตรวจคำสั่งเบื้องหลังด้วยกฎชุดเดียวกับคำสั่งปกติ ต่างกันข้อเดียวคือโหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด
         `pnpm tsc --watch` ไม่ติดกฎใด จึงไม่มีการ์ดและไม่มี classifier
-      ref: "packages/engine/src/tools/agent.ts#\"const approveCommand = async (command: string, ctx: ToolContext, background: boolean)\""
+      ref: "packages/engine/src/tools/agent.ts#\"const approveCommand = async (command: string, ctx: ToolContext, background: boolean\""
 
     - id: start
       lane: tool
