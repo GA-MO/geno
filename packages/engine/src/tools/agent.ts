@@ -156,9 +156,10 @@ async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInp
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
- * In Auto the classifier's allow runs the command. Its deny or ask refuses it, with its reason going back to the
- * model, until the session has had too many such blocks in a row or in all (`autoFallsBack`): then the user's card
- * decides. A classifier call that failed puts the card to the user. `keep` runs, and is awaited, when the user's yes
+ * In Auto the classifier's allow runs the command. Its deny or ask, or a call it could not evaluate, refuses it, with
+ * the reason going back to the model, until the session has had too many such blocks in a row or in all
+ * (`autoFallsBack`): then the user's card decides. A classifier that cannot judge anything, being off or not set up or
+ * refused for its key or model, puts the card to the user. `keep` runs, and is awaited, when the user's yes
  * outlives the call. Where the card would show, or where a run nobody can answer would refuse only for that, the
  * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them.
  */
@@ -182,7 +183,8 @@ export async function settle(
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
   const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
   if (classifier?.verdict === 'allow') return { ...record, classifier, decidedBy: 'classifier', verdict: 'allow' };
-  if (classifier !== undefined && classifier.failure === undefined && !autoFallsBack(autoBlocksOf(call.events()))) return { ...record, classifier, decidedBy: 'classifier', verdict: 'deny' };
+  // A classifier that cannot judge anything would refuse every such call, so the user's card stands in for it.
+  if (classifier !== undefined && classifier.failure !== 'unavailable' && !autoFallsBack(autoBlocksOf(call.events()))) return { ...record, classifier, decidedBy: 'classifier', verdict: 'deny' };
   const byHook = await hooked();
   if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
   const answer = await approval.approve(denial, classifier);
@@ -200,7 +202,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   }
   // As Claude Code's auto mode words it: the model may take another route, or ask the user in its answer.
   if (decidedBy === 'classifier') {
-    return `denied: Auto mode's safety classifier refused \`${command}\`, so it did not run: ${classifier?.reason.replace(/\.$/, '')}. ${DONT_ASK}`;
+    const why = classifier?.reason.replace(/\.$/, '');
+    return classifier?.failure === 'unevaluated'
+      ? `denied: Auto mode could not evaluate \`${command}\` (${why}), so it did not run. ${DONT_ASK}`
+      : `denied: Auto mode's safety classifier refused \`${command}\`, so it did not run: ${why}. ${DONT_ASK}`;
   }
   if (rule === 'hook-ask') {
     return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. ${DONT_ASK}`;

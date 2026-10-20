@@ -285,7 +285,7 @@
           ],
           "enumDescriptions": [
             "Ask before every command that is not on the safe list or a saved allow rule. Edits apply without asking; the sandbox and checkpoints cover them.",
-            "Run clearly safe commands on its own and let a classifier judge the rest, a command the agent asks to run outside the sandbox included. What the classifier refuses goes back to the agent with its reason, and after 3 refusals in a row or 20 in a chat you decide the next one. Geno still asks before deleting the workspace, its .git or a path outside it."
+            "Run clearly safe commands on its own and let a classifier judge the rest, a command the agent asks to run outside the sandbox included. What the classifier refuses or cannot evaluate goes back to the agent with the reason, and after 3 refusals in a row or 20 in a chat you decide the next one; a classifier that is not set up asks you instead. Geno still asks before deleting the workspace, its .git or a path outside it."
           ],
           "default": "ask",
           "description": "The approval mode new chats start in. The picker in the composer switches the open chat."

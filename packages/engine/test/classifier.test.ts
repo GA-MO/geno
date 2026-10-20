@@ -95,7 +95,7 @@ describe('the command classifier', () => {
   it('asks when the model does not answer before the timeout on both tries', async () => {
     const started = performance.now();
     const { run, transport } = await classify([stalled, stalled], 50);
-    expect(run.verdict).toBe('ask');
+    expect(run).toMatchObject({ verdict: 'ask', failure: 'unevaluated' });
     expect(run.reason).toMatch(/timed out/);
     expect(transport.requests).toHaveLength(2);
     expect(performance.now() - started).toBeLessThan(2000);
@@ -110,7 +110,7 @@ describe('the command classifier', () => {
 
   it('asks on two malformed answers, and takes the verdict a retry gives after one', async () => {
     const twice = await classify([verdict({ verdict: 'sure', reason: 'x' }), verdict({ verdict: 'sure', reason: 'x' })]);
-    expect(twice.run.verdict).toBe('ask');
+    expect(twice.run).toMatchObject({ verdict: 'ask', failure: 'unevaluated' });
     expect(twice.transport.requests).toHaveLength(2);
     const once = await classify([verdict({ verdict: 'sure', reason: 'x' }), verdict({ verdict: 'allow', reason: 'only build output' })]);
     expect(once.run.verdict).toBe('allow');
@@ -120,6 +120,7 @@ describe('the command classifier', () => {
   it.each(['ask', 'deny'] as const)('does not retry a real %s', async (said) => {
     const { run, transport } = await classify([verdict({ verdict: said, reason: 'unclear' }), verdict({ verdict: 'allow', reason: 'x' })]);
     expect(run.verdict).toBe(said);
+    expect(run.failure).toBeUndefined();
     expect(transport.requests).toHaveLength(1);
   });
 
@@ -134,10 +135,10 @@ describe('the command classifier', () => {
 
   it('asks on a gateway error or a rejected key, without retrying', async () => {
     const rejected = await classify([httpError(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }), verdict({ verdict: 'allow', reason: 'x' })]);
-    expect(rejected.run.verdict).toBe('ask');
+    expect(rejected.run).toMatchObject({ verdict: 'ask', failure: 'unavailable' });
     expect(rejected.transport.requests).toHaveLength(1);
     const { run, transport } = await classify([httpError(500, { error: { type: 'api_error', message: 'internal error' } }), verdict({ verdict: 'allow', reason: 'x' })]);
-    expect(run.verdict).toBe('ask');
+    expect(run).toMatchObject({ verdict: 'ask', failure: 'unevaluated' });
     expect(run.reason).toMatch(/internal error/);
     expect(transport.requests).toHaveLength(1);
   });
@@ -150,7 +151,7 @@ describe('the command classifier', () => {
   it('asks without calling anything when the provider key is missing', async () => {
     const transport = fakeTransport([]);
     const run = await commandClassifier({}, transport.fetch, { timeoutMs: 8000 })(input, new AbortController().signal);
-    expect(run.verdict).toBe('ask');
+    expect(run).toMatchObject({ verdict: 'ask', failure: 'unavailable' });
     expect(run.reason).toMatch(/DASHSCOPE_API_KEY/);
     expect(transport.requests).toHaveLength(0);
   });
