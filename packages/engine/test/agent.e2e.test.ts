@@ -364,7 +364,7 @@ const userText = (request: { body: { messages: { content: { text: string }[] }[]
 describe('gcode agent --mode auto', () => {
   it('G-09 counts the classifier calls in the run cost and in gcode usage', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
-    const transport = fakeTransport([toolCall('One.', [bash('node -e "1"')], usage), verdict('allow', 'harmless'), answer('Done.', usage)]);
+    const transport = fakeTransport([toolCall('One.', [bash('rm -rf out-1')], usage), verdict('allow', 'harmless'), answer('Done.', usage)]);
     const ran = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
     expect(ran.code, ran.stderr).toBe(0);
     const id = sessionIdOf(ran.stdout);
@@ -431,13 +431,13 @@ describe('gcode agent --mode auto', () => {
   it('keeps auto on a resumed session, and ask mode never calls the classifier', async () => {
     const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
     const transport = fakeTransport([
-      toolCall('One.', [bash('node -e "1"')], usage),
+      toolCall('One.', [bash('rm -rf out-1')], usage),
       verdict('allow', 'harmless'),
       answer('Done.', usage),
-      toolCall('Two.', [bash('node -e "2"')], usage),
+      toolCall('Two.', [bash('rm -rf out-2')], usage),
       verdict('allow', 'harmless'),
       answer('Done.', usage),
-      toolCall('Three.', [bash('node -e "3"')], usage),
+      toolCall('Three.', [bash('rm -rf out-3')], usage),
     ]);
     const first = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
     const id = sessionIdOf(first.stdout);

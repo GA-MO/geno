@@ -26,6 +26,7 @@ export const DENY_RULE_IDS = [
   'secret-path',
   'process-kill',
   'unlisted',
+  'secret-search',
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
 
@@ -48,9 +49,9 @@ export type SimpleCommand = {
 
 /**
  * `plan` reads and runs only what is clearly safe, and changes nothing. `ask` asks the user before every flagged command.
- * `auto` runs what is clearly safe, asks before an `rm -rf` outside the workspace, and lets the classifier judge the
- * rest: it runs what the classifier allows, refuses what it denies, and asks the user about the rest.
- * Non-interactive runs, such as evals, have nobody to ask.
+ * `auto` runs what is clearly safe and, in the sandbox, what no rule but the safe list flags; asks before an `rm -rf`
+ * outside the workspace; and lets the classifier judge the rest: it runs what the classifier allows and refuses the
+ * rest, until too many refusals hand the next one to the user. Non-interactive runs, such as evals, have nobody to ask.
  */
 export const APPROVAL_MODES = ['plan', 'ask', 'auto', 'non-interactive'] as const;
 export type ApprovalMode = (typeof APPROVAL_MODES)[number];
@@ -139,6 +140,8 @@ const ALWAYS_ASK = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': '
 // What Auto lets the classifier judge. A command still cannot write outside the workspace or reach the network,
 // because the sandbox stops it.
 const ASK_OR_CLASSIFY: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
+// What only Auto's classifier judges: in every other mode a rule ahead of it already flags the same command.
+const AUTO_ONLY: Verdicts = { plan: 'allow', ask: 'allow', auto: 'classify', 'non-interactive': 'allow' };
 
 const CLOUD_CLIS = new Set([
   'aws', 'az', 'bq', 'doctl', 'eksctl', 'firebase', 'fly', 'flyctl', 'gcloud', 'gsutil', 'helm', 'heroku',
@@ -431,6 +434,7 @@ export const inCredentialPlace = (places: readonly string[], target: string): bo
 
 // A search for credentials by name, which a recursive grep answers from any file it reaches, such as .env.
 const SECRET_TERM = /api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key/i;
+const SEARCH_PROGRAMS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
 // A write under .git, such as a hook, runs later outside any command the user sees.
 const GIT_DIR = /(?:^|\/)\.git(?:\/|$)/;
 const UNSAFE_WORD = [SECRET_PATH, HIDDEN_GLOB, SECRET_TERM, GIT_DIR];
@@ -526,12 +530,20 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: ASK_OR_CLASSIFY,
     matches: stopsOthers,
   },
-  // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. A run nobody can
-  // ask runs it in the sandbox.
+  // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. Auto and a run
+  // nobody can ask run it in the sandbox, as Claude Code's auto mode runs a sandboxed command no category flags; a
+  // command asked to run outside the sandbox meets the classifier all the same (`unsandboxedDenial`).
   unlisted: {
     reason: 'a command not on the safe list',
-    verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' },
     matches: (command, scope) => !isClearlySafe(command) && !killsOnlyOwn(command, scope),
+  },
+  // What the sandbox does not hold back of an unlisted command: a search for credentials by name prints what it finds,
+  // .env included, to the model. Every other mode meets the same search as unlisted.
+  'secret-search': {
+    reason: 'a search for credentials by name, which can print a file such as .env',
+    verdicts: AUTO_ONLY,
+    matches: ({ program, words }) => SEARCH_PROGRAMS.has(program) && words.some((word) => SECRET_TERM.test(word)),
   },
 };
 
@@ -557,7 +569,8 @@ export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
 /** A command line judged whole, before its words (`lineRuleOf`). */
 export const LINE_RULE_IDS = ['long-command', 'unparsable-command'] as const;
 export type LineRuleId = (typeof LINE_RULE_IDS)[number];
-// As the unlisted rule: Ask asks, and a run nobody can ask still runs it in the sandbox.
+// As the unlisted rule, Ask asks and a run nobody can ask still runs it in the sandbox; Auto's classifier judges it,
+// since Geno cannot tell what the line runs.
 const LINE_VERDICTS: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' };
 export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
   'long-command': { reason: 'a command over 10,000 characters', verdicts: LINE_VERDICTS },
