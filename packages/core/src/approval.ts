@@ -135,7 +135,7 @@ export type Denial = {
 export const withSubject = (denial: Denial | undefined, subject: ApprovalSubject): Denial | undefined => (denial === undefined ? undefined : { ...denial, subject });
 
 // What cannot be undone: Auto still asks.
-const ALWAYS_ASK: Verdicts = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
+const ALWAYS_ASK = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' } as const satisfies Verdicts;
 // What Auto lets the classifier judge. A command still cannot write outside the workspace or reach the network,
 // because the sandbox stops it.
 const ASK_OR_CLASSIFY: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
@@ -562,11 +562,17 @@ export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; 
   'long-command': { reason: 'a command over 10,000 characters', verdicts: LINE_VERDICTS },
   'unparsable-command': { reason: 'a command Geno cannot split into simple commands, such as an open quote or a line that ends in &&', verdicts: LINE_VERDICTS },
 };
+/** A bash call with dangerouslyDisableSandbox: a property of the call, not of any word in its command line. */
+export const SANDBOX_RULE_IDS = ['unsandboxed'] as const;
+export type SandboxRuleId = (typeof SANDBOX_RULE_IDS)[number];
+export const SANDBOX_RULES: Readonly<Record<SandboxRuleId, { readonly reason: string; readonly verdicts: { readonly [M in ApprovalMode]: Exclude<Verdicts[M], 'allow'> } }>> = {
+  unsandboxed: { reason: 'no sandbox, which lets it read and change anything your account can', verdicts: ALWAYS_ASK },
+};
 /** A user's PreToolUse hook that asked before a call or denied it (hooks.ts). */
 export const HOOK_RULE_IDS = ['hook-ask', 'hook-deny'] as const;
 export type HookRuleId = (typeof HOOK_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId | LineRuleId | HookRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS, ...LINE_RULE_IDS, ...HOOK_RULE_IDS] as const;
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId | LineRuleId | SandboxRuleId | HookRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS, ...LINE_RULE_IDS, ...SANDBOX_RULE_IDS, ...HOOK_RULE_IDS] as const;
 
 /** The question a PreToolUse hook's ask puts before a call, named by the hook's source as Claude Code labels it. */
 export function hookAskDenial({ reason, from }: { readonly reason: string | undefined; readonly from: string }, command: string): Denial {
@@ -1025,6 +1031,26 @@ export function lineDenial(command: string, mode: ApprovalMode): Denial | undefi
 export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const flags = flagsOf(parseCommandLine(command, scope), scope, mode);
   return withLine(flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags)), command);
+}
+
+/**
+ * The question a command meets when it asks to run outside the sandbox, given what the rules made of it in `mode`
+ * (`ruled`). Plan and a run nobody can answer refuse it. In Ask and Auto a rule's refusal still wins; anything else,
+ * the safe list's commands included, asks the user, with a rule's question merged in and no rule to keep, since a yes
+ * covers only this call.
+ */
+export function unsandboxedDenial(command: string, mode: ApprovalMode, ruled: Denial | undefined): Denial {
+  const { reason, verdicts } = SANDBOX_RULES.unsandboxed;
+  const verdict = verdicts[mode];
+  if (ruled?.verdict === 'deny' && verdict !== 'deny') return ruled;
+  const asked = ruled?.verdict === 'deny' ? undefined : ruled;
+  return {
+    rule: 'unsandboxed',
+    reason: asked === undefined ? reason : `${reason}; ${asked.reason}`,
+    command: asked?.command ?? command.trim(),
+    ...(asked?.line === undefined ? {} : { line: asked.line }),
+    verdict,
+  };
 }
 
 /** The denial with the whole line beside it, when it names one simple command of several. */
