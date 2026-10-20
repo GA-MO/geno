@@ -4,7 +4,7 @@ import { themeKindOf, themeTokensOf, tokenNamesIn, tokenValueProblem, type Theme
 import { REVIEW_MODES, type ReviewMode } from '../../src/review/mode.js';
 import { answerReady, FakeHost } from '../webview/host.js';
 import type { ThemeDump, ThemeSlug } from '../webview/theme.js';
-import { overflowing } from './checks.js';
+import { overflowing, overlapping } from './checks.js';
 import { FIXTURES, GROUPS } from './fixtures.js';
 import type { Fixture, Stage } from './stage.js';
 
@@ -98,6 +98,7 @@ type Mounted = {
   readonly host: FakeHost;
   readonly errors: string[];
   overflow: readonly string[];
+  overlap: readonly string[];
   readonly badge: HTMLElement;
 };
 
@@ -158,8 +159,14 @@ function stageOf(iframe: HTMLIFrameElement, host: FakeHost): Stage {
 const frames = (view: Window) => new Promise<void>((resolve) => view.requestAnimationFrame(() => view.requestAnimationFrame(() => resolve())));
 
 function showBadge(m: Mounted): void {
-  const problems = [...m.errors.map((e) => `Error: ${e}`), ...m.overflow.map((o) => `Overflow: ${o}`)];
-  m.badge.textContent = problems.length === 0 ? '' : `${m.errors.length > 0 ? `${m.errors.length} error${m.errors.length === 1 ? '' : 's'}` : ''}${m.errors.length > 0 && m.overflow.length > 0 ? ' · ' : ''}${m.overflow.length > 0 ? `${m.overflow.length} past the edge` : ''}`;
+  const problems = [...m.errors.map((e) => `Error: ${e}`), ...m.overflow.map((o) => `Overflow: ${o}`), ...m.overlap.map((o) => `Overlap: ${o}`)];
+  m.badge.textContent = [
+    m.errors.length > 0 ? `${m.errors.length} error${m.errors.length === 1 ? '' : 's'}` : '',
+    m.overflow.length > 0 ? `${m.overflow.length} past the edge` : '',
+    m.overlap.length > 0 ? `${m.overlap.length} overlapping` : '',
+  ]
+    .filter((part) => part !== '')
+    .join(' · ');
   m.badge.title = problems.join('\n');
   m.badge.hidden = problems.length === 0;
 }
@@ -169,6 +176,7 @@ async function check(m: Mounted): Promise<void> {
   if (view === null || m.iframe.contentDocument?.body == null) return;
   await frames(view);
   m.overflow = overflowing(m.iframe.contentDocument);
+  m.overlap = overlapping(m.iframe.contentDocument);
   showBadge(m);
 }
 
@@ -179,7 +187,7 @@ function mount(fixture: Fixture, height: number): { readonly iframe: HTMLIFrameE
   iframe.style.height = `${height}px`;
   const badge = h('span', { class: 'badge', hidden: true });
   const host = new FakeHost((message) => deliver(iframe, message), { model: 'qwen3.8-flash', turns: [] });
-  const m: Mounted = { fixture, iframe, host, errors: [], overflow: [], badge };
+  const m: Mounted = { fixture, iframe, host, errors: [], overflow: [], overlap: [], badge };
   host.on('ready', async () => {
     await answerReady(host, fixture.focused ?? true);
     if (Object.keys(controls.tokens).length > 0) await host.post({ type: 'look', look });
