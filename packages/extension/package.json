@@ -1,7 +1,7 @@
 {
   "name": "g-code",
   "displayName": "Geno",
-  "version": "0.18.7",
+  "version": "0.18.8",
   "private": true,
   "publisher": "g-code",
   "icon": "dist/dino/icon.png",
