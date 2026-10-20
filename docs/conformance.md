@@ -682,7 +682,7 @@ P24 also covers rows that have no Claude Code conformance test:
 | A/B-01 | `prompt.conformance.test.ts`: flash and an unknown model open with the rules tier on both wires, and Opus with the principles tier. The eval in `results/p24-prompt-tier.md`: 10/10 on both tiers, and on the rules tier 12.6% fewer tool calls, 10.7% less cost and 18.6% fewer output tokens on average, all within the run-to-run spread. |
 | A/B-09, A/B-10 | Both tiers carry the "no need to wrap up early" and "act; do not re-derive or narrate" lines. A long eval with a low `GCODE_COMPACT_AT` was not run. |
 | B/B-01 | `edit` says to read first and that the check runs after each edit, `bash` says how to run in the background and what a denial means, `read` says a file is current after an edit, and `preview_start` says when to use it. First-try tool failures were 5.6% on the rules tier and 5.8% on the principles tier. |
-| B/B-18 | `bash` lists the git rules: no interactive flags, commit or push only when asked, no `--no-verify` or force-push unless asked, and `gh` for GitHub. There is no sandbox escape parameter. |
+| B/B-18 | `bash` lists the git rules: no interactive flags, commit or push only when asked, no `--no-verify` or force-push unless asked, and `gh` for GitHub. `dangerouslyDisableSandbox` runs one foreground command outside the sandbox after the user approves it (B/B-86). |
 | C/C-44 | `workflow` runs only when the user asks for a workflow. The permission card stays. |
 | T-ASM-06 (effort) | `session.test.ts` (core) and `prompt.conformance.test.ts`: a Haiku 4.5 request has no `output_config`, and an unknown model sends none. |
 
