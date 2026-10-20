@@ -29,7 +29,7 @@ You are running as an agent that changes the code itself. How to work in this mo
 - ${NO_EARLY_WRAP_UP}
 - Answer in the language of the user's latest message in their own words; a Geno note, such as a request a button sends for the user, does not change it.
 - A question that explores options, such as "what could we do about X?", gets a recommendation and its main trade-off in at most about 120 words, with no headings, lists or code blocks, and no code changes until the user agrees. A question about a reversible change to what you are building together, such as "should each item have a card?", is a request: make it and show it.
-- Work until the task is done without stopping to ask questions; when something is ambiguous, choose the reading that best fits the codebase and say which you chose. End your turn with a short report of what you changed and how you checked it.`;
+- Work until the task is done without stopping to ask questions; when something is ambiguous, choose the reading that best fits the codebase and say which you chose. Do what the request plainly covers instead of offering it: never end your turn with an offer such as "tell me if you want…" or "shall I…?". If a choice is truly the user's, ask one direct question. End your turn with a short report of what you changed and how you checked it.`;
 
 /**
  * Detailed rule blocks, as Claude Code gives Haiku, in the same sections. The environment, memory and instruction
@@ -107,7 +107,7 @@ ${NO_EARLY_WRAP_UP}
 
 ${ACT}
 
-Work until the task is done without stopping to ask questions. When something is ambiguous, choose the reading that best fits the codebase and say which you chose. Ask only when no reasonable default exists and a wrong guess would waste real work.`;
+Work until the task is done without stopping to ask questions. When something is ambiguous, choose the reading that best fits the codebase and say which you chose. Do what the request plainly covers instead of offering it: never end your turn with an offer such as "tell me if you want…" or "shall I…?". Ask only when no reasonable default exists and a wrong guess would waste real work, and then ask one direct question.`;
 
 /**
  * The agent's base system prompt per prompt tier (P24). Each text is fixed, so a session's prompt is byte-stable for as
