@@ -25,8 +25,11 @@ export type SandboxPolicy = {
   readonly unixSockets: readonly string[];
 };
 
-/** `writable` lets this one command also write there, as the check writes its build info outside the workspace. */
-export type SandboxRunOptions = ShellOptions & { readonly writable?: readonly string[] };
+/**
+ * `writable` lets this one command also write there, as the check writes its build info outside the workspace.
+ * `outside` runs it with none of the sandbox's rules, for a command the user approved to run outside it.
+ */
+export type SandboxRunOptions = ShellOptions & ({ readonly writable?: readonly string[]; readonly outside?: never } | { readonly outside: true; readonly writable?: never });
 
 export type Sandbox = {
   run(command: string, options: SandboxRunOptions): Promise<ShellResult>;
@@ -227,9 +230,12 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
   const lingering = new Set<number>();
   return {
     run: async (command, options) => {
-      const filesystem = await rules();
-      const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
-      const result = await runShell(await sandboxed(command, { ...filesystem, allowWrite }), options);
+      const inside = async () => {
+        const filesystem = await rules();
+        return sandboxed(command, { ...filesystem, allowWrite: [...filesystem.allowWrite, ...(options.writable ?? [])] });
+      };
+      // Outside, the package managers keep their caches in the home folder as they would anywhere; only $TMPDIR stays the session's.
+      const result = await runShell(options.outside === true ? `export TMPDIR=${shellQuote(policy.tempDir)}\n${command}` : await inside(), options);
       if (result.lingering !== undefined) lingering.add(result.lingering);
       return result;
     },
