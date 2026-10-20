@@ -199,14 +199,11 @@
 
 /*
  * The row's one pill and label (U43): what runs beside this chat, and what waits on the user, in the accent color
- * once anything does. The label takes what room is left and cuts with an ellipsis.
+ * once anything does. The label takes what room is left and cuts with an ellipsis. Both are the row's own items, so
+ * the row cannot squeeze the pill as it squeezes the label.
  */
 .run-activity {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  display: contents;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -270,8 +267,10 @@
 }
 
 .activity-label {
-  flex: 0 1 auto;
+  /* Grown from nothing up to its text, so the label cuts before the model's name does. */
+  flex: 1 1 0;
   min-width: 0;
+  max-width: max-content;
   overflow: hidden;
   font-size: var(--small);
   text-overflow: ellipsis;
@@ -365,5 +364,12 @@
 
   .input-toolbar:has(.run-wait:not([hidden])) .retry-now .retry-icon {
     display: inline-block;
+  }
+}
+
+/* The narrowest running row keeps the clock and the pill's counts; the / button gives them its room, as in a wait. */
+@container composer-row (max-width: 240px) {
+  .input-toolbar:has(.run-activity) .slash-button {
+    display: none;
   }
 }

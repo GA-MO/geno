@@ -248,16 +248,22 @@ body.vscode-high-contrast-light .input-box .compact-offer[aria-disabled='true'] 
   border-style: dashed;
 }
 
-/* The status gives way first on a narrow row: its wait text ends in an ellipsis before Stop moves. */
+/*
+ * The status gives way first on a narrow row: its wait text ends in an ellipsis before Stop moves. The clock and the
+ * cost do not shrink, or they would be drawn under the activity pill.
+ */
 .run-status {
   display: inline-flex;
   flex: 0 1 auto;
   align-items: center;
-  min-width: 0;
   gap: 8px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.run-status:has(> .run-wait:not([hidden])) {
+  min-width: 0;
 }
 
 .run-time {
