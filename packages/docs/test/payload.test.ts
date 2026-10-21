@@ -188,3 +188,45 @@ describe('the tool_use legend', () => {
     expect(render(viewOf({ source: FOUR_EDITS, select: 'content[1]' }), false)).not.toContain(legend);
   });
 });
+
+describe('a provider reply that is not 200 is an error-response card', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'docs-error-response-'));
+  const file = 'packages/docs/src/data/recorded/overloaded.jsonl';
+  const error = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
+  const limited = { type: 'error', error: { type: 'rate_limit_error', message: 'rate limited' } };
+  mkdirSync(path.join(root, path.dirname(file)), { recursive: true });
+  writeFileSync(
+    path.join(root, file),
+    [
+      { recorded: { flow: 'overloaded' } },
+      { id: 1, url: '<BASE_URL>/v1/messages', request: { model: 'claude-haiku-4-5', max_tokens: 64000, messages: [{ role: 'user', content: 'hi' }] } },
+      { id: 1, status: 529, response: JSON.stringify(error) },
+      { id: 2, status: 200, response: 'event: message_stop\ndata: {"type":"message_stop"}\n\n' },
+      { id: 3, url: '<BASE_URL>/v1/messages', request: { model: 'claude-haiku-4-5', max_tokens: 64000, messages: [{ role: 'user', content: 'hi' }] } },
+      { id: 3, status: 429, headers: { 'retry-after': '3' }, response: JSON.stringify(limited) },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n'),
+  );
+  const resolveIn = (spec: PayloadSpec) => runFiles(root).resolve(spec);
+
+  test('the card shows the HTTP status and the parsed body, labelled as an error the provider answered with', () => {
+    const result = resolveIn({ source: `${file}#line=3`, highlight: ['status', 'body.error.type'] });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.view).toMatchObject({ unit: 'error-response', label: 'คำตอบ error ของ provider (HTTP status, header และ body)', value: { status: 529, body: error } });
+    expect(result.view.highlight).toEqual(['status', 'body.error.type']);
+  });
+
+  test('headers the recording kept show between the status and the body', () => {
+    const result = resolveIn({ source: `${file}#line=6`, highlight: ['headers.retry-after'] });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.view).toMatchObject({ unit: 'error-response', value: { status: 429, headers: { 'retry-after': '3' }, body: limited } });
+    expect(Object.keys(result.view.value as object)).toEqual(['status', 'headers', 'body']);
+  });
+
+  test('a 200 reply in the same recording stays a stream', () => {
+    const result = resolveIn({ source: `${file}#line=4` });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.view.unit).toBe('stream');
+  });
+});

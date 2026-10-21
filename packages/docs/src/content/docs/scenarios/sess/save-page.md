@@ -4,7 +4,7 @@ description: ผู้ใช้เลือก Save as page บนข้อค�
 scenario:
   surface: vscode
   given:
-    - turn ก่อนหน้าจบแล้ว คำตอบมีตาราง แผนภาพ Mermaid ที่แผงวาดไว้ และรูปจาก workspace
+    - turn ก่อนหน้าจบแล้ว คำตอบมีตาราง แผนภาพ Mermaid (ภาษาที่เขียนแผนภาพเป็นข้อความ) ที่แผงวาดไว้ และรูปจาก workspace
     - การตั้งค่า `gcode.pages.folder` เป็นค่าเริ่มต้น `geno-pages`
   trigger: >-
     ผู้ใช้เปิดเมนูของข้อความแล้วเลือก Save as page
@@ -14,7 +14,7 @@ scenario:
     - id: menu
       beat:
         title: คุณเลือก Save as page
-        text: คำตอบมีตาราง แผนภาพ และรูป เมนูของข้อความมีรายการบันทึกเป็นหน้า HTML
+        text: คำตอบของ turn ก่อนมีตาราง แผนภาพ และรูป คุณเปิดเมนูของข้อความแล้วเลือกบันทึกคำตอบนั้นเป็นหน้า HTML ไว้ส่งให้คนอื่นดู
         from: you
         to: panel
         sees: รายการ "Save as page" กับคำอธิบาย "The answer as one HTML file to show someone"
@@ -33,7 +33,7 @@ scenario:
     - id: post
       beat:
         title: แผงส่งแผนภาพที่วาดไว้แล้ว
-        text: แผงส่งแผนภาพตามที่เห็นตอนนี้พร้อมธีมสี หน้า HTML จึงไม่ต้องวาดเอง
+        text: แผงส่งคำขอบันทึกให้ส่วนขยาย พร้อมแผนภาพที่แผงวาดเป็น SVG (ไฟล์ภาพแบบเวกเตอร์ที่เขียนเป็นข้อความ) ไว้แล้วและธีมสี หน้า HTML จึงไม่ต้องวาดแผนภาพเอง
         from: panel
         to: panel
       lane: panel
@@ -84,7 +84,7 @@ scenario:
               - lane: editor
                 beat:
                   title: VS Code ถามว่าจะเขียนทับไหม
-                  text: Keep Both บันทึกเป็นชื่อใหม่ที่บอกไว้ในคำถาม
+                  text: Keep Both บันทึกเป็นชื่อใหม่ที่บอกไว้ในคำถาม Replace เขียนทับไฟล์เดิม Cancel ไม่บันทึกอะไร
                   from: panel
                   to: you
                   sees: '"geno-pages/leap-year-fix.html already exists. Replace it?" ปุ่ม [Replace] [Keep Both] และ Cancel'
@@ -105,7 +105,7 @@ scenario:
     - id: write
       beat:
         title: ส่วนขยายเขียนไฟล์
-        text: ส่วนขยายเขียนผ่าน filesystem ของ VS Code ไม่ผ่าน engine และไม่มี turn ใหม่
+        text: ส่วนขยายสร้างโฟลเดอร์ถ้ายังไม่มี แล้วเขียนไฟล์ผ่าน filesystem ของ VS Code ไม่ผ่าน engine ไม่เรียก model และไม่มี turn ใหม่
         from: panel
         to: machine
       lane: editor
@@ -117,7 +117,8 @@ scenario:
     - id: saved
       beat:
         title: toast บอกที่อยู่ของไฟล์
-        text: เปิดหน้าใน browser หรือเปิดโฟลเดอร์ได้จาก toast
+        text: toast (กล่องแจ้งเตือนมุมล่างของ VS Code) บอกที่อยู่ของไฟล์ คุณเปิดหน้าใน browser หรือเปิดโฟลเดอร์ได้จากปุ่มในนั้น ปุ่มที่สองชื่อ Reveal in Finder บน macOS, Reveal in File Explorer บน Windows และ Open Containing Folder บนระบบอื่น
+          ชื่อในตัวอย่างนี้มี -2 เพราะเลือก Keep Both ถ้าไม่มีไฟล์ชื่อเดิม ชื่อจะเป็น leap-year-fix.html
         from: panel
         to: you
         sees:

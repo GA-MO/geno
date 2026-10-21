@@ -14,7 +14,9 @@ scenario:
     - use: ext-slash-sent
       beat:
         title: คุณพิมพ์ `/workflow fix-bug --resume`
-        text: รอบก่อนหยุดที่ขั้น `fix` เพราะถึงเพดาน คุณสั่งให้ทำต่อจากรอบนั้น
+        text: >-
+          workflow คือไฟล์ที่กำหนดขั้นของงานตายตัว แต่ละขั้นรันเป็น subagent (session ลูกที่มี model ของตัวเอง)
+          รอบก่อนหยุดที่ขั้น `fix` เพราะใช้ถึงเพดานเงินหรือจำนวนครั้งที่เรียก model ของขั้นนั้น คุณสั่งให้ทำต่อจากรอบนั้น
         from: you
         to: panel
         sees:
@@ -25,7 +27,7 @@ scenario:
     - id: issued
       beat:
         title: Geno สร้าง call workflow ในนามคุณ
-        text: Geno ไม่ถาม model มันสร้าง call ที่บอกให้ resume รอบเก่าเอง
+        text: Geno ไม่ส่ง prompt ให้ model มันสร้าง tool call `workflow` ที่บอกให้ resume รอบเก่าเองในนามคุณ
         from: engine
         to: engine
       lane: loop
@@ -40,7 +42,9 @@ scenario:
     - id: earlier
       beat:
         title: Geno เปิด log ของรอบเก่า
-        text: Geno ตรวจว่า id เป็นรอบของ `fix-bug` จริง แล้วอ่าน journal และ input เดิมของรอบนั้น
+        text: >-
+          Geno ตรวจว่า id เป็นรอบของ `fix-bug` จริง แล้วอ่าน journal ของรอบนั้น คือไฟล์ที่จดผลของทุกขั้นที่จบแล้ว
+          และใช้ input เดิมของรอบนั้น
         from: engine
         to: engine
         ask: id ถูกไหม
@@ -87,7 +91,8 @@ scenario:
     - id: replay-plan
       beat:
         title: Geno คำนวณขั้นที่ได้ผลเดิม
-        text: ขั้นที่อยู่ใน journal ได้ผลเดิมโดยไม่เรียก model Geno หาขั้นแรกที่ต้องรันจริง แล้วขอ permission
+        text: >-
+          ขั้นที่อยู่ใน journal ได้ผลเดิมโดยไม่เรียก model Geno หาขั้นแรกที่ต้องรันจริง แล้วขึ้นการ์ดให้คุณยืนยันก่อนรัน
         from: engine
         to: panel
       lane: loop
@@ -136,7 +141,7 @@ scenario:
     - id: replay
       beat:
         title: ขั้นที่เสร็จแล้วได้ผลเดิมฟรี
-        text: "`reproduce` ได้ผลเดิมจาก journal Geno ข้ามไปจนเจอขั้นที่ต้องรันจริง แผง Tasks เริ่มที่ขั้นนั้น จากตรงนี้ workflow รันเหมือนรอบปกติ"
+        text: "`reproduce` ได้ผลเดิมจาก journal Geno ข้ามไปจนเจอขั้นที่ต้องรันจริง แผง Tasks (แผงที่แสดงงานเบื้องหลัง) เริ่มที่ขั้นนั้น จากตรงนี้ workflow รันเหมือนรอบปกติ"
         from: engine
         to: model
         sees:

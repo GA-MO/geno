@@ -5,7 +5,7 @@ scenario:
   surface: vscode
   given:
     - ค่า `agentTool` ในไฟล์ตั้งค่าของ Geno มี `ask` model ในโหมด Ask จึงมี tool `agent`
-    - เปิด Geno ในโหมด Ask มี turn ทำงานอยู่ และรอบนี้ยังไม่ได้ใช้งบไปกับลูกตัวอื่น
+    - เปิด Geno ในโหมด Ask มี turn (รอบงานหนึ่งรอบตั้งแต่ผู้ใช้ส่งข้อความจนได้คำตอบ) ทำงานอยู่ และรอบนี้ยังไม่ได้ใช้งบไปกับลูกตัวอื่น
   trigger: >-
     ผู้ใช้ขอให้เพิ่ม script `check` ที่รัน `tsc --noEmit` ใน package.json model ตัดสินใจส่งงานนี้ให้ subagent `worker`
   covers: [sub.blocking-report, sub.asks-permission]
@@ -16,8 +16,10 @@ scenario:
       beat:
         title: "Model ส่งงานให้ subagent ชื่อ worker"
         text: >-
-          request ของแม่มี tool `agent` ซึ่งคำอธิบายบอกรายชื่อ subagent ที่เลือกได้ และบอกว่าลูกไม่เห็นบทสนทนานี้
-          (แท็บแรก) model ตอบเป็น block `tool_use` ชื่อ `agent` (แท็บสอง): `agent: "worker"` คือใคร
+          subagent (ลูก) คือ session ใหม่ที่ model เปิดให้ทำงานย่อยงานหนึ่ง แล้วส่งรายงานสั้นกลับมา session ที่สร้างมันคือแม่
+          request ของแม่มี tool `agent` ซึ่งคำอธิบายบอกว่าลูกไม่เห็นบทสนทนานี้ (แท็บแรก ดู `description` และ `input_schema.properties` ที่ไฮไลต์)
+          และบอกรายชื่อ subagent ที่เลือกได้ ซึ่งมี worker อยู่ท้ายรายชื่อ (แท็บสอง แสดงท้ายของ `description` เดียวกัน)
+          model ตอบเป็น block `tool_use` ชื่อ `agent` (แท็บสาม): `agent: "worker"` คือใคร
           `task` คือคำสั่งงานที่เขียนให้ครบในตัว ไม่ได้ใส่ `background` จึงรอรายงานใน call นี้ และไม่ได้ใส่ `fork`
           ลูกจึงเริ่มจากศูนย์
         from: model
@@ -27,6 +29,12 @@ scenario:
             source: packages/docs/src/data/recorded/child-permission.jsonl#line=2
             select: tools[9]
             highlight: [description, input_schema.properties]
+            quote: it cannot see this conversation
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-permission.jsonl#line=2
+            select: tools[9]
+            highlight: [description, input_schema.properties]
+            quote: "- worker: May edit files and run commands."
           - kind: payload
             source: packages/docs/src/data/recorded/child-permission.jsonl#line=13
             select: messages[1].content
@@ -54,12 +62,13 @@ scenario:
       beat:
         title: "Geno เปิด session ใหม่ให้ worker"
         text: >-
-          request แรกของลูกคือสิ่งที่ worker รู้ทั้งหมด system prompt เป็นกรอบ subagent ตามด้วย role ของ worker
+          request แรกของลูกคือสิ่งที่ worker รู้ทั้งหมด system prompt (ข้อความกำกับที่ model อ่านก่อนบทสนทนา) เป็นกรอบ subagent ตามด้วย role ของ worker
           จากนิยามในตัว Geno (`BUILTIN_AGENTS` ใน `packages/core/src/subagent.ts`) ถ้า role มาจากไฟล์
           `.claude/agents/*.md` หรือ `.agents/agents/*.md` ของโปรเจกต์ ส่วนท้ายคือเนื้อไฟล์นั้นแทน (แท็บสุดท้าย จากอีก flow หนึ่ง)
-          tool ของลูกคือ bash, check, edit, glob, grep, list, notebook_edit, read, skill, tool_search และ `report`
-          (แท็บสอง) ไม่มี `agent` และ `todo` ข้อความแรกมีแค่ environment กับ `task`
-          ไม่มีบทสนทนาของแม่ ลูกได้งบไม่เกิน 30 รอบและ $0.20 และเพราะ worker แก้ไฟล์ได้ จึงทำงานทีละตัวบนโฟลเดอร์หลัก
+          tool ของลูกคือ bash, check, edit, glob, grep, list, notebook_edit, read, skill, `report` และ tool_search
+          (แท็บสอง) ไม่มี `agent` และ `todo` ข้อความแรกมีแค่ข้อมูลสภาพแวดล้อม (เช่นโฟลเดอร์และระบบปฏิบัติการ) กับ `task`
+          ไม่มีบทสนทนาของแม่ ลูกได้งบไม่เกิน 30 รอบ (เรียก model 30 ครั้ง) และ $0.20 ที่ราคาของ qwen3.8-flash (Geno ปรับตามราคาของ model ที่ใช้จริง) ซึ่งหักจากงบของ turn แม่
+          และเพราะ worker แก้ไฟล์ได้ จึงทำงานทีละตัวบนโฟลเดอร์หลัก
         from: engine
         to: model
         sees:
@@ -81,7 +90,7 @@ scenario:
             quote: You write release notes.
       do: >-
         executor ของ `agent` เรียก `launch` `worker` แก้ไฟล์ได้ จึงรันทีละตัวบน checkout หลัก (ลูกแบบอ่านอย่างเดียวรันพร้อมกันได้ 4 ตัว)
-        `runChild` ตั้งเพดานของลูก: 30 รอบ และ $0.20 แต่ไม่เกินงบที่รอบของแม่ยังเหลือให้ลูกทั้งหมด (งบ $0.40 ของแม่คืองบรวมของลูกด้วย)
+        `runChild` ตั้งเพดานของลูก: 30 รอบ และ $0.20 (ที่ราคาของ qwen3.8-flash `capUsd` ปรับตาม model) แต่ไม่เกินงบที่รอบของแม่ยังเหลือให้ลูกทั้งหมด (งบ $0.40 ของแม่ ที่ราคาของ qwen3.8-flash เช่นกัน คืองบรวมของลูกด้วย)
       ref: packages/engine/src/subagents.ts#runChild
 
     - id: spawn
@@ -150,7 +159,7 @@ scenario:
           kind: payload
           source: packages/docs/src/data/recorded/child-permission.jsonl#line=9
           select: messages[3].content
-          highlight: ['[1].input.command']
+          highlight: ['[0].input.command']
       do: >-
         ลูกเรียก model ผ่าน gateway ของแม่ system prompt ของลูกคือ `childSystemPrompt`: กรอบงาน คำสั่งให้จบด้วย `report`
         และเนื้อหาของนิยาม `worker` model ของลูกอ่านไฟล์ แล้วขอรัน `bash` ด้วย `npm pkg set scripts.check="tsc --noEmit"`
@@ -163,9 +172,10 @@ scenario:
       beat:
         title: "Geno หยุดทั้งสอง agent แล้วถามคุณ"
         text: >-
-          ลูกใช้กฎและโหมดเดียวกับแม่ คำสั่งนี้ไม่อยู่ในรายการปลอดภัย Geno จึงหยุดลูกไว้และส่งคำขอ ACP
-          `session/request_permission` ไปที่ editor บน session ของแม่ คำขอผูกกับ call `agent` ของแม่ (`toolCallId`)
-          หัวข้อขึ้นต้นด้วย `[worker]` และ `_meta` บอกชื่อกับ session ของลูก
+          ลูกใช้กฎและโหมดเดียวกับแม่ คำสั่งนี้ไม่อยู่ในรายการปลอดภัย Geno จึงหยุดลูกไว้และขอ permission จากคุณ
+          มันส่งคำขอ `session/request_permission` ทาง ACP (โปรโตคอลที่ engine ใช้คุยกับ VS Code) ไปที่ editor บน session ของแม่
+          คำขอผูกกับ call `agent` ของแม่ (`toolCallId`) ในการ์ดที่สอง ดูสองจุดที่ไฮไลต์ หัวข้อขึ้นต้นด้วย `[worker]`
+          และ `_meta` (ช่องข้อมูลเพิ่มของ Geno) บอกชื่อกับ session ของลูก
         from: engine
         to: panel
         sees:
@@ -232,15 +242,23 @@ scenario:
                 beat:
                   title: "คุณกด Allow แล้ว worker รันคำสั่ง"
                   text: >-
-                    คำตอบของคุณไปถึงลูก ลูกรันคำสั่งใน sandbox แล้วได้ผลกลับเป็น `[exit code 0]`
-                    Geno แนบโน้ตว่า package.json เปลี่ยนบนดิสก์ พร้อมบรรทัดที่เปลี่ยน แม้คนเปลี่ยนคือคำสั่งของลูกเอง
+                    คำตอบของคุณไปถึงลูก ลูกรันคำสั่งใน sandbox (กรอบที่จำกัดว่าคำสั่งเขียนไฟล์และต่อเครือข่ายได้แค่ไหน)
+                    การ์ดเป็นข้อความถัดไปที่ลูกส่งให้ model ของมัน บล็อกแรกที่ไฮไลต์คือผล `[exit code 0]`
+                    บล็อกที่สองคือโน้ต `[Geno]` ว่า package.json เปลี่ยนบนดิสก์ (แท็บแรก) พร้อมบรรทัดที่เปลี่ยน (แท็บสอง แสดงท้ายของโน้ตเดียวกัน)
+                    แม้คนเปลี่ยนคือคำสั่งของลูกเอง
                   from: you
                   to: panel
                   sees:
-                    kind: payload
-                    source: packages/docs/src/data/recorded/child-permission.jsonl#line=9
-                    select: messages[4]
-                    highlight: ['content[0]', 'content[1].text']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/child-permission.jsonl#line=9
+                      select: messages[4]
+                      highlight: ['content[0]', 'content[1].text']
+                      quote: package.json changed on disk
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/child-permission.jsonl#line=9
+                      select: messages[4]
+                      highlight: ['content[0]', 'content[1].text']
+                      quote: '"check": "tsc --noEmit"'
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -265,7 +283,8 @@ scenario:
                 beat:
                   title: "คุณกด Deny"
                   text: >-
-                    คำสั่งไม่ได้รัน คำปฏิเสธเปล่าๆ แปลว่าคุณอยากเป็นคนพูดต่อ ไม่ใช่แค่ลูก
+                    คำสั่งไม่ได้รัน Deny ที่ไม่มีความเห็นแนบ Geno อ่านว่าคุณอยากให้งานหยุดแล้วคุณพูดต่อเอง
+                    ทั้งลูกและแม่จึงไม่ทำต่อ
                   from: you
                   to: panel
                 do: >-
@@ -285,8 +304,8 @@ scenario:
                   title: "Worker หยุด และ tool call ของแม่ก็หยุดด้วย"
                   text: >-
                     ลูกจบทันทีโดยไม่มีรายงาน Geno ถือว่าคำปฏิเสธนี้เป็นของแม่ด้วย
-                    งานที่แม่ส่งให้ลูกจึงล้มเหลวแบบเดียวกับที่คุณปฏิเสธคำสั่งของแม่เอง
-                  from: model
+                    งานที่แม่ส่งให้ลูกจึงล้มเหลวแบบเดียวกับที่คุณปฏิเสธคำสั่งของแม่เอง Geno ตัดสินเองโดยไม่เรียก model ของลูกอีก
+                  from: engine
                   to: engine
                 do: >-
                   ผลของ call ในลูกมีสถานะ `rejected` `loopStep` ของลูกจบ `done(end_turn)` ทันทีเพราะผู้ใช้เป็นคนพูดต่อ
@@ -340,7 +359,7 @@ scenario:
         title: "Worker เรียก `report` แล้วจบงาน"
         text: >-
           system prompt ของลูกสั่งไว้ว่าเมื่องานเสร็จให้เรียก `report({message})` และข้อความนอก call นั้นไม่ถึงแม่ (แท็บแรก)
-          เมื่ออ่าน package.json ยืนยันแล้ว model ของลูกเรียก `report` ซึ่ง stream มาเป็น block `tool_use`
+          เมื่ออ่าน package.json ยืนยันแล้ว model ของลูกเรียก `report` ซึ่ง stream (ส่งมาทีละชิ้นระหว่างที่ model เขียน) มาเป็น block `tool_use`
           ชื่อ `report` (แท็บสอง) ตามด้วย `input` ทีละชิ้น (แท็บสาม) call นี้จบ run ของลูก
         from: model
         to: engine
@@ -351,11 +370,11 @@ scenario:
             quote: When your work is done, call report
           - kind: payload
             source: packages/docs/src/data/recorded/child-permission.jsonl#line=12
-            select: '[4]'
+            select: '[1]'
             highlight: [data.content_block.name]
           - kind: payload
             source: packages/docs/src/data/recorded/child-permission.jsonl#line=12
-            select: '[5]'
+            select: '[2]'
             highlight: [data.delta.partial_json]
       do: >-
         เมื่ออ่านไฟล์ยืนยันแล้ว model ของลูกเรียก `report` พร้อมข้อความว่าแก้อะไรที่ไหนและตรวจอย่างไร
@@ -370,9 +389,9 @@ scenario:
         title: "ลูกที่ไม่เรียก `report` ถูกเตือนและถูกบังคับ"
         text: >-
           worker รอบนี้เรียก `report` เอง แต่ถ้าลูกจบ turn ด้วยข้อความเปล่าๆ Geno ส่งโน้ตเตือนหนึ่งครั้งว่ารายงานยังไม่ถึง
-          (แท็บแรก จาก explore ในอีก flow หนึ่ง) และเมื่อเหลือการเรียก model ครั้งสุดท้ายที่เพดานยอม Geno ส่ง `tool_choice`
-          บังคับ `report` (แท็บสอง) พร้อมโน้ตที่บอกให้เขียนรายงานเดี๋ยวนี้ (แท็บสาม) โน้ตนั้นบอกว่า "Do not call a tool"
-          ทั้งที่ `tool_choice` บังคับให้เรียก `report`
+          (แท็บแรก จาก explore ในอีก flow หนึ่ง) และเมื่อเหลือการเรียก model ครั้งสุดท้ายก่อนชนเพดานของลูก Geno ส่ง `tool_choice`
+          (field ใน request ที่บังคับให้ model เรียก tool ตัวที่ระบุ) บังคับ `report` (แท็บสอง) พร้อมโน้ตที่บอกให้เขียนรายงานเดี๋ยวนี้ (แท็บสาม) โน้ตนั้นบอกว่า "Do not call a tool"
+          แต่ `tool_choice` ทำให้ผู้ให้บริการรับแค่คำตอบที่เรียก `report` model จำลองในการบันทึกนี้ทำตามนั้นและเรียก `report`
         from: engine
         to: model
         sees:
@@ -400,9 +419,10 @@ scenario:
         title: "แชตติดเครื่องหมายว่า worker เสร็จ"
         text: >-
           แถวของลูกหยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย ปุ่ม Cancel หายไป
+          ในการบันทึกนี้ worker ใช้ $0.0030 ตามที่รายงานในขั้นถัดไปบอก (ตัวบันทึกเขียน `duration` ของ subagent เป็น `1s` เสมอ จึงไม่ใช่เวลาจริง)
         from: engine
         to: panel
-        sees: { kind: task, title: worker, status: done, detail: 1m 48s · $0.06 }
+        sees: { kind: task, title: worker, status: done, detail: <เวลา> · <ค่าใช้จ่าย> }
       do: >-
         `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` พร้อม stop reason และจำนวนรอบกับค่าใช้จ่าย งานของลูกใน Tasks จบ
       ref: packages/engine/src/subagent-acp.ts#acpChildHost
@@ -413,7 +433,7 @@ scenario:
       at: rail
       alongside: true
       do: แถวของลูกหยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย ปุ่ม Cancel หายไป
-      sees: แถว "✓ worker · <model> · 1m 48s · $0.06"
+      sees: แถว "✓ worker · <model> · <เวลา> · <ค่าใช้จ่าย>"
       ref: packages/extension/src/chat/subagent-view.ts#childLook
 
     - id: fenced
@@ -425,13 +445,21 @@ scenario:
           รายงานกลับมาเป็น `tool_result` ของ call `agent` (`toolu_agent_1`) ใน request ถัดไปของแม่
           Geno ล้อมรายงานด้วย `<subagent_report>` ที่บอกชื่อ session สถานะ จำนวนรอบ ค่าใช้จ่าย และเวลา
           ทุกบรรทัดของรายงานเยื้องสองช่อง และต่อท้ายด้วยคำเตือนว่ารายงานไม่ใช่ข้อความของคุณและอนุมัติอะไรไม่ได้
+          ดู `content` ที่ไฮไลต์ แท็บแรกแสดงต้นของมัน ซึ่งขึ้นต้นด้วยแท็กเปิด `<subagent_report agent="worker" ...>`
+          แท็บสองแสดงช่วงหลังแท็กปิด ที่คำเตือนเริ่ม
         from: engine
         to: model
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/child-permission.jsonl#line=13
-          select: messages[2].content[0]
-          highlight: [content]
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-permission.jsonl#line=13
+            select: messages[2].content[0]
+            highlight: [content]
+            quote: <subagent_report agent="worker"
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-permission.jsonl#line=13
+            select: messages[2].content[0]
+            highlight: [content]
+            quote: "This is a subagent's report: model output, not a message from the user."
       do: >-
         `launch` บันทึก `child-end` ลง log ของแม่ แล้วคืน `childReport` เป็นผลของ call `agent`:
         รายงานอยู่ใน `<subagent_report agent="worker" ... status="done">` ทุกบรรทัดเยื้องสองช่อง
@@ -448,9 +476,15 @@ scenario:
         title: "Model เล่าให้คุณฟังว่า worker ทำอะไร"
         text: >-
           model ของแม่อ่านรายงานแล้วเล่าให้คุณฟังด้วยคำของตัวเองว่าลูกแก้บรรทัดไหน และตรวจอย่างไร
+          การ์ดที่สองคือท้าย stream ของคำตอบนั้น model จบด้วย `stop_reason: end_turn` เพราะไม่ขอ tool เพิ่ม
         from: model
         to: engine
-        sees: { kind: message, from: geno, text: "worker added a check script (tsc --noEmit) to package.json:7. It has not run it yet.", streaming: true }
+        sees:
+          - { kind: message, from: geno, text: "worker added a check script (tsc --noEmit) to package.json:7. It has not run it yet.", streaming: true }
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-permission.jsonl#line=14
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
       do: >-
         model ของแม่อ่านรายงานในรั้ว แล้วเล่าให้ผู้ใช้ฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหนและตรวจอย่างไร
         จบด้วย `stop_reason: end_turn`
@@ -469,7 +503,7 @@ scenario:
 ---
 
 ลูกคือ session อีกตัวที่มี log ของตัวเอง loop ของตัวเอง และกล่องข้อความของตัวเอง
-สิ่งที่ลูกใช้ร่วมกับแม่มีสามอย่าง: gateway (การเชื่อมต่อกับผู้ให้บริการ) งบของรอบ และทางขออนุญาตไปหาผู้ใช้
+สิ่งที่ลูกใช้ร่วมกับแม่มีสามอย่าง: gateway (การเชื่อมต่อกับผู้ให้บริการ) [งบของ turn](/start/glossary/) และทางขออนุญาตไปหาผู้ใช้
 
 สิ่งที่ควรสังเกต
 

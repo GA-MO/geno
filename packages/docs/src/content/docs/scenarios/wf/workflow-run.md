@@ -14,7 +14,11 @@ scenario:
     - use: ext-slash-sent
       beat:
         title: คุณพิมพ์ `/workflow fix-bug`
-        text: workflow นี้มีสามขั้น หาเทสต์ที่ล้ม แก้ และ gate ที่รัน check ของโปรเจกต์ งบรวม $0.50 Geno สร้าง call workflow ในนามคุณ ไม่ถาม model
+        text: >-
+          workflow คือไฟล์ JSON ที่กำหนดขั้นของงานตายตัว แต่ละขั้นให้ subagent (session ลูกที่มี model และบทสนทนาของตัวเอง) ทำ
+          workflow นี้มีสามขั้น หาเทสต์ที่ล้ม แก้ และ gate คือขั้นตรวจที่รัน check ของโปรเจกต์ (คำสั่งตรวจที่คุณตั้งไว้ เช่นเทสต์)
+          งบรวม $0.50 คำสั่งนี้เริ่ม turn (หนึ่งรอบตั้งแต่ข้อความของคุณจนแชตตอบเสร็จ) แล้ว Geno สร้าง tool call `workflow` เองในนามคุณ
+          โดยไม่ส่ง prompt ให้ model ก่อน
         from: you
         to: panel
         sees:
@@ -74,7 +78,9 @@ scenario:
     - id: card
       beat:
         title: คุณเห็นการ์ด “Run this workflow?”
-        text: การ์ดแสดงทีละขั้น role model อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณ และราคารวมที่แย่ที่สุด
+        text: >-
+          การ์ดแสดงทีละขั้น: role คือชนิดของ subagent (explore อ่านอย่างเดียว worker แก้ไฟล์ได้) model ที่ใช้ อ่านอย่างเดียวหรือแก้ได้
+          ราคาประมาณ และราคารวมที่แย่ที่สุด ไม่มีอะไรรันจนกว่าคุณจะกด
         from: panel
         to: you
         sees: { kind: permission, face: workflow, command: "fix-bug: reproduce · explore · read-only, fix · worker · can edit, Gate", reason: "Each step runs as a subagent in the background, listed in Tasks." }
@@ -85,7 +91,7 @@ scenario:
         การ์ด workflow แสดงทีละขั้น: ชื่อ role model อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณและเพดาน แล้วราคารวม
       sees: >-
         การ์ด "Run this workflow?" รายการขั้น "reproduce · explore · ... · read-only" "fix · worker · ... · can edit" "Gate"
-        บรรทัด "About $0.09, at most $0.50. The run stops cleanly at its total cap of $0.50."
+        บรรทัด "About <ราคาประมาณ>, at most <ราคาสูงสุด>. The run stops cleanly at its total cap of $0.50."
         "Each step runs as a subagent in the background, listed in Tasks." และปุ่ม [Run] [Don't run]
       ref: packages/extension/src/chat/workflow-view.ts#workflowCardBody
 
@@ -132,7 +138,9 @@ scenario:
     - id: start
       beat:
         title: Geno เปิด session เบื้องหลังของ workflow
-        text: session ชื่อ "Workflow fix-bug" ใช้งบของ workflow แทนขีดจำกัดปกติ turn ของแชตจบทันที คุณติดตามได้ในแผง Tasks
+        text: >-
+          session ชื่อ "Workflow fix-bug" รันเบื้องหลัง และใช้งบของ workflow แทนขีดจำกัดปกติ turn ของแชตจบทันที
+          คุณติดตามได้ในแผง Tasks ซึ่งแสดงงานที่กำลังรันของทุกแชต
         from: engine
         to: engine
       lane: server
@@ -158,9 +166,11 @@ scenario:
     - id: round
       beat:
         title: Workflow รันทีละรอบ
-        text: ทุกรอบ Geno รับผลของรอบก่อน แล้วเลือกรอบถัดไป มันไม่เริ่มรอบที่งบที่เหลือไม่พอ แผง Tasks บอกขั้นที่รันและเงินที่ใช้
+        text: >-
+          รอบคือชุดของขั้นที่รันพร้อมกันได้ ทุกรอบ Geno รับผลของรอบก่อน แล้วเลือกรอบถัดไปเองจากไฟล์ของ workflow
+          ไม่มี model ตัดสินตรงนี้ มันไม่เริ่มรอบที่งบที่เหลือไม่พอ แผง Tasks บอกขั้นที่รันและเงินที่ใช้
         from: engine
-        to: model
+        to: engine
         sees:
           kind: task
           title: Workflow fix-bug
@@ -188,10 +198,11 @@ scenario:
       beat:
         title: แต่ละขั้นเป็น subagent
         text: >-
-          แต่ละขั้นได้ request แรกแบบลูกทั่วไป: system prompt ของ role ของขั้น และข้อความแรกที่มี environment กับ prompt ของขั้น
-          ที่เติม `{{input}}` แล้ว (แท็บแรก ขั้น `reproduce` บน explore) ขั้นที่อ้าง `{{reproduce}}` ได้รายงานของขั้นนั้นทั้งรั้ว
-          `<subagent_report>` และคำเตือน แทรกในข้อความแรก (แท็บสอง ขั้น `fix` บน worker) การ์ดมาจาก workflow สองขั้นที่บันทึกไว้
-          ทัวร์นี้เล่า workflow สามขั้นที่จบด้วย gate ที่รัน check ของโปรเจกต์
+          แต่ละขั้นได้ request แรกแบบ subagent ทั่วไป: system prompt ของ role ของขั้น และข้อความแรกที่มี environment กับ prompt
+          ของขั้น การ์ดมีสองแท็บ ทั้งสองคือ `messages[0]` ดูข้อความที่ไฮไลต์ แท็บแรกคือขั้น `reproduce` บน explore ซึ่ง prompt
+          เติม `{{input}}` ด้วยงานที่พิมพ์ไว้ (งานในการ์ดคือ parseVersion แทนงานที่คุณพิมพ์ในทัวร์) แท็บสองคือขั้น `fix` บน worker ซึ่ง prompt อ้าง `{{reproduce}}` จึงได้รายงานของขั้นนั้น
+          ห่อในแท็ก `<subagent_report>` พร้อมคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ การ์ดมาจาก workflow สองขั้นที่บันทึกไว้
+          ทัวร์นี้เล่า workflow สามขั้นที่จบด้วย gate
         from: model
         to: engine
         sees:
@@ -201,13 +212,14 @@ scenario:
             highlight: ['content[1].text']
           - kind: payload
             source: packages/docs/src/data/recorded/workflow-run.jsonl#line=7
+            quote: "src/version.ts:2 returns [0, 0, 0] for '' instead of failing."
             select: messages[0]
             highlight: ['content[1].text']
       lane: child@worker
       at: model
       do: >-
         แต่ละขั้นรันเป็น subagent ของ session workflow ด้วยเพดาน model และ lane ที่ workflow กำหนด
-        `reproduce` หาเทสต์ที่ล้ม แล้วรอบถัดไป `fix` ได้ผลของ `reproduce` ผ่าน `{{previous}}` แก้โค้ด และรายงาน
+        `reproduce` หาเทสต์ที่ล้ม แล้วรอบถัดไป `fix` ได้ผลของ `reproduce` ผ่าน `{{reproduce}}` แก้โค้ด และรายงาน
       ref: packages/engine/src/subagents.ts#runChild
       emits: [report]
 
@@ -224,16 +236,24 @@ scenario:
       beat:
         title: Workflow จบแล้วปลุกแชต
         text: >-
-          รายงานของ workflow อยู่ในรั้ว `<subagent_report agent="workflow fix-bug">` ที่สรุปทุกขั้น แต่ละขั้นมี session ของตัวเอง
-          และต่อด้วยรายงานของขั้นสุดท้าย รายงานเข้ากล่องของแชตที่เริ่ม แชตเปิด turn ใหม่ที่หัวมีกระดิ่ง
-          และ request ของ turn นั้นจบด้วยรั้วนี้กับโน้ตว่า Geno เริ่ม turn เอง
+          gate ผ่านและไม่มีขั้นเหลือ workflow จึงจบ รายงานของ workflow สรุปทุกขั้น แต่ละขั้นมี session ของตัวเอง
+          และต่อด้วยรายงานของขั้นสุดท้าย รายงานเข้ากล่องข้อความของแชตที่เริ่ม แล้ว Geno ปลุกแชต คือเปิด turn ใหม่เองโดยไม่มีใครพิมพ์
+          หัวของ turn มีกระดิ่ง การ์ดคือข้อความท้ายของ request ของ turn นั้น ดูสองก้อนที่ไฮไลต์: รายงานในแท็ก
+          `<subagent_report agent="workflow fix-bug">` (แท็บแรก) และโน้ตว่า Geno เริ่ม turn นี้เอง (แท็บสอง) การ์ดมาจาก workflow สองขั้นที่บันทึกไว้
+          จึงบอก 2 steps ไม่ใช่สามขั้นของทัวร์
         from: engine
         to: panel
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/workflow-run.jsonl#line=13
-          select: messages[2]
-          highlight: ['content[2].text', 'content[3].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/workflow-run.jsonl#line=13
+            select: messages[2]
+            highlight: ['content[2].text', 'content[3].text']
+            quote: "Workflow fix-bug finished: 2 steps ran"
+          - kind: payload
+            source: packages/docs/src/data/recorded/workflow-run.jsonl#line=13
+            select: messages[2]
+            highlight: ['content[2].text', 'content[3].text']
+            quote: "woke: 1 task finished"
       lane: server
       at: wakes
       do: >-
@@ -249,12 +269,20 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าว่า workflow แก้อะไร
-        text: 'model อ่าน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น แล้วเขียนสรุปถึงคุณ'
+        text: >-
+          model อ่านบรรทัดแรกของรายงาน ในการบันทึกคือ "Workflow fix-bug finished: 2 steps ran, $0.0029 of its $0.50 cap." และรายการขั้น แล้วเขียนสรุปถึงคุณ
+          คำตอบจบด้วย `stop_reason: end_turn` คือตอบจบแล้ว ไม่ขอ tool อีก การ์ดคือ event `message_delta` ท้าย stream ของคำตอบ
+          จาก workflow สองขั้นที่บันทึกไว้ ดู `stop_reason` ที่ไฮไลต์
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/workflow-run.jsonl#line=14
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
       lane: model
       do: >-
-        model ของแชตอ่านรายงาน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น
+        model ของแชตอ่านรายงาน "Workflow fix-bug finished: <N> steps ran, <ราคาที่ใช้> of its $0.50 cap." และรายการขั้น
         แล้วเล่าให้ผู้ใช้ว่าแก้อะไร จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNotice
       emits: [end_turn]
@@ -269,7 +297,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
 ---
 
-workflow คือแผนงานหลายขั้นที่ไม่มี model เป็นคนคุม: director อ่านไฟล์ JSON แล้วออก call `agent` ของแต่ละขั้นเอง
+workflow คือแผนงานหลายขั้นที่ไม่มี model เป็นคนคุม: ตัวคุมของ session (director) อ่านไฟล์ JSON แล้วออก call `agent` ของแต่ละขั้นเอง
 model ของแต่ละขั้นทำงานของขั้นนั้น แต่ลำดับ เพดาน และ gate มาจากไฟล์
 
 สิ่งที่ควรสังเกต

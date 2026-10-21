@@ -57,12 +57,13 @@ describe('the ask-mode example scenario', () => {
     expect(site.problems.filter((problem) => problem.level === 'error')).toEqual([]);
   });
 
-  test('Allow once and Always allow both rejoin at run, and the turn goes on to the next model call', () => {
+  test('Allow once and Always allow both rejoin at run, and the turn goes on to the model reading the result', () => {
     for (const option of ['allow', 'allow-workspace']) {
       const path = choose(option);
       expect(path).toContain('run');
       expect(path.indexOf('run' as StepId)).toBeGreaterThan(path.indexOf(`choice.${option}.3` as StepId));
-      expect(endOf(path).turn).toEqual({ kind: 'end', end: { turn: 'continues', reason: 'call-model' } });
+      expect(path.at(-1)).toBe('reply');
+      expect(endOf(path).turn).toEqual({ kind: 'end', end: { turn: 'continues', reason: 'run-tools' } });
       expect(endOf(path).toolRuns).toBe(1);
     }
   });
@@ -309,7 +310,7 @@ describe('the progress counters count calls, not steps', () => {
   const policy = { lane: 'policy', at: 'rules', do: 'allows', ref: REF };
 
   test('one bash call drawn as several tool steps is one run on every arm of bash-safe-runs', () => {
-    for (const exit of ['zero', 'nonzero', 'timeout']) expect(endOf('bash-safe-runs', { exit })).toMatchObject({ modelCalls: 1, toolRuns: 1 });
+    for (const exit of ['zero', 'nonzero', 'timeout']) expect(endOf('bash-safe-runs', { exit })).toMatchObject({ modelCalls: 2, toolRuns: 1 });
   });
 
   test('a step that stands for two parallel reads counts two', () => {

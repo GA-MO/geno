@@ -7,19 +7,25 @@ scenario:
     - workspace ที่เชื่อถือแล้ว มี PreToolUse hook ที่ matcher เป็น `Bash` ใน `.claude/settings.json` ซึ่งรันสคริปต์ `guard.sh`
     - เปิด Geno ในโหมด Ask มี turn ทำงานอยู่
   trigger: >-
-    model ขอรัน `bash` ด้วยคำสั่ง `pnpm deploy --prod`
+    model ขอรัน `bash` ด้วยคำสั่ง `npm run deploy -- --prod`
   covers: [hook.pretooluse-deny, hook.pretooluse-ask, hook.pretooluse-allow-rewrite, hook.pretooluse-continue-false]
   related: [hook.permission-request, hook.user-prompt-submit, perm.ask-allow]
   steps:
     - id: wants
       beat:
-        title: Model ขอรัน `pnpm deploy --prod`
-        text: model อยากปล่อยงานขึ้น production จากเครื่องของคุณ
+        title: Model ขอรัน `npm run deploy -- --prod`
+        text: model อยากปล่อยงานขึ้น production จากเครื่องของคุณ มันจึงขอใช้ tool `bash` (tool ที่รันคำสั่ง shell) การ์ดข้างล่างเป็นคำตอบจริงจากการรันอื่นที่ model ขอรันคำสั่งเสี่ยง `rm -rf build && npm test` แบบเดียวกัน ดูบล็อก `tool_use` ที่ `name` คือ `bash` และ `input.command` คือคำสั่ง
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A08-ask-risky-denied/1/session.jsonl#seq=8
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input']
       lane: model
       do: >-
-        model ขอเรียก `bash` ด้วยคำสั่ง `pnpm deploy --prod` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `npm run deploy -- --prod` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -27,7 +33,7 @@ scenario:
     - id: decide
       beat:
         title: Geno บันทึกคำขอแล้วเตรียมรัน
-        text: ก่อน call แรกของรอบนี้จะเริ่ม Geno ให้ hook PreToolUse ดูทุก call ก่อน
+        text: hook คือคำสั่ง shell ที่คุณตั้งไว้ใน settings ให้ Geno รันเมื่อเกิดเหตุการณ์หนึ่ง PreToolUse คือเหตุการณ์ก่อน tool รัน ก่อน call แรกในคำตอบนี้ของ model จะเริ่ม Geno ให้ hook PreToolUse ดูทุก call ก่อน
         from: engine
         to: engine
       lane: loop
@@ -41,7 +47,7 @@ scenario:
     - id: hook
       beat:
         title: Geno ส่ง call ให้ `guard.sh`
-        text: สคริปต์ได้ชื่อ tool และคำสั่งเป็น JSON ทาง stdin ถ้ามีหลาย hook Geno ใช้คำตอบที่เข้มที่สุด
+        text: สคริปต์ได้ชื่อ tool และคำสั่งเป็น JSON ทาง stdin ถ้ามีหลาย hook Geno ใช้คำตอบที่เข้มที่สุด ปฏิเสธชนะขอให้ถาม และขอให้ถามชนะอนุญาต
         from: engine
         to: machine
         ask: hook ตอบอะไร
@@ -62,7 +68,7 @@ scenario:
               - lane: policy
                 beat:
                   title: hook ปฏิเสธ call
-                  text: สคริปต์จบด้วย exit 2 และเขียน "deploys go through CI" Geno ไม่ขึ้นการ์ด และไม่ถาม classifier
+                  text: สคริปต์จบด้วย exit 2 และเขียน "deploys go through CI" exit 2 แปลว่าปฏิเสธ Geno ไม่ขึ้นการ์ดถามคุณ และไม่ถาม classifier (model อีกตัวที่ตัดสินคำสั่งแทนคุณในโหมด Auto)
                   from: machine
                   to: engine
                 at: hooks
@@ -75,9 +81,9 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno ไม่รันคำสั่ง
-                  text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน ผลถึง model คือข้อความของ hook hook หลังรันก็ไม่ทำงานกับ call นี้
+                  text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน Geno เขียนข้อความของ hook เป็นผลไว้ใน log ผลนี้ถึง model ตอนเรียกครั้งถัดไป hook หลังรันก็ไม่ทำงานกับ call นี้
                   from: engine
-                  to: model
+                  to: engine
                 at: tools
                 do: >-
                   call ยังขึ้นเป็นขั้นในแผงแชต แต่ `callOf` ไม่รันอะไร ได้ผลสถานะ `denied` ทันที
@@ -94,7 +100,7 @@ scenario:
                   to: you
                   sees:
                     kind: step
-                    label: pnpm deploy --prod
+                    label: npm run deploy -- --prod
                     status: denied
                     note: Denied by a hook · Deploys go through CI.
                 at: rail
@@ -104,10 +110,23 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านเหตุผลของ hook
-                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ model อ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
+                  text: >-
+                    การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ Geno เรียก model อีกครั้ง model อ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน
+                    แท็บแรกคือข้อความ user สุดท้ายของคำขอนั้น บล็อก `tool_result` มีข้อความของ hook และ `is_error: true`
+                    แท็บสองคือ event หนึ่งใน stream ของคำตอบ ในการบันทึกนี้ข้อความมาเป็นสองชิ้น ชิ้นที่ไฮไลต์อ้างเหตุผลของ hook ชิ้นถัดไปบอกให้ push แล้วให้ CI deploy
                   from: model
                   to: engine
                   end: Model หาทางอื่น
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-pretooluse-deny.jsonl#line=4
+                      select: messages[2]
+                      highlight: ['content[0].content', 'content[0].is_error']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-pretooluse-deny.jsonl#line=5
+                      select: '[2]'
+                      highlight: [data.delta.text]
                 at: step
                 do: >-
                   การปฏิเสธจาก hook ไม่ใช่การปฏิเสธของผู้ใช้ `loopStep` จึงตัดสิน `call-model` ตามปกติ
@@ -123,12 +142,12 @@ scenario:
               - lane: policy
                 beat:
                   title: hook อนุญาตแล้วแก้คำสั่ง
-                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `pnpm deploy --prod --dry-run` ซึ่งแทนคำสั่งของ model ทั้งก้อน
+                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `npm run deploy -- --prod --dry-run` ซึ่งแทนคำสั่งของ model ทั้งก้อน
                   from: machine
                   to: engine
                 at: hooks
                 do: >-
-                  สคริปต์พิมพ์ JSON `permissionDecision: "allow"` พร้อม `updatedInput` ที่เปลี่ยนคำสั่งเป็น `pnpm deploy --prod --dry-run`
+                  สคริปต์พิมพ์ JSON `permissionDecision: "allow"` พร้อม `updatedInput` ที่เปลี่ยนคำสั่งเป็น `npm run deploy -- --prod --dry-run`
                   input ใหม่แทนที่ input ของ model ทั้งก้อน และ call ได้ขั้น `run` ที่บอกว่า hook อนุญาตแล้ว
                 ref: "packages/engine/src/hooks.ts#\"const updated = decision.kind === 'none' || decision.input === undefined ? use\""
                 emits: [allow, updatedInput]
@@ -146,7 +165,7 @@ scenario:
               - lane: tool
                 beat:
                   title: คำสั่งที่แก้แล้วรันใน sandbox
-                  text: การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่ model ส่ง
+                  text: sandbox คือกรอบของระบบปฏิบัติการที่ให้คำสั่งเขียนไฟล์ได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่ model ส่ง
                   from: engine
                   to: machine
                 at: shell
@@ -157,10 +176,24 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านผลของ `--dry-run`
-                  text: Geno เรียก model อีกครั้ง model เห็นผลของคำสั่งที่ hook แก้
+                  text: >-
+                    Geno เรียก model อีกครั้ง model เห็นผลของคำสั่งที่ hook แก้ แต่ไม่มีอะไรบอก model ว่า hook เปลี่ยนคำสั่ง
+                    ประวัติยังเก็บ `tool_use` ตามที่ model ส่ง model เห็นแค่ output
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน สคริปต์ `deploy` ในการบันทึกเป็นสคริปต์เล็กๆ ที่พิมพ์ว่าจะอัปโหลดอะไรเมื่อเห็น `--dry-run`
+                    แท็บแรกคือข้อความ user สุดท้ายของคำขอนั้น output ใน `tool_result` แสดงว่าคำสั่งที่รันจริงมี `--dry-run`
+                    แท็บสองคือ event หนึ่งใน stream ของคำตอบ model อ่านจาก output ว่าคำสั่งรันเป็น dry run และบอกคุณว่ายังไม่มีอะไรถูกอัปโหลด
                   from: model
                   to: engine
                   end: Model อ่านผลแล้วทำต่อ
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-pretooluse-deny-rewrite.jsonl#line=4
+                      select: messages[2]
+                      highlight: ['content[0].content']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-pretooluse-deny-rewrite.jsonl#line=5
+                      select: '[2]'
+                      highlight: [data.delta.text]
                 at: step
                 do: >-
                   log เก็บ `tool_use` ตามที่ model ส่ง ส่วน PostToolUse hook เห็น input ที่รันจริง
@@ -199,13 +232,13 @@ scenario:
                 ref: packages/engine/src/tools/agent.ts#settle
               - lane: server
                 beat:
-                  title: Geno หยุด turn แล้วถามคุณ
-                  text: ถ้ามี hook PermissionRequest มันได้ตอบก่อน เมื่อไม่มี Geno ส่งคำขอ permission ให้ VS Code งานใน Tasks ขึ้นว่ารอคุณ
+                  title: Geno พัก turn แล้วถามคุณ
+                  text: ถ้ามี hook PermissionRequest มันได้ตอบก่อน เมื่อไม่มี Geno ส่งคำขอ permission ให้ VS Code แล้วรอ turn ยังไม่จบ งานของ turn นี้ในแผง Tasks (แผงที่แสดงงานที่ Geno กำลังทำ) ขึ้นว่ารอคุณ
                   from: engine
                   to: panel
                   sees:
                     kind: task
-                    title: pnpm deploy --prod
+                    title: npm run deploy -- --prod
                     status: needs-input
                 at: approvals
                 do: >-
@@ -228,7 +261,7 @@ scenario:
                   to: you
                   sees:
                     kind: permission
-                    command: pnpm deploy --prod
+                    command: npm run deploy -- --prod
                     reason: "Geno asks because it uses A PreToolUse hook [settings] asks first: touches production.."
                     options:
                       - Allow
@@ -238,14 +271,14 @@ scenario:
                 do: >-
                   แผงแชตแสดงการ์ดคำสั่ง เหตุผลบนการ์ดคือข้อความของ hook ต่อท้ายวลี "Geno asks because it uses"
                 sees: >-
-                  การ์ด "Run this command?" คำสั่ง `pnpm deploy --prod`
+                  การ์ด "Run this command?" คำสั่ง `npm run deploy -- --prod`
                   และบรรทัด "Geno asks because it uses A PreToolUse hook [settings] asks first: touches production.."
                   ปุ่ม [Allow] [Deny] [No, and tell the agent…]
                 ref: packages/extension/src/chat/render.ts#COMMAND_FACE
               - lane: user
                 beat:
                   title: คุณกด Allow
-                  text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต และ tool ไม่ถามซ้ำ แต่กฎ deny ของ workspace ยังมีผล
+                  text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต และการตรวจของ `bash` เองไม่ถามซ้ำ แต่กฎ deny ของ workspace ยังมีผล
                   from: you
                   to: panel
                 do: ผู้ใช้อ่านแล้วกด Allow
@@ -265,20 +298,28 @@ scenario:
               - lane: tool
                 beat:
                   title: คำสั่งรันใน sandbox
-                  text: "`pnpm deploy --prod` รัน ผลพาบันทึกว่าคุณเป็นคนอนุญาต"
+                  text: "`npm run deploy -- --prod` รัน ผลพาบันทึกว่าคุณเป็นคนอนุญาต"
                   from: engine
                   to: machine
                 at: shell
                 do: >-
-                  `bash` รัน `pnpm deploy --prod` ใน sandbox ผลแนบบันทึกว่าผู้ใช้อนุญาต update ปิดจึงมี `APPROVAL_META`
+                  `bash` รัน `npm run deploy -- --prod` ใน sandbox ผลแนบบันทึกว่าผู้ใช้อนุญาต update ปิดจึงมี `APPROVAL_META`
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
               - use: tool-result-returns
               - lane: loop
                 beat:
-                  title: Model อ่านผลของคำสั่ง
-                  text: Geno เรียก model อีกครั้ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
-                  from: model
-                  to: engine
+                  title: Geno เรียก model อีกครั้ง
+                  text: >-
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้ง ท้ายคำขอคือผลของคำสั่ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
+                    การ์ดข้างล่างเป็นคำขอจริงจากการรันอื่นที่คุณกด Allow ให้ `rm -rf build` บนการ์ดแบบเดียวกัน
+                    ดูบล็อก `tool_result` ที่ `tool_use_id` ชี้กลับไปที่คำขอของ model และ `content` คือ output ของคำสั่ง
+                  from: engine
+                  to: model
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/B-panel/1/wire.jsonl.gz#line=17
+                    select: messages[-1].content
+                    highlight: ['[0]']
                   end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
@@ -295,7 +336,7 @@ scenario:
               - lane: policy
                 beat:
                   title: hook สั่งหยุดทั้ง turn
-                  text: 'hook ตอบ `continue: false` พร้อมเหตุผล "production is frozen" call นี้ถูกปฏิเสธ call อื่นใน turn เดียวกันที่ hook ไม่ได้ปฏิเสธยังรันตามปกติ แล้ว Geno บันทึก error ว่า hook หยุด turn'
+                  text: 'hook ตอบ `continue: false` พร้อมเหตุผล "production is frozen" call นี้ถูกปฏิเสธ call อื่นในคำตอบเดียวกันของ model ที่ hook ไม่ได้ปฏิเสธยังรันตามปกติ แล้ว Geno บันทึก error ว่า hook หยุด turn'
                   from: machine
                   to: engine
                 at: hooks
@@ -319,7 +360,7 @@ scenario:
                   to: you
                   sees:
                     - kind: step
-                      label: pnpm deploy --prod
+                      label: npm run deploy -- --prod
                       status: denied
                       note: Denied by a hook · Production is frozen.
                     - kind: notice
@@ -347,7 +388,7 @@ scenario:
                   sees:
                     kind: composer
                     state: idle
-                    header: failed after 4s
+                    header: failed after ...
                 at: step
                 do: >-
                   `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` model ไม่ถูกเรียกอีก
@@ -363,12 +404,12 @@ scenario:
               - lane: panel
                 at: rail
                 do: หัวข้อเปลี่ยนเป็น "failed after ..."
-                sees: หัวข้อ "failed after 4s" และปุ่ม Send กลับมา
+                sees: หัวข้อ "failed after" ตามด้วยเวลาที่ใช้ และปุ่ม Send กลับมา
                 ref: packages/extension/src/chat/rail.ts#headerOf
                 end: { turn: failed, reason: error }
 ---
 
-PreToolUse ทำงานก่อนการตรวจสิทธิ์ของ Geno เอง และตัดสิน call ทุกตัวของ turn ก่อน call แรกจะเริ่ม
+[hook](/start/glossary/) PreToolUse ทำงานก่อนการตรวจ[สิทธิ์](/start/glossary/)ของ Geno เอง และตัดสิน call ทุกตัวของ turn ก่อน call แรกจะเริ่ม
 เหมือน Claude Code การจัดชุดเกิดหลังจากนั้น call ที่ hook ปฏิเสธหรือถามผู้ใช้จึงไม่รันพร้อม call อื่น
 
 | hook ตอบ | call | turn |
@@ -381,7 +422,7 @@ PreToolUse ทำงานก่อนการตรวจสิทธิ์ข
 
 สิ่งที่ควรสังเกต
 
-- **การปฏิเสธของ hook ต่างจาก Reject ของผู้ใช้** ผลเป็น `denied` (`ToolDenied`) ไม่ใช่ `rejected` ชุดถัดไปจึงยังรัน และ turn ไม่จบ
+- **การปฏิเสธของ hook ต่างจากการที่ผู้ใช้กด Deny** ผลเป็น `denied` (`ToolDenied`) ไม่ใช่ `rejected` ชุดถัดไปจึงยังรัน และ turn ไม่จบ
 - **hook allow ไม่ข้ามกฎ deny** กฎ deny ของ workspace และคำสั่งที่ต้องถามเสมอยังมีผล การอนุญาตของ hook แค่ตอบคำถามแทนผู้ใช้
 - **log เก็บสิ่งที่ model ขอ** `updatedInput` ไม่ได้แก้ `tool_use` ใน log การเล่นซ้ำจึงเห็นคำสั่งเดิมของ model
 - **การ์ดของ hook ask อ่านแปลก** (อ่านจากโค้ด) การ์ดคำสั่งเติมเหตุผลต่อท้าย "Geno asks because it uses" เสมอ

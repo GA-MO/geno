@@ -4,7 +4,7 @@ description: repo มี hook ใน .claude/settings.json แต่ VS Code ย
 scenario:
   surface: vscode
   given:
-    - เปิดโฟลเดอร์ที่ clone มาใหม่ VS Code ยังไม่เชื่อถือ workspace นี้ (`vscode.workspace.isTrusted` เป็น false)
+    - เปิดโฟลเดอร์ที่ clone มาใหม่ ในเรื่องหลัก VS Code ยังไม่เชื่อถือ workspace นี้ (`vscode.workspace.isTrusted` เป็น false)
     - "`.claude/settings.json` ของ repo มี UserPromptSubmit hook ที่รัน `./scripts/hook.sh`"
     - "`~/.claude/settings.json` ของผู้ใช้มี UserPromptSubmit hook ของตัวเองที่รัน `~/bin/log-prompt.sh`"
     - หน้าต่างนี้ยังไม่ได้ต่อ engine
@@ -15,15 +15,15 @@ scenario:
   steps:
     - id: settings
       beat:
-        title: VS Code บอก Geno ว่ายังไม่เชื่อถือ workspace
-        text: ตอนต่อ engine ครั้งแรก ส่วนขยายส่งสถานะ trust ของ workspace ไปด้วย engine จำค่านี้ไว้กับการเชื่อมต่อนี้ ทุก turn จากหน้าต่างนี้ใช้มัน
+        title: VS Code บอก Geno ว่าเชื่อถือ workspace หรือไม่
+        text: trust คือการที่คุณบอก VS Code ว่าเชื่อโค้ดในโฟลเดอร์นี้ ตอนต่อ engine (process เบื้องหลังที่รัน agent ของ Geno) ครั้งแรก ส่วนขยายส่งสถานะ trust ของ workspace ไปด้วย ในเรื่องหลักโฟลเดอร์ที่เพิ่ง clone มายังไม่ถูกเชื่อถือ engine จำค่านี้ไว้กับการเชื่อมต่อนี้ ทุก turn จากหน้าต่างนี้ใช้มัน
         from: panel
         to: engine
       lane: editor
       at: engine-link
       do: >-
         `engineSettings` อ่าน `vscode.workspace.isTrusted` ตอนต่อ engine ครั้งแรก
-        แล้วส่งคำขอ ACP `initialize` ที่บอกสถานะ trust ไว้ใน `_meta` ใต้คีย์ `gcode/workspaceTrusted` (ครั้งนี้เป็น false)
+        แล้วส่งคำขอ ACP `initialize` ที่บอกสถานะ trust ไว้ใน `_meta` ใต้คีย์ `gcode/workspaceTrusted` (ในเรื่องหลักเป็น false)
       ref: "packages/extension/src/chat/engine.ts#\"await agent.request(acp.methods.agent.initialize, {\""
       emits: [initialize, gcode/workspaceTrusted]
       phase: idle
@@ -68,7 +68,7 @@ scenario:
     - id: open
       beat:
         title: Geno อ่าน hook จากทุกที่
-        text: session นี้เปิดครั้งแรก Geno จึงอ่านการตั้งค่า hook ทั้งหมด ทั้งของคุณ ของ plugin และของ repo
+        text: hook คือคำสั่ง shell ที่ตั้งไว้ใน settings ให้ Geno รันเมื่อเกิดเหตุการณ์หนึ่ง session นี้เปิดครั้งแรกใน engine ตัวนี้ Geno จึงอ่านการตั้งค่า hook ทั้งหมด ทั้งของคุณ ของ plugin (ชุดส่วนเสริมที่คุณติดตั้ง) และของ repo แล้วจำชุดนี้ไว้ตลอดที่ engine ยังรัน
         from: engine
         to: engine
       lane: loop
@@ -81,7 +81,7 @@ scenario:
     - id: filter
       beat:
         title: Geno คัด hook ที่รันได้
-        text: hook ของคุณเองรันเสมอ hook ที่มาจากไฟล์ของ repo รันได้เฉพาะเมื่อเชื่อถือ workspace กฎ allow และโฟลเดอร์เพิ่มของ repo ก็รอแบบเดียวกัน
+        text: hook ของคุณเองรันเสมอ hook ที่มาจากไฟล์ของ repo รันได้เฉพาะเมื่อเชื่อถือ workspace การตั้งค่าอื่นของ repo ที่ขยายสิทธิ์ ได้แก่กฎที่อนุญาตคำสั่ง และโฟลเดอร์นอก workspace ที่ repo ขอให้เข้าถึงได้ ก็รอแบบเดียวกัน
         from: engine
         to: engine
         ask: เชื่อถือ repo ไหม
@@ -104,7 +104,7 @@ scenario:
               - lane: policy
                 beat:
                   title: ทั้งสอง hook รัน
-                  text: hook ของ repo รันใน sandbox เขียนได้แค่ใน workspace ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อน model
+                  text: สมมติว่าคุณกดเชื่อถือโฟลเดอร์นี้ก่อนเปิดแชต ส่วนขยายจึงส่งสถานะ trust เป็น true hook ของ repo รันใน sandbox ซึ่งเป็นกรอบของระบบปฏิบัติการ มันเขียนได้แค่ใน workspace กับโฟลเดอร์ชั่วคราวของ session และต่อเครือข่ายได้ตามกฎของ sandbox ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อน model
                   from: engine
                   to: machine
                 at: hooks
@@ -137,7 +137,7 @@ scenario:
     - id: record
       beat:
         title: เฉพาะ hook ของคุณที่รัน
-        text: Geno บันทึก prompt แล้วรัน `~/bin/log-prompt.sh` ของคุณ `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอก model หรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
+        text: Geno บันทึก prompt แล้วรัน hook UserPromptSubmit ซึ่งเป็น hook ที่ได้อ่าน prompt ก่อน model มีแค่ `~/bin/log-prompt.sh` ของคุณที่รัน `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอก model หรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
         from: engine
         to: machine
       lane: loop
@@ -180,7 +180,7 @@ scenario:
     - id: shown
       beat:
         title: Settings บอกว่า hook ของ repo รอ trust
-        text: ทุก hook ขึ้นพร้อมที่มาและสถานะ hook ของ repo มีป้ายว่าต้องเชื่อถือ workspace ก่อน เมื่อคุณเชื่อถือ workspace ใน VS Code มันจะรันใน turn ถัดไป
+        text: ทุก hook ขึ้นพร้อมที่มาและสถานะ hook ของ repo มีป้ายว่าต้องเชื่อถือ workspace ก่อน ถ้าคุณกดเชื่อถือทีหลัง engine ตัวเดิมยังจำค่าเดิมของการเชื่อมต่อและชุด hook ของ session นี้ไว้ hook ของ repo อาจยังไม่รันจนกว่า engine จะเริ่มใหม่ ดูหมายเหตุท้ายหน้า
         from: panel
         to: you
         sees: แถว "UserPromptSubmit" `./scripts/hook.sh` ป้าย "Needs a trusted workspace" และแถวของ `~/bin/log-prompt.sh` ที่รันได้
@@ -196,14 +196,16 @@ scenario:
       end: { turn: continues, reason: call-model }
 ---
 
-trust ของ VS Code คือเส้นแบ่งระหว่างการตั้งค่าที่ผู้ใช้เขียนเองกับการตั้งค่าที่มากับ repo
-hook ของ repo เป็นคำสั่ง shell ที่คนอื่นเขียน Geno จึงไม่รันมันจนกว่าผู้ใช้จะบอก VS Code ว่าเชื่อถือโฟลเดอร์นี้
-และเมื่อรัน ก็รันใน sandbox เหมือนคำสั่งของ model
+trust ของ VS Code (Workspace Trust) คือเส้นแบ่งระหว่างการตั้งค่าที่ผู้ใช้เขียนเองกับการตั้งค่าที่มากับ repo
+[hook](/start/glossary/) ของ repo เป็นคำสั่ง shell ที่คนอื่นเขียน Geno จึงไม่รันมันจนกว่าผู้ใช้จะบอก VS Code ว่าเชื่อถือโฟลเดอร์นี้
+และเมื่อรัน ก็รันใน [sandbox](/start/glossary/) เหมือนคำสั่งของ model
+คำว่า [engine](/start/glossary/) [session](/start/glossary/) [turn](/start/glossary/) และ [ACP](/start/glossary/) ในขั้นข้างบนมีคำอธิบายในคำศัพท์
 
 | ที่มาของ hook | workspace ไม่เชื่อถือ | workspace เชื่อถือ |
 | --- | --- | --- |
 | `~/.claude`, `~/.g-code`, `~/.agents` ของผู้ใช้ | รัน | รัน นอก sandbox |
 | plugin ที่ติดตั้งระดับผู้ใช้ | รัน | รัน นอก sandbox |
+| plugin ที่ติดตั้งให้เฉพาะโปรเจกต์นี้ | ไม่รัน | รัน ใน sandbox |
 | `.claude`, `.g-code`, `.agents`, `.gcode.json` ของ repo | ไม่รัน ป้าย "Needs a trusted workspace" | รัน ใน sandbox |
 
 สิ่งที่ควรสังเกต

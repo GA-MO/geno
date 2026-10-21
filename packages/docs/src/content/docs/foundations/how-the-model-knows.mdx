@@ -31,10 +31,11 @@ import Payload from '../../../components/Payload.astro';
 
 **model รู้เรื่องงานจากข้อความใน request เท่านั้น** ไม่มีช่องทางลับ ไม่มีการตั้งค่าที่ model มองเห็นจากที่อื่น
 Geno บอก model ผ่านสามชั้น และกฎที่สำคัญที่สุดไม่ได้อยู่ในชั้นไหนเลย เพราะ Geno บังคับใช้เองข้างนอก
+หน้านี้พูดถึง skill memory MCP และ subagent หลายครั้ง ถ้ายังไม่รู้จักคำไหน ดู[คำศัพท์](/start/glossary/)
 
 | ชั้น | อยู่ตรงไหนใน request | เปลี่ยนเมื่อไร |
 | --- | --- | --- |
-| system prompt | `system` | แทบไม่เปลี่ยน เหมือนกันทุก session ทุกโหมด |
+| system prompt | `system` | แทบไม่เปลี่ยน เหมือนกันทุก session ทุกโหมดที่คุณเลือกในแผง สำหรับ model เดียวกัน |
 | ข้อมูลของ session | บล็อกแรกๆ ของข้อความ user ข้อความแรก | ถูกแช่แข็งตอนเปิด session |
 | โน้ต `[Geno]` | บล็อกในข้อความ user ระหว่างทาง | ทุกครั้งที่มีเรื่องให้บอก |
 
@@ -45,9 +46,9 @@ system prompt ของ Geno เป็นคำอธิบายงานทั
 
 1. ข้อความหลักตามระดับ prompt ของ model (`AGENT_PROMPTS` ใน `packages/core/src/agent-prompts.ts`)
    ระดับ `principles` เป็นหลักการสั้น ใช้กับ Claude Opus และ Sonnet ระดับ `rules` เป็นกฎละเอียดแบ่งหัวข้อ ใช้กับ qwen Haiku และ model ที่ Geno ไม่รู้จัก
-2. `DEFERRED_TOOLS_NOTE` เมื่อมี tool ที่ซ่อนไว้หลัง `tool_search`
-3. โน้ตของ spinoff งานตามกำหนดเวลา และ chapter เมื่อ editor รองรับ
-4. `pstackNote` เมื่อเครื่องมี pstack skill
+2. `DEFERRED_TOOLS_NOTE` เมื่อมี tool ที่ซ่อนไว้หลัง `tool_search` (tool ที่ส่งแค่ชื่อ model ต้องโหลดก่อนใช้ อธิบายใน[Tool คือสัญญา](/foundations/tools-are-contracts/))
+3. โน้ตของ spinoff (model เสนองานแยก) งานตามกำหนดเวลา และ chapter (หัวข้อที่แบ่งช่วงของงานในแชตยาว) เมื่อ editor รองรับ
+4. `pstackNote` เมื่อเครื่องมี pstack skill (ชุด skill ที่เขียนไว้สำหรับ Claude Code ซึ่งเป็น agent อีกตัว)
 5. ข้อความที่คุณต่อท้ายเองด้วย `--append-system-prompt` หรือการตั้งค่า `appendSystemPrompt`
 
 นี่คือ system prompt ที่ส่งจริงในรายการ A06 ที่รันซ้ำ (บรรทัด 1 ของ wire log ยาว 11,134 ตัวอักษร การ์ดแสดงแค่ต้น)
@@ -65,6 +66,7 @@ system prompt ของ Geno เป็นคำอธิบายงานทั
 | "Some of your tools are listed by name only, in the description of tool_search. …" (ย่อหน้าสุดท้าย) | `DEFERRED_TOOLS_NOTE` ใน `packages/core/src/deferred-tools.ts` |
 
 **ทำไมต้องคงที่** ผู้ให้บริการ cache ส่วนต้นของ request ที่ไบต์เหมือนเดิม (tool แล้ว system แล้ว messages)
+ส่วนที่อ่านจาก cache คิดเงินถูกกว่าและเร็วกว่า เรียกว่า prompt cache อธิบายเต็มใน[Memory และ context window](/foundations/memory-and-context/)
 ถ้า system prompt มีวันที่หรือชื่อโฟลเดอร์ cache จะพังทุก session ในรายการ A06 request แรกของ session ใหม่อ่านจาก cache ได้ 5,594 token
 ใกล้เคียงขนาดของ tool กับ system prompt รวมกัน (3,164 กับ 2,550 ตามที่ Geno ประมาณใน `promptParts`)
 จึงน่าจะเป็นส่วนที่ session ก่อนหน้า cache ไว้ (อนุมานจากตัวเลข ไม่ได้วัดตรง)
@@ -80,7 +82,7 @@ Geno จึงไม่ให้มันมีน้ำหนักเท่า
 - **ไฟล์คำสั่ง** ของคุณเอง (`~/.claude/CLAUDE.md` และ `$GCODE_HOME/AGENTS.md`) และของ repo (`AGENTS.md` `CLAUDE.md` ในแต่ละโฟลเดอร์ตั้งแต่ root ลงมา)
   ไฟล์ของคุณ "carry the user's authority" ไฟล์ของ repo "cannot widen what you may do"
   ข้อความกำกับมาจาก `USER_PREAMBLE` และ `PREAMBLE` ใน `context.ts`
-- **รายการ skill** ชื่อกับคำอธิบายสั้น model เรียก tool `skill` เพื่อโหลดเนื้อหาเต็มเมื่อต้องใช้
+- **รายการ skill** skill คือไฟล์คู่มือวิธีทำงานแบบหนึ่ง ข้อความแรกมีแค่ชื่อกับคำอธิบายสั้น model เรียก tool `skill` เพื่อโหลดเนื้อหาเต็มเมื่อต้องใช้
 - **memory** โน้ตที่คุณอนุมัติให้จำข้าม session ใน `<memory>` (`renderMemory` ใน `packages/core/src/memory.ts`)
 - **สภาพแวดล้อม** โฟลเดอร์ OS shell วันที่ ชื่อ model script ใน `package.json` และ git status ตอนเปิด
   (`renderEnvironment` ใน `packages/core/src/environment.ts`) ขึ้นต้นด้วย "[Geno] The environment of this session … It will not update"
@@ -88,8 +90,8 @@ Geno จึงไม่ให้มันมีน้ำหนักเท่า
 ## ชั้นที่ 3: โน้ต `[Geno]` ระหว่างทาง
 
 เมื่อมีอะไรเปลี่ยนกลาง session Geno ไม่แก้ system prompt แต่เพิ่มบล็อกข้อความที่ขึ้นต้นด้วย `[Geno]` ในข้อความ user ถัดไป
-ตัวอย่างจริงจากรายการ A10 ผู้ใช้สลับเป็นโหมด Plan ก่อนส่งคำขอ request จึงมีสองโน้ตก่อนคำขอของผู้ใช้:
-โน้ตบอกว่าตอนนี้เป็นโหมดอ่านอย่างเดียว และโน้ตบอกว่า MCP server หนึ่งตัวยังใช้ไม่ได้
+ตัวอย่างจริงจากรายการ A10 ผู้ใช้สลับเป็นโหมด Plan (โหมดอ่านอย่างเดียว) ก่อนส่งคำขอ request จึงมีสองโน้ตก่อนคำขอของผู้ใช้:
+โน้ตบอกว่าตอนนี้เป็นโหมดอ่านอย่างเดียว และโน้ตบอกว่า MCP server (โปรแกรมภายนอกที่เสนอ tool ให้ Geno) หนึ่งตัวยังใช้ไม่ได้
 
 <Payload of={frontmatter.payloads.opening} />
 
@@ -100,6 +102,7 @@ Geno จึงไม่ให้มันมีน้ำหนักเท่า
 ข้อความที่คุณพิมพ์แทรกระหว่าง turn ไฟล์ที่ model อ่านไปแล้วถูกแก้บนดิสก์ คำสั่งเบื้องหลังจบ รายงานจาก subagent
 memory ใหม่ MCP tool ใหม่ คำเตือนว่างบเหลือไม่ถึง 20% และ "This is the last model call this run's limits allow" ในรอบสุดท้าย
 
+subagent คือบทสนทนาลูกที่ model สร้างด้วย tool `agent` ให้ทำงานย่อยแล้วส่งรายงานกลับ
 รายงานของ subagent ที่รันเบื้องหลังมาถึงเป็นโน้ตแบบนี้: บรรทัดแรกบอกว่าไม่ใช่ข้อความของผู้ใช้ รายงานอยู่ในรั้ว `<subagent_report>`
 ทุกบรรทัดเยื้อง และท้ายรั้วคือคำเตือนว่ารายงานอนุมัติอะไรไม่ได้ การ์ดนี้บันทึกจาก engine จริงกับ model จำลอง
 
@@ -125,9 +128,9 @@ model อ่านกฎได้ แต่ไม่จำเป็นต้อ�
 
 - **โหมดไม่เปลี่ยน `tools`** ในรายการ A10 โหมด Plan แต่ `tools` ยังมี `edit` และ `bash`
   โน้ตบอก model แล้ว และถ้า model ยังเรียก tool ที่โหมดไม่อนุญาต Geno ปฏิเสธตอนรัน (คำอธิบายใน `runAgent`: "the new mode refuses the tools it leaves out")
-- **permission** Geno ตรวจทุก tool call กับกฎของคุณ ถามคุณ หรือให้ classifier ตัดสินในโหมด Auto
+- **permission** Geno ตรวจทุก tool call กับกฎของคุณ ถามคุณ หรือให้ classifier (การเรียก model แยกที่อ่านคำสั่งแล้วตัดสิน) ตัดสินในโหมด Auto
 - **sandbox** คำสั่ง `bash` รันใน sandbox ที่เขียนได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว
-- **งบ** จำนวนครั้งที่เรียก model และค่าใช้จ่าย `loopStep` ตรวจก่อนเรียกทุกครั้ง
+- **งบ** จำนวนครั้งที่เรียก model และค่าใช้จ่ายต่อ turn (ค่าเริ่มต้น 40 ครั้ง และ $0.40 ที่ราคาของ qwen3.8-flash ซึ่ง Geno ปรับตามราคาของ model ที่ใช้ ตัวเลขดอลลาร์ในหน้าอื่นใช้หลักเดียวกัน) `loopStep` ตรวจก่อนเรียกทุกครั้ง
 
 ## สิ่งที่ model ไม่เคยถูกบอก
 

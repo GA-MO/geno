@@ -4,7 +4,7 @@ description: model เรียก web_search โหมด Plan ค้นทั�
 scenario:
   surface: vscode
   given:
-    - ตั้ง key ของ Brave Search ไว้แล้ว (`BRAVE_SEARCH_API_KEY` หรือใน Settings) ถ้าไม่มี key model ไม่ได้รับ `web_search` เลย
+    - ตั้ง key ของ Brave Search ไว้แล้ว (`BRAVE_SEARCH_API_KEY` หรือใน Settings) ถ้าไม่มี key model ได้ `web_search` เฉพาะบน Anthropic หรือ Vertex ซึ่งค้นเว็บเองได้
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
     model เรียก `web_search` ด้วย `query` "date-fns format day of week token"
@@ -16,10 +16,19 @@ scenario:
       beat:
         title: "Model ขอค้นเว็บ"
         text: >-
-          คุณตั้ง key ของ Brave Search ไว้แล้ว model จึงมี `web_search` ให้ใช้ มันขอค้นว่า "date-fns format day of week
-          token"
+          Brave Search คือบริการค้นเว็บที่ Geno เรียกผ่าน API คุณตั้ง key ของมันไว้แล้ว Geno จึงเสนอ `web_search` ให้ model
+          `web_search` เป็น tool ที่เลื่อนไว้ คือ Geno ส่งแค่ชื่อของมันในคำอธิบายของ `tool_search` model จึงโหลดมันด้วย `tool_search` ก่อน
+          แล้วขอค้นว่า "date-fns format day of week token" และหยุดรอผล
+          การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน การบันทึกเรียก Brave ไม่ได้
+          จึงรันบน Anthropic ในโหมด Plan โดยไม่มี key ของ Brave และค้นด้วยระบบค้นเว็บของ Anthropic แทน สิ่งที่ model ส่งเหมือนกันทั้งสองแบบ
+          การ์ดคือคำตอบของ model ตามที่ Geno ใส่กลับในคำขอถัดไป ดู `input` ที่ไฮไลต์ คือคำค้น
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/tool-web-search.jsonl#line=8
+          select: messages[-2]
+          highlight: ['content[1].input']
       do: >-
         model ส่งบล็อก `tool_use` ของ `web_search` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -40,7 +49,8 @@ scenario:
       beat:
         title: "Geno ตัดสินด้วยกฎของการค้นเว็บ"
         text: >-
-          การค้นส่งคำค้นออกไปที่ผู้ให้บริการค้นหา ไม่มีกฎโดเมนเกี่ยว ผลขึ้นกับโหมดเท่านั้น ลองเลือกโหมด
+          การค้นส่งคำค้นออกไปที่ผู้ให้บริการค้นหา ไม่มีกฎโดเมนเกี่ยว ผลขึ้นกับโหมดเท่านั้น โหมดคือค่าที่บอกว่า Geno ถามคุณก่อนแค่ไหน
+          Plan อ่านอย่างเดียว Ask ถามก่อนทำสิ่งเสี่ยง และ Auto ให้ classifier ตัดสินแทนคุณ ลองเลือกโหมด
         from: engine
         to: engine
         ask: "โหมดไหน"
@@ -76,7 +86,8 @@ scenario:
                 beat:
                   title: "โหมด Ask ถามคุณก่อน"
                   text: >-
-                    ไม่มี hook ตอบแทน Geno จึงส่งคำถามไปที่แชต คำขอนี้ไม่มีกฎให้บันทึก การ์ดจึงไม่มีปุ่ม Always allow
+                    ไม่มี hook (คำสั่ง shell ที่คุณตั้งให้ตัดสินแทน) ตอบแทน Geno จึงพัก turn แล้วส่งคำถามไปที่แชต
+                    คำขอนี้ไม่มีกฎให้บันทึก การ์ดจึงไม่มีปุ่ม Always allow
                   from: engine
                   to: panel
                 do: >-
@@ -140,7 +151,8 @@ scenario:
                 beat:
                   title: "โหมด Auto ให้ classifier ตัดสิน"
                   text: >-
-                    classifier อ่านคำค้นเหมือนการเปิดหน้าเว็บ ผ่านเมื่องานต้องการหัวข้อนั้น
+                    classifier คือการเรียก model อีกครั้งที่อ่านคำขอแล้วตอบว่าอนุญาต ถาม หรือปฏิเสธ
+                    มันอ่านคำค้นเหมือนการเปิดหน้าเว็บ ผ่านเมื่องานต้องการหัวข้อนั้น
                     และไม่ผ่านถ้าคำค้นพาข้อมูลของโปรเจกต์ออกไป ทัวร์ของ classifier เล่าต่อ
                   from: engine
                   to: engine
@@ -156,8 +168,9 @@ scenario:
       beat:
         title: "Engine ถาม Brave Search"
         text: >-
-          engine ส่งคำขอเองนอก sandbox ขอผลไม่เกิน 8 รายการ key ที่ถูกปฏิเสธหรือ error ของ HTTP ทำให้ call ล้มเหลว
-          พร้อมบอกว่าแก้ที่ไหน
+          engine ส่ง HTTP GET ถึง Brave Search เองจาก process ของมัน ไม่ผ่าน sandbox ซึ่งกันเฉพาะคำสั่ง shell
+          ขอผลไม่เกิน 8 รายการ key ที่ถูกปฏิเสธหรือ error ของ HTTP ทำให้ call ล้มเหลว พร้อมบอกว่าแก้ที่ไหน
+          ในการบันทึก ขั้นนี้คือการเรียก model ช่วยบน Anthropic หนึ่งครั้งแทน ซึ่งค้นเว็บด้วยระบบของ Anthropic
         from: engine
         to: machine
       do: >-
@@ -171,8 +184,8 @@ scenario:
       beat:
         title: "Geno ล้อมรั้วผลค้น"
         text: >-
-          ผลที่โฮสต์ตรงกฎห้ามของ `web_fetch` ถูกทิ้ง ที่เหลืออยู่ในรั้ว ตามด้วยบรรทัดที่บอกว่าผลค้นเป็นข้อมูล
-          ไม่ใช่คำสั่ง ผลกลับมาที่แชต
+          ผลที่โฮสต์ตรงกับกฎของ workspace ที่ห้าม `web_fetch` ถูกทิ้ง ที่เหลืออยู่ในรั้ว คือแท็ก `<web_search_results>` ที่ครอบรายการ
+          ตามด้วยบรรทัดที่บอกว่าผลค้นเป็นข้อมูล ไม่ใช่คำสั่ง ผลกลับมาที่แชต และถึง model ตอนเรียกครั้งถัดไป
         from: engine
         to: engine
       do: >-
@@ -189,10 +202,32 @@ scenario:
       beat:
         title: "Model ได้รายการผล"
         text: >-
-          Geno เรียก model ต่อ model ได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล ถ้าอยากอ่านหน้าไหนต้องเรียก `web_fetch` ต่อ
+          Geno เรียก model ต่อ โดยส่งผลเป็น `tool_result` ท้ายคำขอ model ได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล
+          ไม่ได้เนื้อหน้าเว็บ ถ้าอยากอ่านหน้าไหนต้องเรียก `web_fetch` ต่อ การ์ดข้างล่างคือ `tool_result` จากการบันทึกเดียวกัน
+          ดู `content` ที่ไฮไลต์ สามแท็บคือ `content` อันเดียวกัน แต่ละแท็บแสดงคนละช่วง รายการอยู่ในรั้ว `<web_search_results>` (แท็บแรก)
+          ตามด้วยบรรทัด `[Geno]` ที่บอกว่าเป็นข้อมูล ไม่ใช่คำสั่ง (แท็บสาม)
+          การบันทึกนี้ค้นด้วยระบบของ Anthropic ป้าย `provider` จึงเป็น Anthropic web search (แท็บแรก) และมี `<web_search_summary>`
+          คือสรุปที่ model ช่วย (helper) เขียนจากผลต่อท้าย (แท็บสาม) ถ้าค้นด้วย Brave ป้ายเป็น Brave Search และไม่มีสรุป
+          บนระบบของ Anthropic คำอธิบายคือข้อความที่ model ช่วยอ้าง หรืออายุของหน้า ถ้าไม่ได้อ้าง ผลที่ 2 และ 3 จึงขึ้นว่า "Updated" ตามด้วยวันที่ (แท็บสองแสดงของผลที่ 2)
         from: engine
         to: model
         end: "model ทำต่อ"
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/tool-web-search.jsonl#line=8
+            select: messages[-1]
+            highlight: ['content[0].content']
+            quote: <web_search_results
+          - kind: payload
+            source: packages/docs/src/data/recorded/tool-web-search.jsonl#line=8
+            select: messages[-1]
+            highlight: ['content[0].content']
+            quote: 3. How to get day of week
+          - kind: payload
+            source: packages/docs/src/data/recorded/tool-web-search.jsonl#line=8
+            select: messages[-1]
+            highlight: ['content[0].content']
+            quote: "[Geno] A helper model wrote the summary"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล
         ถ้าอยากอ่านหน้าใดต้องเรียก `web_fetch` ต่อ
@@ -218,6 +253,8 @@ scenario:
 - **Ask ถามทุกครั้งและบันทึกเป็นกฎไม่ได้** กฎ `web-search` ไม่แนบรูปแบบให้บันทึก ปุ่ม Always allow จึงไม่ขึ้น
 - **การ์ดเขียนว่า "Run this command?"** การค้นใช้หน้าตาของการ์ดคำสั่ง เพราะไม่มี subject แบบ fetch หรือ read
   ชื่อการ์ดจึงไม่ตรงกับสิ่งที่ถาม แต่บรรทัดคำสั่งและเหตุผลบอกว่าเป็นการค้นเว็บ
+- **ไม่มี key ของ Brave ก็ค้นได้บน Anthropic หรือ Vertex** Geno เรียก model ช่วยหนึ่งครั้งบนผู้ให้บริการนั้น
+  ให้มันค้นด้วยระบบค้นเว็บของผู้ให้บริการ แล้วส่งผลกับสรุปที่อ้างเลขผลให้ model ถ้ามี key ของ Brave Geno ใช้ Brave เสมอ
 - **กฎ deny ของโดเมนกรองผลด้วย** โฮสต์ที่ workspace ห้าม `web_fetch` ไม่โผล่ในผลค้น model จึงไม่ถูกชวนไปเปิดหน้านั้น
 
 อ่านหน้าที่ค้นเจอ ดู [Model ดึงหน้าเว็บด้วย web_fetch](/scenarios/tool/web-fetch/)

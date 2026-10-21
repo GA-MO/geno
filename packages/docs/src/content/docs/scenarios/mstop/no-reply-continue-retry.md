@@ -17,7 +17,7 @@ scenario:
       beat:
         title: "แชตบอกว่า Geno หยุดโดยไม่มีคำตอบ"
         text: >-
-          turn ที่แล้วจบโดยไม่มีข้อความหลังขั้นสุดท้าย ในทัวร์นี้คุณกด Stop ก่อน model ตอบ แผงเลือกเหตุผลจากวิธีที่ turn
+          turn ที่แล้วจบโดยไม่มีข้อความหลังขั้นสุดท้าย (ขั้นคือแถวของ tool หรือ error ในแชต) ในทัวร์นี้คุณกด Stop ก่อน model ตอบ แผงเลือกเหตุผลจากวิธีที่ turn
           จบ และใส่ปุ่มให้เพราะนี่คือ turn ล่าสุด
         from: panel
         to: you
@@ -35,7 +35,7 @@ scenario:
       beat:
         title: "คุณเลือกปุ่ม"
         text: >-
-          ทั้งสองปุ่มเริ่ม turn ใหม่ Retry ส่งข้อความเดิมของคุณซ้ำ Continue ส่งคำขอสำเร็จรูปของ Geno ในนามคุณ ลองเลือกดู
+          ทั้งสองปุ่มเริ่ม turn ใหม่ Retry ส่งข้อความเดิมของคุณซ้ำ Continue ส่งคำขอสำเร็จรูปของ Geno ที่ขึ้นในแชตเหมือนข้อความของคุณ ลองเลือกดู
         from: you
         to: panel
         ask: "กดปุ่มไหน"
@@ -152,7 +152,8 @@ scenario:
         title: "Geno รวม prompt เดิม โน้ต และข้อความใหม่"
         text: >-
           prompt เดิมยังไม่ได้คำตอบ Geno จึงรวมมันกับโน้ตที่บอกว่าคุณหยุด turn ที่แล้ว และข้อความใหม่ เป็นข้อความ user
-          เดียว กด Continue model เห็นว่าคุณอนุญาตให้ทำต่อ ในรูปโน้ตของ Geno กด Retry model เห็น prompt เดิมสองครั้ง
+          เดียว (โน้ตคือข้อความที่ Geno แทรกให้ model อ่าน ขึ้นต้นด้วย `[Geno]` และไม่ขึ้นในแชต)
+          กด Continue model เห็นว่าคุณอนุญาตให้ทำต่อ ในรูปโน้ตของ Geno กด Retry model เห็น prompt เดิมสองครั้ง
         from: engine
         to: engine
       do: >-
@@ -169,8 +170,18 @@ scenario:
         title: "Geno ส่งคำขอของ turn ใหม่"
         text: >-
           คำขอออกไปหา model จากตรงนี้ turn ใหม่เดินเหมือน turn ปกติ
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน เป็นทาง Continue: คุณถาม
+          "Explain what src/version.ts does." กด Stop ก่อน model ตอบ แล้วกด Continue ดูข้อความ user ข้อความเดียวของคำขอ
+          สามก้อนที่ไฮไลต์เรียงกันคือ prompt เดิมที่ยังไม่ได้คำตอบ โน้ตว่าคุณหยุด turn ที่แล้ว และโน้ตว่าคุณกดปุ่ม Continue
+          ก้อนแรกที่พับไว้คือโน้ตสภาพแวดล้อมที่ Geno ใส่ไว้ตอนเริ่ม session
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/mstop-no-reply-continue-retry.jsonl#line=4
+          select: 'messages[0]'
+          collapse: ['content[0]']
+          highlight: ['content[1]', 'content[2]', 'content[3]']
         end: "turn ใหม่เริ่ม"
       do: >-
         gateway ส่งคำขอ turn ใหม่ดำเนินต่อเหมือน turn ปกติ
@@ -186,7 +197,7 @@ scenario:
 | ถึงขีดจำกัดจำนวนครั้งหรือค่าใช้จ่าย | It reached its limit before it answered. |
 | มี error อื่น | ไม่แสดงประกาศ บล็อก error บอกเหตุผลแล้ว |
 | ผู้ใช้กด Stop | You stopped it before it answered. |
-| ขั้นสุดท้ายถูกปฏิเสธ | It stopped at the call that was denied. |
+| ขั้นสุดท้ายเป็น call ที่คุณไม่อนุญาต | It stopped at the call that was denied. |
 | อย่างอื่น เช่นคำตอบว่าง | Its last reply had no text. |
 
 สิ่งที่ควรสังเกต
@@ -194,7 +205,7 @@ scenario:
 - **ปุ่มมีเฉพาะ turn ล่าสุด** และเฉพาะตอนที่ช่องพิมพ์ไม่มีข้อความรอในคิว turn เก่าแสดงแค่ประกาศ
 - **Retry เป็นข้อความธรรมดา Continue เป็นคำของ Geno** Retry โพสต์ `send` เหมือนผู้ใช้พิมพ์เอง Continue ส่งคำขอคงที่พร้อม
   `gcode/action` engine จึงให้ model อ่านเป็นโน้ตของ Geno และภาษาของคำตอบยังตามข้อความที่ผู้ใช้พิมพ์เอง ทั้งสองปุ่มได้ turn ใหม่ที่มีขีดจำกัดเต็ม
-  ต่างจาก "Retry now" ในช่องพิมพ์ ซึ่งเร่งการเรียก model ที่กำลังรอ backoff ใน turn เดิม
+  ต่างจาก "Retry now" ในช่องพิมพ์ ซึ่งเร่งการเรียก model ที่กำลังรอ backoff (รอก่อนลองใหม่หลังผู้ให้บริการล้มชั่วคราว) ใน turn เดิม
 - **หลัง Stop โน้ตเป็นตัวกำหนดน้ำเสียง** `STOPPED_TURN_NOTE` บอก model ว่าผู้ใช้หยุด turn ที่แล้ว ให้ตอบคำถามก่อนแล้วถามว่าจะทำต่อหรือไม่
   ข้อความ Continue ที่ตามมาจึงเป็นคำอนุญาตให้ทำต่อ
 

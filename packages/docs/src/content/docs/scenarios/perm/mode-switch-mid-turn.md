@@ -88,7 +88,8 @@ scenario:
         title: "Call ถัดไปใช้โหมดใหม่"
         text: >-
           Geno อ่านโหมดทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม คำสั่งนอกรายการปลอดภัยตัวถัดไปจึงไปที่
-          classifier แทนการ์ด ส่วน `pnpm test` ที่รันอยู่ไม่ได้รับผลใดๆ
+          classifier (การเรียก model แยกที่ตัดสินแทนคุณว่า allow ask หรือ deny) แทนการ์ด
+          ส่วน `pnpm test` ที่รันอยู่ไม่ได้รับผลใดๆ
         from: engine
         to: engine
       do: >-
@@ -118,37 +119,75 @@ scenario:
       lane: loop
       at: drive
       beat:
-        title: "Geno บอก model ว่าโหมดเปลี่ยน"
+        title: "Geno เตรียมประกาศโหมดให้ model"
         text: >-
-          ที่จุดปลอดภัยก่อนเรียก model Geno เห็นว่าโหมดต่างจากที่ model รู้ จึงเพิ่มประกาศต่อจากผลของ tool
+          Geno เขียนประกาศไว้ใน log ประกาศนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
+          จุดปลอดภัยคือจังหวะหลังผลของ tool ชุดหนึ่งครบแล้วและก่อนเรียก model ครั้งถัดไป
+          ตรงนั้น Geno เห็นว่าโหมดต่างจากที่ model รู้ จึงเพิ่มประกาศต่อจากผลของ tool
           ประกาศนี้ไม่ขึ้นในแชต ใน run จริงด้านล่างโหมดถูกตั้งก่อนข้อความแรก แต่ประกาศมีข้อความเดียวกัน
+          ดูข้อความที่ขึ้นต้นด้วย `[Geno]` แท็บแรกคือต้นข้อความ ที่บอกว่าคุณสลับเป็น Auto และคำสั่งนอก safe list ไปที่ classifier
+          แท็บสองคือช่วงต่อมา ที่บอกว่า `ask_user` ใช้ไม่ได้ ("ask_user is refused")
         from: engine
-        to: model
+        to: engine
         sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
-          select: messages[-1].content[3]
+          - kind: payload
+            source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
+            select: messages[-1].content[3]
+          - kind: payload
+            source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
+            select: messages[-1].content[3]
+            quote: ask_user is refused
       do: >-
         ที่จุดปลอดภัย `deliver()` ถาม `noticeFor` ว่าโหมดตอนนี้ต่างจากที่ model รู้หรือไม่ ต่างจริง จึงบันทึก event `notice`
         ที่มีโหมด Auto ซึ่งคำขอถัดไปแสดงเป็นข้อความ `MODE_NOTICES.auto` ต่อจากผลของ tool ประกาศนี้ไม่แสดงในแผง
       ref: packages/core/src/notice.ts#noticeFor
       emits: [notice]
 
+    - id: call
+      lane: loop
+      at: model-call
+      beat:
+        title: "Geno เรียก model อีกครั้ง"
+        text: >-
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model ในคำขอใหม่ ประกาศโหมดอยู่ต่อจากผลของ tool
+          คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด
+          (prompt cache คือส่วนต้นของคำขอที่ผู้ให้บริการจำไว้ คำขอที่ขึ้นต้นเหมือนเดิมจึงอ่านเร็วและถูกกว่า)
+          การ์ดข้างล่างเป็นคำขอจริงจาก run เดียวกับการ์ดก่อนหน้า ซึ่งมีข้อความเดียวเพราะโหมดถูกตั้งก่อนข้อความแรก
+          บล็อกที่ไฮไลต์ในข้อความนั้นคือประกาศ `[Geno]` เรื่องโหมด
+        from: engine
+        to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
+          select: messages
+          highlight: ['[0].content[3]']
+      do: >-
+        `callModel` ส่ง log ให้ gateway ประกอบคำขอ event `notice` กลายเป็นข้อความ `MODE_NOTICES.auto` ต่อจากผลของ tool
+        tool ชุดเดิมและ system prompt เดิมไม่เปลี่ยน prompt cache จึงไม่หลุด
+      ref: packages/engine/src/drive.ts#callModel
+
     - id: reads
       lane: model
       beat:
         title: "Model ทำต่อในโหมด Auto"
         text: >-
-          คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด
-          model ทำงานต่อโดยรู้ว่าตอนนี้ถามคุณด้วยฟอร์มไม่ได้แล้ว
+          model ตอบหลังได้คำขอนี้เท่านั้น มันทำงานต่อโดยรู้ว่าตอนนี้เรียก `ask_user` (tool ที่ถามคุณเป็นฟอร์ม) ไม่ได้แล้ว
+          ในการรันจริงนี้ model ขอ `list` และ `bash` เพื่อดู repo ก่อน ดู `input` สองตัวที่ไฮไลต์
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=6
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input', '[3].input']
         end: "turn ทำต่อในโหมดใหม่"
       do: >-
-        คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด model อ่าน
-        "[Geno] The user switched this session to Auto mode. ..." แล้วทำงานต่อโดยรู้ว่า `ask_user` ใช้ไม่ได้แล้ว
-      ref: packages/core/src/notice.ts#MODE_NOTICES
-      end: { turn: continues, reason: call-model }
+        model อ่าน "[Geno] The user switched this session to Auto mode. ..." แล้วทำงานต่อโดยรู้ว่า `ask_user` ใช้ไม่ได้แล้ว
+        ในการรันนี้ model ขอเรียก tool และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 โหมดมีผลสองที่ และเวลาที่มีผลต่างกัน
@@ -163,7 +202,8 @@ scenario:
 - **ทุกโหมดได้ tool เหมือนกัน** Plan ไม่ได้เอา `edit` ออกจากคำขอ มันปฏิเสธตอน call รัน
   การสลับโหมดจึงไม่เปลี่ยนไบต์ของ system prompt และรายการ tool
 - **การ์ดที่เปิดอยู่ไม่เปลี่ยน** ถ้าการ์ดขออนุญาตรออยู่ตอนสลับเป็น Auto การ์ดนั้นยังรอผู้ใช้ตอบ โหมดใหม่มีผลกับ call ที่ถูกตัดสินหลังจากนี้
-- **effort ต่างจากโหมด** การเปลี่ยน effort ระหว่าง turn มีผลกับรอบถัดไป ไม่ใช่การเรียก model ครั้งถัดไป
+- **effort ต่างจากโหมด** โหมดมีผลตั้งแต่การเรียก model ครั้งถัดไป เพราะ engine อ่านโหมดใหม่ก่อนเรียกทุกครั้ง
+  แต่การเปลี่ยน effort ระหว่าง turn มีผลตั้งแต่ turn ถัดไป turn ที่กำลังรันใช้ระดับเดิมจนจบ เพราะ engine อ่าน effort จากสำเนาของ log ที่คัดไว้ตอนเริ่ม turn
   ดู [เปลี่ยน effort](/scenarios/sess/model-effort/)
 
 อ่านต่อที่ [โหมด Auto ให้ classifier ตัดสินคำสั่ง](/scenarios/perm/auto-classifier/)

@@ -15,7 +15,9 @@ scenario:
       beat:
         title: Model ขอ worker ใน worktree ของตัวเอง
         text: >-
-          schema ของ tool `agent` มี `isolation` ที่มีค่าเดียวคือ `worktree` (แท็บแรก) model ส่ง `tool_use` ที่มี
+          worker คือ subagent ในตัว Geno ที่แก้ไฟล์ได้ (subagent คือ session ลูกที่ทำงานย่อยแล้วส่งรายงานกลับให้แม่)
+          git worktree คือโฟลเดอร์ที่สองของ repo เดียวกันบน branch ของตัวเอง ให้ worker แก้ไฟล์โดยไม่ยุ่งกับโฟลเดอร์ที่คุณทำงานอยู่
+          schema ของ tool `agent` มี `isolation` ที่มีค่าเดียวคือ `worktree` (แท็บแรก ดูที่ไฮไลต์) model ส่ง `tool_use` ที่มี
           `agent: "worker"`, `isolation: "worktree"` และ `task` ที่เขียนให้ครบในตัว (แท็บสอง) ไม่มี `background` จึงรอรายงาน
         from: model
         to: engine
@@ -27,7 +29,7 @@ scenario:
           - kind: payload
             source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=10
             select: messages[1].content
-            highlight: ['[1].input']
+            highlight: ['[0].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "worker"`, `isolation: "worktree"` และ task ที่เขียนให้ครบในตัว
@@ -48,7 +50,9 @@ scenario:
     - id: want
       beat:
         title: Geno ขอ lane ให้ worker
-        text: lane คือ checkout แยกของ worker มันไม่แตะ checkout หลัก worker จึงรันพร้อมลูกตัวอื่นได้ แทนที่จะรอคิว
+        text: >-
+          Geno เรียก worktree ที่มันสร้างว่า lane lane คือ checkout แยกของ worker มันไม่แตะ checkout หลัก (โฟลเดอร์ที่คุณเปิดอยู่)
+          ปกติลูกที่แก้ไฟล์ต้องรอคิวรันทีละตัวบน checkout หลัก worker ใน lane จึงรันพร้อมลูกตัวอื่นได้ แทนที่จะรอคิว
         from: engine
         to: engine
       lane: loop
@@ -63,16 +67,26 @@ scenario:
       beat:
         title: Geno สร้าง git worktree บน branch `geno/`
         text: >-
-          worktree อยู่ใต้ `.geno/worktrees/` Geno คัดลอกไฟล์ที่ต้องใช้และ `node_modules` ไปให้ sandbox ของ worker ครอบแค่ lane
-          และไฟล์ที่มันแก้ลงดิสก์ตรงๆ ไม่ผ่าน buffer ของ VS Code ข้อความแรกของ worker บอกว่า workspace ของมันคือ lane
+          worktree อยู่ใต้ `.geno/worktrees/` Geno คัดลอกไฟล์ที่ต้องใช้และ `node_modules` (บน macOS) ไปไว้ในนั้น
+          sandbox ของ worker (กรอบที่จำกัดว่าคำสั่งเขียนไฟล์ได้ที่ไหน) ครอบแค่ lane และไฟล์ที่มันแก้ลงดิสก์ตรงๆ
+          ไม่ผ่าน editor ของ VS Code ข้อความแรกของ worker บอกว่า workspace ของมันคือ lane
           บน branch ไหน checkout หลักอยู่ที่ไหน และห้าม `git stash` เปล่าๆ เพราะ stash ใช้ร่วมกันทุก lane
+          ในการ์ด บล็อกแรกที่ไฮไลต์คือข้อมูลสภาพแวดล้อม แท็บแรกแสดงบรรทัด Lane ที่บอกว่า workspace นี้เป็น lane บน branch ไหน และ checkout หลักอยู่ที่ไหน
+          แท็บสองแสดงคำห้าม `git stash` เปล่าๆ บล็อกที่สองคือ `task` ที่แม่เขียน
         from: engine
         to: machine
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=4
-          select: messages[0]
-          highlight: ['content[0].text', 'content[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=4
+            select: messages[0]
+            highlight: ['content[0].text', 'content[1].text']
+            quote: "Lane: worker-00000002, a git worktree on branch geno/worker-00000002; the main checkout is /home/dev/shop."
+          - kind: payload
+            source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=4
+            select: messages[0]
+            highlight: ['content[0].text', 'content[1].text']
+            quote: >-
+              Git's stash stack is shared by the main checkout and every lane, and other sessions may push or pop it while you work. Never run a bare git stash or git stash pop
       lane: loop
       at: agent
       do: >-
@@ -127,20 +141,22 @@ scenario:
 
     - id: works
       beat:
-        title: worker แก้ `src/version.ts` ใน lane
-        text: worker อ่านแล้วแก้ `src/version.ts` ใน lane path ใน `edit` เป็น path เดียวกับ checkout หลัก แต่ไฟล์ที่ถูกแก้คือของ lane แล้ว worker เรียก `report`
+        title: worker ทำงานใน lane แล้วเรียก `report`
+        text: >-
+          worker อ่าน `src/version.ts` ใน lane การ์ดไฮไลต์ `input` ของ `read` path ในนั้นเป็น path เดียวกับ checkout หลัก
+          แต่ไฟล์ที่ถูกอ่านคือของ lane จากนั้น worker แก้ไฟล์หรือไม่แก้ก็ได้ตามที่งานต้องการ แล้วเรียก `report` ที่สรุปสิ่งที่ทำ
         from: model
         to: engine
         sees:
           kind: payload
-          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=8
-          select: messages[3].content
-          highlight: ['[1].input']
+          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=6
+          select: messages[1].content
+          highlight: ['[0].input']
       lane: child@worker
       at: model
       do: >-
-        ลูกเรียก model อ่านและแก้ `src/version.ts` ใน lane
-        จบด้วยการเรียก `report` ที่สรุปสิ่งที่เปลี่ยน
+        ลูกเรียก model อ่าน `src/version.ts` ใน lane แก้ไฟล์ถ้างานต้องการ
+        แล้วจบด้วยการเรียก `report` ที่สรุปสิ่งที่ทำ
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
 
@@ -163,6 +179,23 @@ scenario:
             label: เปลี่ยน
             then: row-done
             steps:
+              - lane: child@worker
+                beat:
+                  title: worker แก้ `src/version.ts` ใน lane
+                  text: >-
+                    ทางนี้ worker แก้ `src/version.ts` ใน lane ก่อนเรียก `report` การ์ดไฮไลต์ `input` ของ `edit`
+                    path ในนั้นเป็น path เดียวกับ checkout หลัก แต่ไฟล์ที่ถูกแก้คือของ lane Geno จึงพบว่า lane เปลี่ยน
+                  from: model
+                  to: engine
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=8
+                    select: messages[3].content
+                    highlight: ['[0].input']
+                at: model
+                do: >-
+                  ก่อน `report` ลูกเรียก `edit` บน `src/version.ts` ใน lane `settleChildLane` จึงเห็นไฟล์ที่เปลี่ยนใน lane
+                ref: packages/engine/src/lanes.ts#settleChildLane
               - lane: loop
                 beat:
                   title: Geno เก็บ lane ไว้ให้คุณตรวจ
@@ -178,18 +211,66 @@ scenario:
 
           - id: unchanged
             label: ไม่เปลี่ยน
-            then: row-done
             steps:
               - lane: loop
                 beat:
                   title: Geno ลบ lane ทิ้ง
-                  text: lane ไม่มีอะไรจะเสีย Geno ลบ worktree และ branch และรายงานไม่มีโน้ตเรื่อง lane
+                  text: worker ไม่ได้เปลี่ยนไฟล์ใน lane เช่นอ่านแล้วพบว่าไม่ต้องแก้ หรือแก้แล้วย้อนกลับ lane ไม่มีอะไรจะเสีย Geno ลบ worktree และ branch และรายงานไม่มีโน้ตเรื่อง lane
                   from: engine
                   to: machine
                 at: tools
                 do: >-
                   lane ไม่มีอะไรจะเสีย `removeLane` ลบ worktree และ branch ทิ้ง รายงานไม่มีโน้ตเรื่อง lane
                 ref: packages/engine/src/lanes.ts#settleChildLane
+
+              - lane: server
+                at: updates
+                beat:
+                  title: แชตติดเครื่องหมายว่า worker เสร็จ
+                  text: แถวของ worker หยุดนาฬิกาและขึ้นเครื่องหมายถูก
+                  from: panel
+                  to: you
+                  sees:
+                    kind: task
+                    title: worker
+                    status: done
+                do: >-
+                  `runPlaced` เรียก `acpChildHost.ended` ซึ่งส่ง `subagent_update` สถานะ `idle` แถวของลูกขึ้นเครื่องหมายถูก
+                ref: packages/engine/src/subagent-acp.ts#acpChildHost
+                emits: [subagent_update, idle]
+
+              - lane: loop
+                at: tools
+                beat:
+                  title: Geno ส่งรายงานให้ model โดยไม่มีโน้ตของ lane
+                  text: >-
+                    รายงานกลับมาเป็นผลของ call ในรั้ว `<subagent_report agent="worker" ...>` ไม่มีโน้ต `[Geno]` เรื่อง lane
+                    เพราะ lane ถูกลบแล้ว ท้ายรั้วยังมีคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ
+                    การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บันทึกจาก `gcode agent` ในเทอร์มินัล ไม่ใช่จาก VS Code แต่รายงานที่แม่ได้เป็นแบบเดียวกันทั้งสองที่ การบันทึกนี้ใช้งานอื่นที่ไม่ต้องแก้ไฟล์ คือให้ worker ตรวจว่า `parseVersion` นับ patch ที่ขาดเป็น 0 ไหม worker อ่าน `src/version.ts` แล้วพบว่านับอยู่แล้ว จึงไม่แก้อะไร ดู `content` ที่ไฮไลต์ แท็กปิด `</subagent_report>` ตามหลังรายงานทันที ไม่มีบรรทัดที่บอก branch หรือ path ของ lane
+                  from: engine
+                  to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/sub-worktree-lane.jsonl#line=8
+                    select: messages[2].content[0]
+                    highlight: [content]
+                    quote: I changed nothing.
+                do: >-
+                  `launch` บันทึก `child-end` ลง log ของแม่ แล้วคืนรายงานในรั้วเป็นผลของ call โดยไม่มีโน้ตของ lane
+                ref: packages/core/src/subagent.ts#childReport
+                emits: [child-end, subagent_report]
+
+              - use: model-call
+
+              - use: turn-ends
+                beat:
+                  title: Model เล่ารายงาน turn จบ
+                  text: >-
+                    model เล่าให้คุณฟังว่า worker รายงานอะไร ไม่มี lane ให้ตรวจหรือ Apply model จบด้วย `end_turn` Geno จึงจบ turn แบบ done
+                  from: engine
+                  to: panel
+                  end: "ไม่มี lane turn จบ"
+                  sees: { kind: composer, state: idle }
 
     - id: row-done
       beat:
@@ -214,6 +295,7 @@ scenario:
         text: >-
           รายงานกลับมาเป็นผลของ call ในรั้ว โน้ต `[Geno]` ของ lane อยู่ในรั้วต่อจากรายงานที่เยื้องไว้: งานอยู่ใน lane ไหน
           บน branch อะไร ไฟล์ไหนเปลี่ยน และผู้ใช้นำกลับด้วยแผง Lanes หรือ `gcode lane apply` ท้ายรั้วคือคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ
+          ใน `content` ที่ไฮไลต์ ส่วนที่ทำเครื่องหมายไว้คือโน้ตของ lane ซึ่งตามหลังรายงานที่เยื้องไว้ และอยู่ก่อนแท็กปิด `</subagent_report>`
         from: engine
         to: model
         sees:
@@ -221,6 +303,9 @@ scenario:
           source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=10
           select: messages[2].content[0]
           highlight: [content]
+          quote: >-
+            [Geno] worker's edits are in lane worker-00000002, on branch geno/worker-00000002 at /home/dev/shop/.geno/worktrees/worker-00000002, not in your checkout.
+            Files changed: src/version.ts. Read them there to review them; the user applies them from the Lanes pane or with gcode lane apply worker-00000002.
       lane: loop
       at: tools
       do: >-
@@ -235,9 +320,15 @@ scenario:
     - id: relays
       beat:
         title: Model บอกให้คุณตรวจ lane
-        text: model เล่าว่า worker ทำอะไรใน lane ไหน การแก้ยังไม่เข้า checkout หลักจนกว่าคุณจะ Apply ทัวร์ถัดไปเล่าการตรวจและ Apply lane
+        text: >-
+          model เล่าว่า worker ทำอะไรใน lane ไหน การแก้ยังไม่เข้า checkout หลักจนกว่าคุณจะ Apply ทัวร์ถัดไปเล่าการตรวจและ Apply lane การ์ดข้างล่างคือท้าย stream ของคำตอบนั้น model จบด้วย `stop_reason: end_turn`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/worktree-lane.jsonl#line=11
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
         end: ไปตรวจและ Apply lane
       lane: model
       do: >-
@@ -253,7 +344,7 @@ lane คือ git worktree ที่ Geno สร้างและจดไว�
 
 สิ่งที่ควรสังเกต
 
-- **การแก้ใน lane ไม่ผ่าน review ของ editor** ไฟล์ลงดิสก์ใน lane โดยตรง ผู้ใช้เห็น hunk เมื่อ Apply lane กลับมาที่ checkout หลัก
+- **การแก้ใน lane ไม่ผ่าน review ของ editor** ไฟล์ลงดิสก์ใน lane โดยตรง ผู้ใช้เห็น [hunk](/start/glossary/) เมื่อ Apply lane กลับมาที่ checkout หลัก
 - **lane ที่ไม่เปลี่ยนหายไปเอง** ลูกที่แค่อ่านใน lane ไม่ทิ้งอะไรไว้
 - **ลูกแบบเบื้องหลังที่แก้ไฟล์ต้องอยู่ใน lane** `background: true` กับ `worker` ที่ไม่มี `isolation: "worktree"` ถูกปฏิเสธ
 - **setup ของ repo ต้องอนุมัติก่อน** คำสั่ง setup ที่ repo ขอให้รันใน lane ใหม่รันเฉพาะเมื่อผู้ใช้อนุมัติด้วย `gcode lane new --approve-setup` ครั้งหนึ่ง

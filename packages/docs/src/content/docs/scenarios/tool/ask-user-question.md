@@ -17,10 +17,18 @@ scenario:
       beat:
         title: "Model ถามคุณกลางงาน"
         text: >-
-          model อยากให้คุณเลือกก่อนทำต่อ มันเรียก tool ถามคำถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก
-          date-fns ที่มันแนะนำ และ dayjs
+          model อยากให้คุณเลือกก่อนทำต่อ มันจึงเรียก tool `ask_user` ซึ่งเป็น tool ที่ถามคุณผ่านฟอร์มในแชต
+          มันถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก date-fns ที่มันแนะนำ และ dayjs
+          แล้วหยุดรอผล การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในโหมด Ask
+          การ์ดคือคำตอบของ model ตามที่ Geno ใส่กลับในคำขอถัดไป ดู `input` ที่ไฮไลต์ `questions` มีหนึ่งข้อ
+          มี `header` เป็นชื่อแท็บ และ `options` สองตัวพร้อมคำอธิบาย ตัวที่มี `recommended` คือตัวที่ model แนะนำ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/tool-ask-user-question.jsonl#line=5
+          select: messages[-2]
+          highlight: ['content[1].input']
       do: >-
         model ส่งบล็อก `tool_use` ของ `ask_user` ที่มี `questions` หนึ่งข้อ พร้อมตัวเลือกและคำอธิบาย จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -39,7 +47,7 @@ scenario:
       beat:
         title: "แชตขึ้นขั้นของคำถาม"
         text: >-
-          Geno จัดคิวคำถามนี้ให้รันทีละตัว เพราะต้องรอคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          Geno จัดคิวคำถามนี้ให้รันทีละตัว ไม่รันพร้อม call อื่น เพราะต้องรอคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: engine
         to: panel
 
@@ -49,8 +57,9 @@ scenario:
       beat:
         title: "Geno ดูโหมดตอนที่ call รัน"
         text: >-
-          Geno อ่านโหมดของ session ตอนที่ call รัน ไม่ใช่ตอนที่ turn เริ่ม แล้วตรวจคำถามและตัวเลือกตามขีดจำกัด
-          ถ้าคุณสลับโหมดระหว่าง turn ผลจึงเปลี่ยนตาม
+          โหมดคือค่าที่บอกว่า Geno ถามคุณก่อนแค่ไหน Ask ถามก่อนทำสิ่งเสี่ยง Plan อ่านอย่างเดียว และ Auto ตัดสินเองโดยไม่ถามคุณ
+          Geno อ่านโหมดตอนที่ call นี้รัน ไม่ใช่ตอนที่ turn เริ่ม ถ้าคุณสลับโหมดระหว่าง turn ผลจึงเปลี่ยนตาม
+          แล้วตรวจว่ามีคำถาม 1 ถึง 4 ข้อ และแต่ละข้อมีตัวเลือก 2 ถึง 4 ตัว
         from: engine
         to: engine
         ask: "โหมดไหน"
@@ -74,9 +83,9 @@ scenario:
                 beat:
                   title: "โหมด Auto ไม่มีใครรอตอบ"
                   text: >-
-                    โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันทีพร้อมข้อความบอก model ว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
+                    โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันที Geno เตรียมข้อความผลที่บอก model ว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   `USER_TOOL_MODES` ไม่ให้ `ask_user` ในโหมด Auto ซึ่งไม่มีใครรอตอบ call จึงล้มเหลวด้วย `ToolError`
                   "ask_user is not available in auto mode. Do not retry it." และไม่มีการ์ด
@@ -89,7 +98,8 @@ scenario:
       beat:
         title: "Geno ส่งฟอร์มไปที่ VS Code"
         text: >-
-          Geno ส่งอัปเดตที่ค้างออกไปก่อน แล้วส่งฟอร์มคำถามไปที่ VS Code งานในแผง Tasks เปลี่ยนเป็นรอคุณ VS Code
+          Geno ส่งข้อความของ model ที่ยังไม่ได้ส่งให้แชตก่อน แล้วส่งฟอร์มคำถามไปที่ VS Code ทาง ACP ซึ่งเป็นโปรโตคอลที่ engine ใช้คุยกับ VS Code
+          ในแผง Tasks ซึ่งเป็นรายการงานของ Geno งานนี้ขึ้นป้าย Needs input ตามการ์ดข้างล่าง VS Code
           ตรวจคำถามด้วยตัวตรวจเดียวกับ engine แล้วโฟกัสแผงแชต
         from: engine
         to: panel
@@ -196,12 +206,13 @@ scenario:
       lane: tool
       at: executor
       beat:
-        title: "Geno เขียนผลให้ model อ่าน"
+        title: "Geno เตรียมผลให้ model"
         text: >-
-          ผลของ call บอกคำตอบของคุณ หรือบอกว่าคุณไม่ตอบ ให้ model ใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
-          หรือบอกว่าใช้ไม่ได้ในโหมด Auto ผลกลับมาที่แชตใต้ขั้นนั้น
+          Geno เขียนข้อความผลไว้ใน log ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
+          ถ้าคุณตอบ ผลคือ "The user answered: date-fns" ถ้าคุณข้าม ผลบอกว่าคุณไม่ตอบ ให้ model ใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
+          ในโหมด Auto ผลเป็น error ที่บอกว่า tool นี้ใช้ไม่ได้และอย่าเรียกซ้ำ ผลกลับมาที่แชตใต้ขั้นนั้นด้วย
         from: engine
-        to: model
+        to: engine
       do: >-
         `askUserResult` เขียนผลให้ model อ่าน: "The user answered: date-fns" หรือถ้าข้าม
         "The user declined to answer. Go on with your best judgment and say what you assumed."
@@ -216,10 +227,16 @@ scenario:
       beat:
         title: "Model ทำต่อตามผล"
         text: >-
-          Geno เรียก model อีกรอบ model อ่านผลแล้วทำงานต่อใน turn เดิม
+          Geno เรียก model อีกรอบพร้อมผลนั้นเป็น `tool_result` model อ่านผลแล้วทำงานต่อใน turn เดิม ไม่ว่าคุณจะตอบ ข้าม หรือ call ล้มเหลวในโหมด Auto
+          การ์ดข้างล่างคือ `tool_result` จากการบันทึกเดียวกัน ซึ่งผู้ใช้เลือก date-fns ดู `content` ที่ไฮไลต์ เป็น "The user answered: date-fns"
         from: engine
         to: model
         end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/tool-ask-user-question.jsonl#line=5
+          select: messages[-1]
+          highlight: ['content[0].content']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ทำงานต่อตามคำตอบ
       ref: packages/core/src/loop.ts#loopStep

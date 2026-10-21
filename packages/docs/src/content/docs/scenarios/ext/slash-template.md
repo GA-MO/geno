@@ -15,7 +15,7 @@ scenario:
     - use: ext-slash-sent
       beat:
         title: คุณพิมพ์ `/fix-issue 42`
-        text: แชตขึ้นข้อความที่ขึ้นต้นด้วยชิปชื่อคำสั่ง แล้วส่งเป็น prompt ไปที่ engine
+        text: แชตขึ้นข้อความที่ขึ้นต้นด้วยชิปชื่อคำสั่ง แล้วส่งเป็น prompt ไปที่ engine ส่วน `/pstack:how ...` ก็เริ่มแบบเดียวกัน แล้วแยกทางที่ขั้นหาคำสั่ง
         from: you
         to: panel
         sees:
@@ -26,7 +26,7 @@ scenario:
     - id: kind
       beat:
         title: Geno หาคำสั่งด้วยชื่อ
-        text: คำสั่งที่ไม่ใช่คำสั่งในตัวกลายเป็นข้อความของ turn เสมอ วิธีแปลงขึ้นกับว่ามันมาจากไหน
+        text: engine หาคำสั่งด้วยชื่อในรายการของมัน คำสั่งที่ไม่ใช่คำสั่งในตัวกลายเป็นข้อความของ turn เสมอ วิธีแปลงขึ้นกับว่ามันมาจากไหน จากไฟล์คำสั่ง (prompt template) หรือจาก skill
         from: engine
         to: engine
         ask: มาจากไหน
@@ -45,7 +45,7 @@ scenario:
               - lane: server
                 beat:
                   title: Geno แทน `$1` ด้วย 42
-                  text: '`/fix-issue` มาจากไฟล์ใน `commands/` ข้อความของ turn จึงเป็น "Read issue #42 with gh, find the cause, and fix it."'
+                  text: '`/fix-issue` มาจากไฟล์ใน `commands/` ซึ่งเป็นแม่แบบข้อความ `$1` คืออาร์กิวเมนต์ตัวแรก ข้อความของ turn จึงเป็น "Read issue #42 with gh, find the cause, and fix it."'
                   from: engine
                   to: engine
                 at: turns
@@ -62,7 +62,7 @@ scenario:
               - lane: server
                 beat:
                   title: Geno แนบ SKILL.md เป็น context
-                  text: ถ้าคุณพิมพ์ `/pstack:how` ซึ่งเป็น skill ข้อความของ turn คือสิ่งที่คุณพิมพ์ และ SKILL.md ไปเป็น context item
+                  text: ถ้าคุณพิมพ์ `/pstack:how` ซึ่งเป็น skill (ไฟล์ `SKILL.md` ที่สอนวิธีทำงานแบบหนึ่ง มาจาก plugin pstack ที่ติดตั้งไว้) ข้อความของ turn คือสิ่งที่คุณพิมพ์ และเนื้อหา SKILL.md ไปเป็น context item คือข้อความเพิ่มที่แนบท้ายข้อความของคุณ ห่อด้วยแท็ก `<context_item>`
                   from: engine
                   to: engine
                 at: turns
@@ -74,14 +74,14 @@ scenario:
 
     - id: prompt-logged
       beat:
-        title: Geno บันทึก prompt ที่แปลงแล้ว
-        text: Geno บันทึกข้อความ ชื่อคำสั่งกับอาร์กิวเมนต์และคำอธิบายของคำสั่ง และ context ของ skill ถ้ามี ก่อนเปิดรอบ
+        title: Geno บันทึก prompt ของ turn
+        text: ก่อนเปิดรอบของ agent (loop ที่เรียก model และรัน tool) Geno บันทึก prompt ลง log ของ session เอง ได้แก่ข้อความของ turn (ทางแม่แบบคือข้อความที่แปลงแล้ว ทางสกิลคือบรรทัดที่พิมพ์) ชื่อคำสั่งกับอาร์กิวเมนต์และคำอธิบายของคำสั่ง และ context item ของ skill ถ้ามี
         from: engine
         to: engine
       lane: server
       at: turns
       do: >-
-        ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความที่แปลงแล้ว ชื่อคำสั่ง อาร์กิวเมนต์และคำอธิบายของคำสั่ง
+        ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความของ turn ชื่อคำสั่ง อาร์กิวเมนต์และคำอธิบายของคำสั่ง
         และ context item ของสกิล (ถ้ามี) แล้ว `runTurn` เรียก `runAgent` ด้วย prompt ว่าง ให้ loop ใช้ prompt ที่อยู่ใน log
       ref: packages/engine/src/serve.ts#logPrompt
       emits: [user]
@@ -89,9 +89,9 @@ scenario:
     - id: build
       beat:
         title: Turn เดินตามปกติ
-        text: tool และ system prompt เหมือน turn อื่นทุกอย่าง hook UserPromptSubmit ได้อ่านข้อความที่แปลงแล้วก่อน model แล้ว Geno ส่งให้ model
+        text: tool และ system prompt เหมือน turn อื่นทุกอย่าง ถ้าคุณตั้ง hook UserPromptSubmit ไว้ (คำสั่ง shell ที่ได้อ่าน prompt ก่อน model) มันได้อ่านข้อความของ turn แล้ว Geno จึงเรียก model
         from: engine
-        to: model
+        to: engine
       lane: loop
       at: agent
       do: >-
@@ -102,7 +102,7 @@ scenario:
       lane: policy
       at: hooks
       do: >-
-        `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงให้ UserPromptSubmit hook อ่านข้อความที่แปลงแล้วก่อน model
+        `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงให้ UserPromptSubmit hook อ่านข้อความของ turn ก่อน model
         เมื่อไม่มี hook ก็ผ่านไป
       ref: packages/engine/src/drive.ts#submitted
       emits: [UserPromptSubmit]
@@ -111,13 +111,27 @@ scenario:
 
     - id: answer
       beat:
-        title: Model ทำตามข้อความที่แปลงแล้ว
-        text: model เห็นข้อความหลังแปลง ไม่ใช่ `/fix-issue 42` ดิบๆ แล้วทำงานตามนั้น
+        title: Model ทำตามข้อความของ turn
+        text: >-
+          ทางแม่แบบ model เห็นข้อความหลังแปลง ไม่ใช่ `/fix-issue 42` ดิบๆ ทางสกิล model เห็นบรรทัดที่คุณพิมพ์ พร้อมเนื้อหา SKILL.md ใน `<context_item>` แล้วทำงานตามนั้น
+          การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ทางแม่แบบ แท็บแรกคือข้อความแรกของคำขอ บล็อกที่ไฮไลต์คือ "Read issue #42 with gh, find the cause, and fix it." ซึ่งเป็นสิ่งเดียวที่ model รู้จากคำสั่งนี้
+          แท็บสองคือ event ท้าย stream ของคำตอบ `stop_reason: end_turn` บอกว่า model ตอบเป็นข้อความโดยไม่เรียก tool
+          ในการบันทึกนี้ model ยังไม่รัน `gh` แต่ถามก่อนว่า issue #42 อยู่ใน repository ไหนบน GitHub จะได้อ่านด้วย `gh issue view 42 --repo <owner>/<repo>` หรือให้คุณวางเนื้อหาของ issue มาแทน
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/ext-slash-template.jsonl#line=2
+            select: messages[0].content
+            collapse: ['[0]']
+            highlight: ['[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/ext-slash-template.jsonl#line=3
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
       lane: model
       do: >-
-        model เห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
+        ทางแม่แบบ model เห็นข้อความที่แปลงแล้ว ทางสกิล model เห็นบรรทัดที่พิมพ์ และเนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
         ต่อจากข้อความของผู้ใช้ แล้วทำงานตามนั้น ในตัวอย่างนี้ตอบเป็นข้อความโดยไม่เรียก tool จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/context.ts#ITEM_RENDER
       emits: [end_turn]

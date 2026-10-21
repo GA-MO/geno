@@ -16,9 +16,19 @@ scenario:
       beat:
         title: "Model ขอรัน node scripts/build-icons.mjs"
         text: >-
-          session อยู่ในโหมด Auto model ขอรันคำสั่งที่ไม่อยู่ในรายการคำสั่งปลอดภัย
+          session อยู่ในโหมด Auto model ขอรันคำสั่งที่ไม่อยู่ใน safe list (รายการคำสั่งที่ Geno รันได้โดยไม่ถาม)
+          ในโหมดนี้ Geno ไม่ถามคุณ แต่ให้ classifier ตัดสิน classifier คือการเรียก model แยกอีกครั้ง
+          ที่อ่านคำสั่งแล้วตอบว่า allow (รัน) ask (ถามคุณ) หรือ deny (ปฏิเสธ)
+          การ์ดข้างล่างเป็นคำตอบจริงจาก run เดียวกับการ์ดอื่นในหน้านี้ model ขอรัน `ps aux` ซึ่งไม่อยู่ในรายการเช่นกัน
+          ดู `input` ที่ไฮไลต์
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=18
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       do: >-
         model ขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -48,7 +58,7 @@ scenario:
       beat:
         title: "Geno ตรวจคำสั่งกับกฎของคุณ"
         text: >-
-          คำสั่งไม่อยู่ในรายการคำสั่งปลอดภัย ในโหมด Ask แปลว่าถามคุณ แต่ในโหมด Auto แปลว่าให้ classifier ตัดสิน
+          ไม่มีกฎของ workspace ตรง และคำสั่งไม่อยู่ในรายการคำสั่งปลอดภัย (safe list) ในโหมด Ask แปลว่าถามคุณ แต่ในโหมด Auto แปลว่าให้ classifier ตัดสิน
         from: engine
         to: engine
       do: >-
@@ -76,16 +86,18 @@ scenario:
       lane: policy
       at: classifier
       beat:
-        title: "Classifier ตัดสินภายใน 8 วินาที"
+        title: "Classifier ตัดสินคำสั่ง"
         text: >-
-          Geno เรียก model classifier ครั้งเดียว บังคับให้ตอบเป็นคำตัดสิน ถ้าหมดเวลาหรือตอบผิดรูป นับเป็นไม่แน่ใจ
+          Geno เรียก model classifier และบังคับให้ตอบผ่าน tool `verdict` เป็นคำตัดสินพร้อมเหตุผล แต่ละครั้งรอได้ 8 วินาที
+          ถ้าหมดเวลาหรือไม่ได้คำตัดสินที่ถูกรูป Geno ลองอีกหนึ่งครั้ง ถ้ายังไม่ได้ นับเป็นไม่แน่ใจ
           ค่าใช้จ่ายนับรวมในงบของ turn ลองเลือกคำตอบของ classifier
         from: engine
         to: engine
         ask: "classifier ตอบอะไร"
       do: >-
-        `commandClassifier` เรียก model classifier (ค่าเริ่มต้น `qwen3.8-flash` บน Model Studio) ครั้งเดียว
-        บังคับให้ตอบผ่าน tool `verdict` ภายใน 8 วินาที ถ้าหมดเวลา ล้มเหลว หรือตอบผิดรูป จะนับเป็น `ask`
+        `commandClassifier` เรียก model classifier (ค่าเริ่มต้น `qwen3.8-flash` บน Model Studio)
+        บังคับให้ตอบผ่าน tool `verdict` ภายใน 8 วินาทีต่อครั้ง ถ้าหมดเวลาหรือไม่ได้คำตัดสินที่ถูกรูป จะลองอีกหนึ่งครั้ง
+        ถ้ายังไม่ได้ หรือเกิด error อื่น เช่น key ถูกปฏิเสธ จะนับเป็น `ask`
         ค่าใช้จ่ายของการเรียกนี้นับรวมในงบ $0.40 ของ turn
       ref: packages/engine/src/classifier.ts#commandClassifier
       fork:
@@ -100,7 +112,8 @@ scenario:
                   title: "Classifier อนุญาต"
                   text: >-
                     คำสั่งรันได้โดยไม่มีการ์ด Geno จดว่า classifier เป็นผู้อนุญาตพร้อมเหตุผล
-                    บันทึกจาก run จริงด้านล่างเป็นแบบนี้
+                    การ์ดเป็นบันทึกจาก run จริงที่ classifier อนุญาต `ps aux` ดู `verdict` ที่เป็น `allow`
+                    และ `reason` ซึ่งเป็นเหตุผลของมัน
                   from: engine
                   to: panel
                   sees:
@@ -115,7 +128,8 @@ scenario:
                 beat:
                   title: "คำสั่งรันใน sandbox"
                   text: >-
-                    การอนุญาตของ classifier ไม่ได้ยกเว้น sandbox คำสั่งรันเหมือนคำสั่งที่คุณอนุญาตเอง แล้วผลกลับมาที่แชต
+                    การอนุญาตของ classifier ไม่ได้ยกเว้น sandbox (กรอบของระบบปฏิบัติการที่ให้คำสั่งเขียนไฟล์ได้แค่ใน workspace
+                    กับโฟลเดอร์ชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต) คำสั่งรันเหมือนคำสั่งที่คุณอนุญาตเอง แล้วผลกลับมาที่แชต
                   from: engine
                   to: machine
                 do: >-
@@ -142,9 +156,16 @@ scenario:
                 beat:
                   title: "Model อ่านผลของคำสั่ง"
                   text: >-
-                    Geno เรียก model ต่อ model ได้อ่านผลของคำสั่ง
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ข้อความสุดท้ายของคำขอคือผลของคำสั่ง
+                    ใน run จริงด้านล่าง classifier อนุญาต `ps aux` แต่ sandbox ไม่ให้รัน `/bin/ps`
+                    ดู `tool_result` ที่ไฮไลต์ มันมี `is_error: true` และข้อความ `Operation not permitted`
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=22
+                    select: messages[8]
+                    highlight: ['content[0]']
                   end: "classifier อนุญาต turn ทำต่อ"
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านผลของคำสั่ง
@@ -160,7 +181,9 @@ scenario:
                 beat:
                   title: "Classifier ปฏิเสธ"
                   text: >-
-                    คำสั่งไม่ได้รัน แต่ turn ไม่จบ ต่างจากตอนคุณกด Deny บันทึกจาก run จริงด้านล่างคือการปฏิเสธแบบนี้
+                    คำสั่งไม่ได้รัน แต่ turn ไม่จบ ต่างจากตอนคุณกด Deny บนการ์ดซึ่งจบ turn
+                    การ์ดเป็นบันทึกจาก run จริงที่ classifier ปฏิเสธคำสั่ง `grep` ที่อ่านไฟล์ `.env`
+                    ดู `verdict` ที่เป็น `deny` และ `reason`
                   from: engine
                   to: model
                   sees:
@@ -175,11 +198,12 @@ scenario:
               - lane: loop
                 at: tools
                 beat:
-                  title: "Geno บอก model ให้หาทางอื่น"
+                  title: "Geno เตรียมผลที่บอกให้หาทางอื่น"
                   text: >-
-                    ผลของ call บอก model ว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น แล้วผลกลับมาที่แชต
+                    Geno เขียนข้อความผลไว้ใน log ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
+                    ผลบอกว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น แล้วผลกลับมาที่แชต
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   ผลของ call มีสถานะ `denied` ข้อความบอก model ว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น
                 ref: packages/engine/src/tools/agent.ts#denialText
@@ -204,9 +228,23 @@ scenario:
                 beat:
                   title: "Model หาทางอื่น"
                   text: >-
-                    Geno เรียก model ต่อ model อ่านคำปฏิเสธแล้วหาทางอื่น
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ข้อความสุดท้ายของคำขอคือผลที่บอกว่า classifier ปฏิเสธ
+                    model อ่านคำปฏิเสธแล้วหาทางอื่น การ์ดข้างล่างเป็นข้อความนั้นจากคำขอจริงของ run เดียวกับการ์ดก่อนหน้า
+                    ดู `tool_result` ที่ไฮไลต์ ข้อความขึ้นต้นด้วย `denied:` ตามด้วยเหตุผลของ classifier (แท็บแรก)
+                    และจบด้วย `Do not retry it; find another way.` (แท็บสอง แสดงท้ายของข้อความเดียวกัน)
                   from: engine
                   to: model
+                  sees:
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=26
+                      select: messages[10]
+                      highlight: ['content[1]']
+                      quote: "denied:"
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=26
+                      select: messages[10]
+                      highlight: ['content[1]']
+                      quote: Do not retry it; find another way.
                   end: "classifier ปฏิเสธ turn ทำต่อ"
                 do: >-
                   `loopStep` ตัดสิน `call-model` model อ่านคำปฏิเสธแล้วหาทางอื่นต่อ
@@ -240,14 +278,14 @@ scenario:
                 beat:
                   title: "Classifier ตอบไม่ได้"
                   text: >-
-                    classifier ถูกปิด ไม่มี key ช้าเกิน 8 วินาที หรือตอบผิดรูป Geno ไม่เดาว่าคำสั่งปลอดภัย
+                    classifier ถูกปิด ไม่มี key หรือลองสองครั้งแล้วยังช้าเกิน 8 วินาทีหรือตอบผิดรูป Geno ไม่เดาว่าคำสั่งปลอดภัย
                     แต่นับเป็นไม่แน่ใจพร้อมเหตุผลที่ล้ม ถ้า classifier ใช้ไม่ได้เลย เช่นไม่มี key หรือ key ผิด
                     แชตขึ้นข้อความครั้งเดียวว่า classifier ของ Auto ใช้ไม่ได้
                   from: engine
                   to: engine
                 do: >-
                   `commandClassifier` ไม่ได้คำตัดสินจริง: `GCODE_CLASSIFIER_MODEL=off`, ผู้ให้บริการของ classifier ไม่มี key,
-                  เกิน 8 วินาที, ผู้ให้บริการปฏิเสธ หรือคำตอบผิดรูป ทุกกรณีคืน `ask` พร้อมเหตุผลว่าอะไรล้ม
+                  เกิน 8 วินาทีหรือคำตอบผิดรูปทั้งสองครั้ง หรือผู้ให้บริการปฏิเสธ ทุกกรณีคืน `ask` พร้อมเหตุผลว่าอะไรล้ม
                   ไม่มีการเดาว่าคำสั่งปลอดภัย เมื่อตั้งค่าไม่ได้ หรือผู้ให้บริการปฏิเสธ key หรือ model `onBroken` แจ้ง engine
                   ซึ่งบอกผู้ใช้ครั้งเดียวต่อ session
                 ref: packages/engine/src/classifier.ts#commandClassifier
@@ -268,6 +306,8 @@ scenario:
                 goto: perm.auto-classifier-asks-user
 ---
 
+คำว่า classifier, safe list และ sandbox ดูความหมายได้ที่ [คำศัพท์](/start/glossary/)
+
 โหมด Auto ไม่ได้แปลว่าทุกอย่างผ่าน มันแปลว่า**ไม่มีใครถูกถาม** สำหรับคำสั่งที่ classifier อนุญาตหรือปฏิเสธ
 คำสั่งใน safe list ยังรันทันทีเหมือนโหมด Ask คำสั่งที่ย้อนไม่ได้ เช่น `rm -rf` ของ workspace ยังขึ้นการ์ดถามผู้ใช้เสมอ
 
@@ -279,10 +319,10 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **classifier ที่ล่มเท่ากับ `ask`** หมดเวลา ไม่ได้ตั้งค่า หรือตอบผิดรูป ทั้งหมดกลายเป็น `ask` ซึ่งขึ้นการ์ดถามผู้ใช้
+- **classifier ที่ล่มเท่ากับ `ask`** หมดเวลาหรือตอบผิดรูปซ้ำในครั้งที่สอง หรือไม่ได้ตั้งค่า ทั้งหมดกลายเป็น `ask` ซึ่งขึ้นการ์ดถามผู้ใช้
   Geno จึงไม่รันคำสั่งที่ไม่มีใครตัดสิน
-- **คำปฏิเสธของ classifier ไม่จบ turn** ต่างจากปุ่ม Reject บนการ์ด คำปฏิเสธของ classifier เป็น `ToolDenied`
-  model อ่านเหตุผลแล้วทำต่อ
+- **คำปฏิเสธของ classifier ไม่จบ turn** ต่างจากปุ่ม Deny บนการ์ด คำปฏิเสธของ classifier เป็น `ToolDenied`
+  ซึ่งเป็นผลธรรมดาที่ model อ่านเหตุผลแล้วทำต่อ
 - **ป้าย Auto-approved ซ่อนในมุมมองย่อ** แผงแสดงป้ายนี้เฉพาะเมื่อวาดทุกขั้น ส่วนป้าย "Denied by Auto" แสดงเสมอ
 
 เมื่อ Auto ยังต้องถามคุณ ดู [โหมด Auto ยังขึ้นการ์ดถามคุณ](/scenarios/perm/auto-still-asks/)

@@ -15,8 +15,11 @@ scenario:
       beat:
         title: คุณกด Stop
         text: >-
-          ก่อนหน้านี้ model ส่ง `agent` สองครั้ง: `review` แบบ `background: true` ได้ผลกลับทันทีว่าเริ่มแล้ว
-          แล้ว `explore` แบบรอผล (การ์ด: บทสนทนาของแม่ตอนนั้น) แถวของ explore ยังหมุนอยู่ และ review ทำงานเบื้องหลัง คุณกด Stop
+          subagent (ลูก) คือ session ใหม่ที่ model ของแม่เปิดด้วย tool `agent` ให้ทำงานย่อยแล้วส่งรายงานกลับ
+          ลูกแบบรอผลทำให้ call `agent` ค้างจนรายงานมา ลูกเบื้องหลังได้ผลกลับทันทีว่าเริ่มแล้ว และรายงานมาทีหลัง
+          ก่อนหน้านี้ model ส่ง `agent` สองครั้ง: `review` แบบ `background: true` แล้ว `explore` แบบรอผล
+          การ์ดคือบทสนทนาของแม่ตอนนั้น จุดที่ไฮไลต์คือ call ของ review ผล "เริ่มแล้ว" ของมัน และ call ของ explore
+          แถวของ explore ยังหมุนอยู่ และ review ทำงานเบื้องหลัง คุณกด Stop
         from: you
         to: panel
         sees:
@@ -26,7 +29,7 @@ scenario:
             source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
             select: messages
             collapse: ['[0]', '[4]']
-            highlight: ['[1].content[1].input', '[2].content[0]', '[3].content[1].input']
+            highlight: ['[1].content[0].input', '[2].content[0]', '[3].content[0].input']
       lane: user
       do: ผู้ใช้กด Stop ขณะแถวของ explore ยังหมุนอยู่ใต้ขั้น `agent`
       phase: running-tools
@@ -67,9 +70,18 @@ scenario:
     - id: blocking-stops
       beat:
         title: explore หยุดทันที
-        text: explore ผูกกับ call ที่แม่รออยู่ มันจึงหยุดพร้อม turn และจบแบบ cancelled
+        text: >-
+          explore ผูกกับ call ที่แม่รออยู่ มันจึงหยุดพร้อม turn และจบแบบ cancelled
+          การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน การ์ดคือคำขอของ explore ที่ค้างอยู่ตอนคุณกด Stop ดู task ที่ไฮไลต์
+          คำขอนี้ไม่มีคำตอบ บรรทัดถัดไปในไฟล์บันทึกบอกว่า engine ยกเลิกคำขอนี้ก่อนคำตอบใดๆ จะมา
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/parent-stop.jsonl#line=8
+          select: messages[0].content
+          collapse: ['[0]']
+          highlight: ['[1].text']
       lane: child@explore
       at: loop
       do: >-
@@ -113,9 +125,11 @@ scenario:
       beat:
         title: Geno หยุด review ที่ทำงานเบื้องหลัง
         text: >-
-          turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย ไม่มีอะไรปลุก session ทีหลัง แต่ review ที่ถูกหยุดยังได้รั้ว
+          ปกติลูกเบื้องหลังที่รายงานหลัง turn จบจะปลุก session คือเริ่ม turn ใหม่เองให้แม่อ่านรายงาน
+          แต่ turn นี้ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย ไม่มีอะไรปลุก session ทีหลัง แต่ review ที่ถูกหยุดยังได้รั้ว (แท็กที่ห่อรายงานไว้)
           `<subagent_report agent="review" status="cancelled" partial="true">` ที่มีแค่ "(no report)" และรั้วนี้ติดไปกับ prompt
-          ถัดไปของคุณ ต่อจากผลที่ถูกหยุดของ explore
+          ถัดไปของคุณ ต่อจากผลที่ถูกหยุดของ explore การ์ดคือข้อความนั้นใน request ของ turn ถัดไป
+          บล็อกแรกที่ไฮไลต์คือโน้ตที่มีรั้วของ review บล็อกที่สองคือ prompt ใหม่ของคุณ "Go on."
         from: engine
         to: model
         sees:
@@ -123,6 +137,7 @@ scenario:
           source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
           select: messages[4]
           highlight: ['content[1].text', 'content[2].text']
+          quote: 'status="cancelled" partial="true"'
       lane: loop
       at: agent
       do: >-
@@ -211,6 +226,6 @@ Stop ของแม่หยุดทุกอย่างที่ turn เร
   สิ่งที่ลูกทำไว้ยังอยู่ใน log ของลูก เปิดดูได้จากแถวของลูก
 - **ลูกเบื้องหลังรอดได้เฉพาะ turn ที่จบด้วย `end_turn`** ถ้า model จบ turn เอง ลูกเบื้องหลังทำงานต่อและปลุก session ได้
   ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/)) ทุกการจบแบบอื่นหยุดลูกเบื้องหลังทั้งหมด
-- **การปลุกถูกพัก** จนกว่าผู้ใช้จะส่ง prompt ใหม่ ถ้า session ยังมีสิ่งที่รอปลุกอยู่ (monitor, schedule, PR watch)
+- **การปลุกถูกพัก** จนกว่าผู้ใช้จะส่ง prompt ใหม่ ถ้า session ยังมีสิ่งที่รอ[ปลุก](/start/glossary/)อยู่ (monitor, schedule, PR watch)
   แผง Tasks แสดง "Wake-ups paused after Stop" ถ้าไม่มีอะไรรอ ก็ไม่มีบรรทัดนี้
-- **Retry หลัง Stop** ส่ง prompt เดิมอีกครั้ง prompt เดิมยังค้างใน log (`abort` เป็นชนิดที่เก็บ prompt ไว้) พร้อมโน้ตว่า turn ก่อนถูกหยุด
+- **Retry หลัง Stop** ส่ง prompt เดิมอีกครั้ง prompt เดิมยังค้างใน log (turn ที่จบด้วย error ชนิด `abort` ไม่ทิ้ง prompt ที่ยังไม่ได้คำตอบ) พร้อมโน้ตว่า turn ก่อนถูกหยุด

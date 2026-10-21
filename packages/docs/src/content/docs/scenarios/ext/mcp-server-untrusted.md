@@ -14,7 +14,7 @@ scenario:
     - id: register
       beat:
         title: Geno อ่านคำนิยาม server ทุกแหล่ง
-        text: คุณเปิดแชตใหม่ใน repo ที่เพิ่ง clone มา server ที่มาจาก `.mcp.json` ของ repo ต้องได้รับอนุมัติก่อนรัน เพราะคนเขียน repo เป็นคนเลือกมัน
+        text: MCP server คือโปรแกรมภายนอกที่เสนอ tool ให้ model คำนิยามของมันคือคำสั่งที่ Geno ใช้เริ่ม process นั้น พร้อมอาร์กิวเมนต์และตัวแปรสภาพแวดล้อม คุณเปิดแชตใหม่ใน repo ที่เพิ่ง clone มา server ที่มาจาก `.mcp.json` ของ repo ต้องได้รับอนุมัติก่อนรัน เพราะคนเขียน repo เป็นคนเลือกมัน ส่วน server ในไฟล์ของคุณเองรันได้เลย
         from: engine
         to: engine
       lane: server
@@ -29,7 +29,7 @@ scenario:
     - id: untrusted
       beat:
         title: server `db` ยังไม่ได้รับอนุมัติ
-        text: ไม่มีการอนุมัติที่ตรงกับคำนิยามนี้ใน workspace นี้ Geno จึงไม่เริ่ม process ของมัน และ model ไม่ได้ tool ของมัน
+        text: ไฟล์อนุมัติของ Geno ไม่มีรายการที่ตรงกับคำนิยามนี้ใน workspace นี้ Geno จึงไม่เริ่ม process ของมัน และ model ไม่ได้ tool ของมัน
         from: engine
         to: engine
       lane: policy
@@ -79,7 +79,7 @@ scenario:
     - id: card
       beat:
         title: คุณเห็นการ์ด “Allow this server to run?”
-        text: การ์ดแสดงคำนิยามทั้งหมด คำสั่ง อาร์กิวเมนต์ ตัวแปรสภาพแวดล้อม และบอกว่าใครเป็นคนเลือก server นี้
+        text: การ์ดแสดงคำนิยามทั้งหมด คำสั่ง อาร์กิวเมนต์ ตัวแปรสภาพแวดล้อม และบอกว่าใครเป็นคนเลือก server นี้ มันยังเตือนว่า server รันนอก sandbox (กรอบของระบบปฏิบัติการที่จำกัดคำสั่งของ model) และใช้เครือข่ายได้
         from: panel
         to: you
         sees: { kind: permission, face: server, command: npx db-mcp --url $DATABASE_URL, reason: ".mcp.json in this workspace defines it, so whoever wrote the repository chose it. Geno runs this command outside the sandbox, with network access, whenever a chat in this workspace starts. A changed definition asks again." }
@@ -108,7 +108,7 @@ scenario:
               - lane: editor
                 beat:
                   title: คุณกด Allow
-                  text: การ์ดส่งคำนิยามที่คุณเห็นไปด้วย Geno จึงรู้ว่าคุณอนุมัติฉบับไหน
+                  text: การ์ดส่ง hash ของคำนิยามที่คุณเห็นไปด้วย Geno จึงรู้ว่าคุณอนุมัติฉบับไหน
                   from: you
                   to: panel
                 at: chat
@@ -119,7 +119,7 @@ scenario:
               - lane: policy
                 beat:
                   title: Geno ตรวจว่าคำนิยามไม่เปลี่ยน
-                  text: ถ้าไฟล์เปลี่ยนหลังคุณเห็น Geno ปฏิเสธ คำนิยามตรง Geno จึงบันทึกการอนุมัติ
+                  text: Geno เทียบ hash กับคำนิยามตอนนี้ ถ้าไฟล์เปลี่ยนหลังคุณเห็น Geno ปฏิเสธ ในทัวร์นี้คำนิยามตรง Geno จึงบันทึกการอนุมัติพร้อม hash
                   from: engine
                   to: engine
                 at: rules
@@ -142,13 +142,13 @@ scenario:
                   text: แถบประกาศหายไป turn ถัดไปของ agent ได้ tool ของ `db` และ Geno บอก model ชื่อ tool ที่มาใหม่
                   from: panel
                   to: you
-                  sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อ tool เช่น "query, list_tables"
+                  sees: แถว "db · .mcp.json" ป้าย "Ready, 2 tools" และรายชื่อ tool "query, list_tables"
                   end: tool ของ db พร้อมใช้
                 at: rail
                 do: >-
                   แถวของ `db` เปลี่ยนเป็นพร้อมใช้และแสดงชื่อ tool แถบประกาศหายไป
-                  รอบถัดไปของเอเจนต์จะได้ tool เหล่านี้ และข้อความแจ้งบอก model ชื่อ tool ที่มาใหม่
-                sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อ tool เช่น "query, list_tables"
+                  รอบถัดไปของ agent จะได้ tool เหล่านี้ และข้อความแจ้งบอก model ชื่อ tool ที่มาใหม่
+                sees: แถว "db · .mcp.json" ป้าย "Ready, 2 tools" และรายชื่อ tool "query, list_tables"
                 ref: packages/extension/src/chat/mcp-panel.ts#serverRow
                 phase: idle
                 end: { turn: none }
@@ -188,7 +188,7 @@ scenario:
                 end: { turn: none }
 ---
 
-repo ที่ clone มาคือโค้ดของคนอื่น server ที่กำหนดไว้ใน repo จึงเป็นคำสั่งที่คนเขียน repo เลือก Geno ไม่รันมันจนกว่าผู้ใช้จะเห็นคำนิยามเต็มและอนุมัติ
+repo ที่ clone มาคือโค้ดของคนอื่น [MCP](/start/glossary/) server ที่กำหนดไว้ใน repo จึงเป็นคำสั่งที่คนเขียน repo เลือก Geno ไม่รันมันจนกว่าผู้ใช้จะเห็นคำนิยามเต็มและอนุมัติ
 
 สิ่งที่ควรสังเกต
 

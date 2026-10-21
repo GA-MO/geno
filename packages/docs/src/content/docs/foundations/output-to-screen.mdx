@@ -21,7 +21,7 @@ flowchart LR
 | extension host ถึง webview | `Action` ของแผงแชต | `updateActions` ใน `packages/extension/src/chat/session-updates.ts` แล้ว `reduce` ใน `chat/transcript.ts` |
 
 ACP (Agent Client Protocol) เป็นโปรโตคอลสาธารณะ engine เป็นฝั่ง agent และ extension เป็นฝั่ง client
-Geno เพิ่ม method `_gcode/*` และ key `gcode/*` ใน `_meta` สำหรับสิ่งที่แผงของตัวเองวาดได้ editor อื่นที่พูด ACP ยังได้ข้อความที่อ่านรู้เรื่อง
+Geno เพิ่ม method `_gcode/*` และ key `gcode/*` ใน `_meta` (field เสริมใน ACP ที่ client อื่นที่ไม่รู้จักข้ามไปได้) สำหรับสิ่งที่แผงของตัวเองวาดได้ editor อื่นที่พูด ACP ยังได้ข้อความที่อ่านรู้เรื่อง
 
 extension host กับ webview ใช้ reducer ตัวเดียวกัน host เก็บ transcript ของตัวเองไว้ด้วย
 เปิดแผงใหม่หรือ reload จึงวาดบทสนทนาเดิมได้ทันที
@@ -61,7 +61,7 @@ extension host กับ webview ใช้ reducer ตัวเดียวก�
 | `tool_call_update` + `gcode/background` | คำสั่งเบื้องหลัง | แถวงานที่ยังรัน พร้อม tail และปุ่ม Stop |
 | `notice` | retry, กำลัง compaction | แถวสถานะพร้อมจุดหมุน |
 | `notice` + `gcode/progress` | สถานะของ stream | ป้ายบนแถว "Thinking" |
-| `notice` + `gcode/waiting` | ออฟไลน์หรือโดน rate limit | หัวข้อ "waiting" และปุ่ม Retry now |
+| `notice` + `gcode/waiting` | ออฟไลน์หรือโดน rate limit | หัวข้อ "waiting for the network" หรือ "waiting for the rate limit" และปุ่ม Retry now |
 | `usage_update` | หลังทุกการเรียก model | วงแหวน context และค่าใช้จ่ายในช่องพิมพ์ |
 | `session_info_update` | ตั้งชื่อแชต | ชื่อแชตด้านบน |
 | `current_mode_update` | สลับโหมด | ปุ่มโหมด |

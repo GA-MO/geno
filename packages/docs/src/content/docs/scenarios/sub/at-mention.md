@@ -14,7 +14,10 @@ scenario:
     - use: prompt-starts-turn
       beat:
         title: คุณพิมพ์ `@explore` ตามด้วยคำถาม
-        text: คุณพิมพ์ "@explore parseConfig ถูกนิยามไว้ที่ไหน" แล้วกด Enter `@` ใช้ได้ทุกโหมด แม้ model จะเรียก subagent เองไม่ได้
+        text: >-
+          คุณพิมพ์ "@explore parseConfig ถูกนิยามไว้ที่ไหน" แล้วกด Enter subagent คือ session ลูกที่ทำงานย่อยงานหนึ่ง
+          แล้วส่งรายงานสั้นกลับ explore เป็น subagent ในตัว Geno ที่ค้นโค้ดแบบอ่านอย่างเดียว
+          `@` ใช้ได้ทุกโหมด แม้ model จะเรียก subagent เองไม่ได้
         from: you
         to: panel
         sees:
@@ -26,7 +29,8 @@ scenario:
       beat:
         title: Geno สร้าง tool call `agent` ในนามคุณ
         text: >-
-          Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ มันสร้าง `tool_use` ชื่อ `agent` เองในนามคุณ
+          Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ (แม่คือ session หลักที่คุณคุยอยู่)
+          ปกติ model ของแม่เป็นคนเขียน `tool_use` เพื่อขอเรียก tool ครั้งนี้ Geno สร้าง `tool_use` ชื่อ `agent` เองในนามคุณ
           (`id` ขึ้นต้นด้วย `toolu_gcode_`) `input` คือ `agent: "explore"` และ `task` คือข้อความหลังชื่อ ไม่มี `background`
           และไม่มี `fork` ไม่มี request ไปหา model ของแม่ใน turn นี้เลย
         from: engine
@@ -55,7 +59,7 @@ scenario:
         text: >-
           explore ได้บันทึกและงบของตัวเอง แชตขึ้นแถวของมันพร้อมนาฬิกาและปุ่ม Cancel request แรกของ explore
           เป็น request แรกของทั้ง turn: system prompt คือกรอบ subagent กับ role ของ explore จากนิยามในตัว Geno
-          (แท็บสอง) tool มีแค่ glob, grep, list, read และ `report` และข้อความแรกคือ environment กับคำที่คุณพิมพ์หลัง `@explore` (แท็บสาม)
+          (แท็บสอง) tool มีแค่ glob, grep, list, read และ `report` และข้อความแรกคือ environment กับคำที่คุณพิมพ์หลัง `@explore` (แท็บสาม การ์ดมาจากการบันทึกที่พิมพ์ "Where is parseVersion called?" Geno ส่งคำของคุณไปตามที่พิมพ์ ไม่แปลหรือเขียนใหม่)
         from: engine
         to: model
         sees:
@@ -77,7 +81,9 @@ scenario:
     - id: report
       beat:
         title: explore ส่งรายงานที่อ้าง `path:line`
-        text: รอบสุดท้าย explore เรียก tool `report` พร้อมคำตอบ แล้วจบงานของตัวเอง การ์ดเป็นรายงานจริงจากการรันที่ explore หาจุดเรียก `getUser`
+        text: >-
+          รอบสุดท้าย explore เรียก tool `report` พร้อมคำตอบ แล้วจบงานของตัวเอง การ์ดเป็นรายงานจริงจากการรันที่ explore หาจุดเรียก `getUser`
+          ดู `input.message` ที่ไฮไลต์ เป็นข้อความของรายงาน ทุกจุดอ้างไฟล์กับเลขบรรทัดแบบ `path:line`
         from: model
         to: engine
         sees:
@@ -129,7 +135,10 @@ scenario:
     - id: fenced
       beat:
         title: Geno ล้อมรั้วรายงานเป็นผลของ call
-        text: รายงานอยู่ในรั้ว `<subagent_report>` ที่บอกว่ามันเป็นข้อมูล ไม่ใช่คำสั่งของคุณ การ์ดเป็นผลจริงจากการรันเดียวกัน ซึ่ง model เป็นคนเรียก explore
+        text: >-
+          Geno ห่อรายงานด้วยแท็ก `<subagent_report>` ที่บอกว่าข้างในเป็นข้อมูล ไม่ใช่คำสั่งของคุณ แล้วบันทึกเป็นผลของ call `agent`
+          การ์ดเป็นผลจริงจากการรันเดียวกัน ซึ่ง model เป็นคนเรียก explore ดู `output` ที่ไฮไลต์ แท็กเปิดบอกชื่อลูก สถานะ
+          จำนวนรอบ ค่าใช้จ่าย และเวลา แล้วจึงเป็นข้อความรายงาน
         from: engine
         to: engine
         sees:
@@ -209,9 +218,10 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **ใช้ได้ทุกโหมด** การเปิด `agentTool` มีผลแค่กับ model executor ของ `agent` มีให้เสมอเมื่อมี director
-- **`@review` เปล่าๆ แนบ diff** ถ้าพิมพ์ `@review` โดยไม่มีงาน งานจะเป็น "Review the changes in this diff." พร้อมผลของ
-  `git diff HEAD` ไม่เกิน 60,000 ตัวอักษร
+- **ใช้ได้ทุกโหมด** setting `agentTool` ตัดสินแค่ว่า model ของแม่เห็น tool `agent` ใน `tools` ไหม
+  ส่วน executor (ฟังก์ชันที่รัน tool) ของ `agent` มีอยู่เสมอเมื่อ Geno สร้าง call ในนามคุณ ดู [subagent](/start/glossary/) ในคำศัพท์
+- **`@review` แนบ diff เสมอ** ทุก `@review` แนบผลของ `git diff HEAD` ไม่เกิน 60,000 ตัวอักษรไปกับงาน
+  ถ้าพิมพ์ `@review` โดยไม่มีงาน บรรทัดแรกของงานจะเป็น "Review the changes in this diff."
 - **พิมพ์ชื่ออย่างเดียว** `@explore` ที่ไม่มีงาน ลูกจะตอบสั้นๆ ว่าทำอะไรได้บ้าง
 - **ชื่อที่ไม่รู้จักไม่ใช่ mention** ถ้าไม่มีลูกชื่อนั้น ข้อความไปเป็น prompt ธรรมดาให้ model ของแม่
 - **ประกาศ "Geno stopped without a reply" ขึ้นหลังทุก `@agent`** (อ่านจากโค้ด) turn แบบนี้จบโดยไม่มีข้อความของ Geno

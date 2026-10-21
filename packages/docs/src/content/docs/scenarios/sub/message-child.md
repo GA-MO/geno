@@ -7,7 +7,7 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน model จึงมีทั้ง `agent` และ `message_agent`
     - ใน turn นี้ model เริ่ม `explore` แบบเบื้องหลังไว้แล้ว ได้ session id ของลูกจากผลของ call `agent`
   trigger: >-
-    ผู้ใช้บอกว่าไม่ต้องดูไฟล์เทสต์ model จึงส่งข้อความถึง explore
+    ผู้ใช้ถามว่า `parseVersion` ถูกเรียกที่ไหน model เริ่ม explore แล้วตัดสินใจเองว่าไฟล์เทสต์จะเป็นแค่สิ่งรบกวน จึงส่งข้อความถึง explore ให้ข้ามไฟล์เทสต์
   covers: [sub.message-running-child, sub.message-finished-resume]
   related: [sub.user-steers-child, bg.child-wakes-parent, sub.cut-off-by-engine-stop, ctl.steer-delivered]
   steps:
@@ -15,7 +15,9 @@ scenario:
       beat:
         title: Model ส่งข้อความถึง explore
         text: >-
-          `message_agent` เป็น tool ที่ส่งแค่ชื่อไปก่อน model จึงโหลดนิยามด้วย `tool_search` ก่อน (แท็บแรก: ผลที่ได้คือ schema
+          explore เป็น subagent (session ลูกที่ค้นโค้ดแล้วส่งรายงานกลับ) ที่ model เริ่มแบบเบื้องหลัง คือแม่ไม่รอ รายงานมาทีหลัง
+          ตอนนี้ model อยากเปลี่ยนงานของมัน `message_agent` เป็น deferred tool คือ Geno ส่งแค่ชื่อไปก่อน
+          model จึงโหลดนิยามด้วย `tool_search` ก่อน (แท็บแรก: ผลที่ได้คือ schema
           และคำอธิบายว่าลูกที่ยังทำงานได้ข้อความหลังรอบ tool ปัจจุบัน ส่วนลูกที่จบแล้วจะทำต่อจาก transcript ของตัวเอง)
           แล้ว model ส่ง `tool_use` ที่มี `agent_session` คือ session id ที่ได้จากผลของ `agent` และ `text: "Skip test files."` (แท็บสอง)
         from: model
@@ -28,7 +30,7 @@ scenario:
           - kind: payload
             source: packages/docs/src/data/recorded/background-steer.jsonl#line=14
             select: messages[5].content
-            highlight: ['[1].input']
+            highlight: ['[0].input']
       lane: model
       do: >-
         model ขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "Skip test files."`
@@ -72,9 +74,11 @@ scenario:
               - lane: loop
                 beat:
                   title: ข้อความเข้ากล่องของ explore
-                  text: explore ยังทำงาน Geno ใส่ข้อความในกล่องของมัน แล้วรอจนมันรับ
+                  text: >-
+                    explore ยังทำงาน Geno ใส่ข้อความในกล่องข้อความของมัน แล้วรอจนมันรับ ลูกรับที่จุดปลอดภัย
+                    คือหลัง tool รอบปัจจุบันจบและก่อนเรียก model ครั้งถัดไป ข้อความจึงถึง model ของ explore ในคำขอถัดไปของมัน
                   from: engine
-                  to: model
+                  to: engine
                 at: tools
                 do: >-
                   กล่องข้อความของลูกยังเปิดอยู่และแม่คือ session นี้ `inbox.push` ใส่ข้อความ (`from: 'parent'`) แล้วรอจนลูกรับ
@@ -86,13 +90,21 @@ scenario:
                   text: >-
                     request ถัดไปของ explore มีผลของ `grep` ที่มันขอไว้ ตามด้วยโน้ตของ Geno: ข้อความของแม่ในรั้ว `<parent_message>`
                     และหมายเหตุว่าให้ถือเป็นการเปลี่ยน task ข้อความนี้ไม่ใช่ผู้ใช้และไม่อนุมัติอะไร
+                    ดูบล็อกที่ไฮไลต์ แท็บแรกคือต้นบล็อก ขึ้นต้นด้วยบรรทัด `[Geno] Automated notice`
+                    แท็บสองคือช่วงต่อมา ที่ "Skip test files." อยู่ในรั้ว `<parent_message>` ตามด้วยหมายเหตุ
                   from: engine
                   to: model
                   sees:
-                    kind: payload
-                    source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
-                    select: messages[2]
-                    highlight: ['content[1].text']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
+                      select: messages[2]
+                      highlight: ['content[1].text']
+                      quote: "[Geno] Automated notice"
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
+                      select: messages[2]
+                      highlight: ['content[1].text']
+                      quote: Skip test files.
                 at: loop
                 do: >-
                   `deliver()` ของลูกที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไปบันทึก event `user` แบบ steer (`from: 'parent'`)
@@ -109,10 +121,22 @@ scenario:
                 ref: packages/extension/src/chat/steer-view.ts#steerStep
               - lane: child@explore
                 beat:
-                  title: explore ปรับงานตามข้อความของแม่
-                  text: explore อ่านข้อความของแม่แล้วทำงานต่อโดยถือว่า task เปลี่ยนแล้ว
+                  title: explore อ่านข้อความแล้วรายงาน
+                  text: >-
+                    explore อ่านข้อความของแม่พร้อมผล `grep` ผล grep ของมันไม่มีไฟล์เทสต์อยู่แล้ว ไม่มีอะไรต้องตัดออก
+                    ในการ์ดข้างล่าง explore ตอบคำขอในการ์ดก่อนด้วยการเรียก `report` ที่มีแค่ไฟล์ใน `src/` การ์ดทั้งสองเป็น event ใน stream (ส่งมาทีละชิ้นระหว่างที่ model เขียน)
+                    การ์ดแรกเปิด block `tool_use` ชื่อ `report` การ์ดที่สองคือ `input` ที่ stream มาทีละชิ้นใน `partial_json`
                   from: model
                   to: engine
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/background-steer.jsonl#line=11
+                      select: '[1]'
+                      highlight: [data.content_block.name]
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/background-steer.jsonl#line=11
+                      select: '[2]'
+                      highlight: [data.delta.partial_json]
                 at: model
                 do: >-
                   ลูกเรียก model ต่อโดยอ่านข้อความของแม่ แล้วทำงานต่อตามนั้น
@@ -122,7 +146,7 @@ scenario:
                   title: Geno ตอบ model ว่าข้อความถึงแล้ว
                   text: >-
                     ผลของ call บอกว่าข้อความไปถึงตอนไหนในบันทึกของ explore ผลนี้ไม่ใช่รายงาน รายงานของ explore
-                    มาทีหลังเป็นโน้ตของ Geno เหมือนลูกเบื้องหลังตัวอื่น
+                    มาทีหลังเป็นโน้ตของ Geno เหมือนลูกเบื้องหลังตัวอื่น การ์ดแสดงผลนั้น `delivered at next tool round (event 4 ...)`
                   from: engine
                   to: model
                   sees:
@@ -133,7 +157,7 @@ scenario:
                 at: tools
                 do: >-
                   `push` ได้ผล `delivered` พร้อมลำดับ event ในลูก ผลของ call คือ
-                  "delivered at next tool round (event 14 of the subagent's log)"
+                  "delivered at next tool round (event 4 of the subagent's log)"
                   (ถ้าลูกจบก่อนรับ ข้อความจะไปทางเดียวกับลูกที่จบแล้ว)
                 ref: packages/core/src/steer.ts#messageAgentResult
                 emits: [delivered]
@@ -160,14 +184,15 @@ scenario:
                     request ของ explore ที่ถูกปลุกเริ่มด้วยบทสนทนาเดิมของมันทั้งหมด รวม call `report` ครั้งก่อน
                     ต่อด้วยผล "Report delivered" และโน้ตที่มีข้อความของแม่ในรั้ว `<parent_message>` บอกว่ามาหลังรายงาน
                     ให้ทำต่อและส่งรายงานใหม่ (การ์ดนี้มาจาก flow ที่ explore รันแบบรอ และข้อความคือคำถามต่อ)
-                    explore ได้งบชุดใหม่
+                    สองจุดที่ไฮไลต์คือ call `report` ครั้งก่อน และโน้ตที่มีข้อความของแม่ explore ได้งบชุดใหม่
                   from: engine
                   to: model
                   sees:
                     kind: payload
-                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=12
+                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=14
                     select: messages
-                    highlight: ['[1].content[1]', '[2].content[1].text']
+                    highlight: ['[3].content[0]', '[4].content[1].text']
+                    quote: "Which of those calls can pass an empty string?\n</parent_message>\nThe agent that handed you your task sent this after your report"
                 at: loop
                 do: >-
                   `openResume` ต่อท้าย log ของลูกด้วย event `user` จากแม่ (`resumeEvent`) หมายเหตุบอกว่าข้อความนี้มาหลังรายงาน
@@ -208,12 +233,12 @@ scenario:
                   text: >-
                     explore เดิมทำงานเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง session นี้รอรายงานใหม่ ซึ่งจะมาถึงทีหลัง
                     ถ้า explore เคยรันแบบรอ call `message_agent` จะรอ และผลของมันคือรายงานใหม่ในรั้ว
-                    `<subagent_report>` ที่มี session id เดิม (การ์ด จาก flow แบบรอ)
+                    `<subagent_report>` ที่มี session id เดิม (การ์ด จาก flow แบบรอ ดู `content` ที่ไฮไลต์)
                   from: engine
                   to: model
                   sees:
                     kind: payload
-                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=14
+                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=16
                     select: messages[8].content[0]
                     highlight: [content]
                 at: tools
@@ -254,9 +279,17 @@ scenario:
     - id: tells
       beat:
         title: Model บอกคุณว่าส่งต่อแล้ว
-        text: model บอกว่าส่งข้อความถึง explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
+        text: >-
+          model บอกว่าส่งข้อความถึง explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
+          การ์ดมาจากการบันทึกอีกรอบของเรื่องเดียวกัน ที่ model เล่าให้คุณฟังก่อนรายงานของ explore มาถึง ขั้นก่อนหน้าจึงต่างจากการ์ดนี้เล็กน้อย
+          คำตอบนี้กลับไปเป็นข้อความของ model ในคำขอถัดไป ดู `text` ที่ไฮไลต์ ไม่มีชื่อไฟล์ที่ explore ยังไม่ได้รายงาน
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/sub-message-child.jsonl#line=14
+          select: messages[7].content
+          highlight: ['[0].text']
         end: Turn จบ รอรายงาน
       lane: model
       do: >-
@@ -273,7 +306,7 @@ scenario:
 | ยังทำงาน | จุดปลอดภัยถัดไปของลูก | `delivered at next tool round (event N ...)` | ฉบับเดิมที่จะมา |
 | จบแล้ว รันแบบรอ | ต่อท้าย log แล้วรันใหม่ | รายงานใหม่ในรั้ว | เป็นผลของ call นี้ |
 | จบแล้ว รันเบื้องหลัง | ต่อท้าย log แล้วรันใหม่ | `Resumed ... in the background ...` | มาทีหลังเป็นข้อความ |
-| รันบน agent ภายนอก | ไม่ส่ง | `not delivered: ... cannot take a message mid-turn` หรือ error ว่า resume ไม่ได้ | ไม่มี |
+| รันบน agent ภายนอก (โปรแกรม agent อื่นที่ Geno สั่งให้ทำงานแทน loop ของตัวเอง) | ไม่ส่ง | `not delivered: ... cannot take a message mid-turn` หรือ error ว่า resume ไม่ได้ | ไม่มี |
 
 สิ่งที่ควรสังเกต
 

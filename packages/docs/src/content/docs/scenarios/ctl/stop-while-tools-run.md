@@ -17,8 +17,9 @@ scenario:
       beat:
         title: "pnpm test รันอยู่บนเครื่องของคุณ"
         text: >-
-          model ขอรัน `pnpm test` แล้วอ่าน `src/date.ts` คำสั่งผ่านการตรวจสิทธิ์แล้วและรันอยู่ในกลุ่ม process ของตัวเอง
-          ส่วนการอ่านไฟล์รออยู่ในชุดถัดไป
+          model ขอรัน `pnpm test` แล้วอ่าน `src/date.ts` ในคำตอบเดียว Geno แบ่ง tool call เป็นชุดที่รันต่อกัน `pnpm test` อยู่ในชุดของตัวเอง
+          ส่วนการอ่านไฟล์รออยู่ในชุดถัดไป คำสั่งผ่านการตรวจสิทธิ์แล้วและรันอยู่ใน process group ของตัวเอง
+          คือกลุ่มที่รวมคำสั่งนี้กับทุก process ที่มันเปิด จึงฆ่าได้ทีเดียวทั้งกลุ่ม
         from: engine
         to: machine
         sees: { kind: step, label: pnpm test, status: running }
@@ -51,7 +52,7 @@ scenario:
       beat:
         title: "VS Code สั่ง engine หยุด"
         text: >-
-          รอบนี้ไม่มีการ์ดเปิดอยู่ VS Code จึงสั่ง engine ให้หยุด turn ทันที
+          รอบนี้ไม่มีการ์ดขออนุญาตหรือคำถามเปิดอยู่ VS Code จึงสั่ง engine ให้หยุด turn ทันที
         from: panel
         to: engine
       do: >-
@@ -77,7 +78,7 @@ scenario:
       beat:
         title: "Geno เลิกรอทั้งชุดทันที"
         text: >-
-          Geno ไม่รอให้ tool หยุดเสร็จก่อน มันเลิกรอชุดนี้ทันทีที่ได้สัญญาณ
+          Geno ไม่รอให้ tool หยุดเสร็จก่อน มันเลิกรอชุดนี้ทันทีที่ได้สัญญาณ tool แต่ละตัวต้องหยุดตัวเอง
         from: engine
         to: engine
       do: >-
@@ -104,10 +105,22 @@ scenario:
       beat:
         title: "Geno ตอบทุก call ที่ค้างว่าถูกหยุด"
         text: >-
+          ทุก `tool_use` (บล็อกที่ model ขอเรียก tool) ต้องมี `tool_result` (บล็อกที่ส่งผลของ tool กลับ) คู่กันในคำขอถัดไป Geno จึงเขียนคำตอบให้ทุก call ที่ค้าง
           call ที่เริ่มแล้วได้คำตอบว่าคุณหยุดมันระหว่างรันและอาจรันไปบางส่วน
           การอ่านไฟล์ที่ยังไม่เริ่มได้คำตอบว่ามันไม่ได้รัน Geno บันทึกทุกคำตอบไว้ รอบหน้าจึงไม่รัน call เหล่านี้ซ้ำ
+          และ model รู้ว่า call ไหนอาจรันไปแล้วบางส่วน
+          คำตอบเหล่านี้ไปถึง model ในคำขอแรกของ turn ถัดไป การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน
+          ในการบันทึกคำสั่งเป็น `node --test` แทน `pnpm test` ส่วนที่เหลือเหมือนทัวร์นี้ คุณกด Stop ระหว่างที่มันรัน แล้วส่ง "What happened?"
+          ดูข้อความสุดท้ายของคำขอที่ไฮไลต์ไว้ `tool_result` ก้อนแรกตอบ `bash` ว่าคุณหยุดมันระหว่างรัน ก้อนที่สองตอบ `read` ว่าไม่ได้รัน
+          ทั้งสองมี `is_error: true` ตามด้วยโน้ตที่บอก model ว่าคุณหยุด turn ที่แล้ว และข้อความใหม่ของคุณ
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/ctl-stop-while-tools-run.jsonl#line=4
+          select: messages
+          collapse: ['[0]', '[1]']
+          highlight: ['[2].content[0]', '[2].content[1]']
       do: >-
         call ที่จบแล้วเก็บผลจริงไว้ call ที่เริ่มแล้วแต่ไม่จบได้คำตอบ `UNRUN_TEXTS.stopped` ("...may have partly run.")
         ส่วน `read` ที่ยังไม่เริ่มขึ้นเป็นขั้นรอในแผงก่อน แล้วได้คำตอบ `UNRUN_TEXTS['not-started']` ("...so it did not run.")
@@ -129,7 +142,7 @@ scenario:
       beat:
         title: "แชตขึ้นสองขั้นที่ล้มเหลว"
         text: >-
-          ขั้นของ `pnpm test` และการอ่านไฟล์หยุดหมุนและขึ้นเครื่องหมายล้มเหลว ผลที่พับไว้คือข้อความว่าคุณหยุด
+          ขั้นของ `pnpm test` และการอ่านไฟล์หยุดหมุนและขึ้นเครื่องหมายล้มเหลว ผลที่พับไว้คือข้อความว่าคุณหยุด ขั้น `pnpm test` บอกว่าอาจรันไปบางส่วน ขั้นอ่านไฟล์บอกว่าไม่ได้รัน
         from: panel
         to: you
         sees: { kind: step, label: pnpm test, status: failed, output: "[Request interrupted by user for tool use] The user stopped this call while it ran, so it may have partly run." }
@@ -137,8 +150,9 @@ scenario:
       do: >-
         ขั้นของ `pnpm test` และ `read` หยุดหมุนและขึ้นเครื่องหมายล้มเหลว ผลที่พับไว้คือข้อความว่าผู้ใช้หยุด
       sees: >-
-        ขั้น "pnpm test" และ "read date.ts" ขึ้นไอคอน error ของขั้นที่ล้มเหลว เปิดดูได้ข้อความ
+        ขั้น "pnpm test" และ "read date.ts" ขึ้นไอคอน error ของขั้นที่ล้มเหลว เปิด "pnpm test" ได้ข้อความ
         "[Request interrupted by user for tool use] The user stopped this call while it ran, so it may have partly run."
+        เปิด "read date.ts" ได้ข้อความ "[Request interrupted by user for tool use] The user stopped the turn before this call started, so it did not run."
       ref: packages/extension/src/chat/session-updates.ts#updateActions
 
     - id: abort-logged
@@ -147,8 +161,9 @@ scenario:
       beat:
         title: "Geno บันทึกการหยุดแล้วจบ turn"
         text: >-
-          Geno บันทึกการหยุดพร้อมรายการ tool ที่ถูกตัด เวลาเริ่ม และเวลาหยุด แผงไม่ขึ้นแถบ error Geno จบ turn และ Stop
-          hook ไม่ทำงาน
+          Geno บันทึกการหยุดลง session log พร้อมรายการ tool ที่ถูกตัด เวลาเริ่ม และเวลาหยุด แผงไม่ขึ้นแถบ error
+          เพราะปุ่ม Stop บอกอยู่แล้ว Geno จบ turn และ Stop hook ไม่ทำงาน Stop hook คือคำสั่ง shell ที่คุณตั้งให้รันตอน model
+          จบ turn เอง ครั้งนี้ model ไม่ได้จบเอง
         from: engine
         to: engine
       do: >-
@@ -216,7 +231,7 @@ scenario:
       do: >-
         `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้าย ไม่มีบล็อก error และ turn ถูกหยุด จึงแสดงประกาศพร้อม Continue และ Retry
       sees: >-
-        หัวข้อ "stopped after 21s" กล่อง "Geno stopped without a reply · You stopped it before it answered."
+        หัวข้อ "stopped after" ตามด้วยเวลาที่ใช้ กล่อง "Geno stopped without a reply · You stopped it before it answered."
         ปุ่ม [Continue] [Retry] และท้าย turn ขึ้น "Stopped by you"
       ref: packages/extension/src/chat/rail.ts#missingReply
       end: { turn: stopped, reason: cancelled }

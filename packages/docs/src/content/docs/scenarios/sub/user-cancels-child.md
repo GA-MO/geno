@@ -5,7 +5,7 @@ scenario:
   surface: vscode
   given:
     - ค่า `agentTool` มีโหมดปัจจุบัน และมี turn ทำงานอยู่
-    - model ของแม่ส่งคำถามกว้างๆ ให้ `explore` และลูกกำลังค้นอยู่นาน
+    - model ของแม่ส่งคำถามกว้างๆ ให้ `explore` และลูกกำลังค้นอยู่
   trigger: >-
     ผู้ใช้เห็นว่าลูกค้นผิดทาง จึงกด Cancel บนแถวของลูก
   covers: [sub.user-cancels-child]
@@ -15,8 +15,10 @@ scenario:
       beat:
         title: Model ส่งงานค้นหาให้ explore
         text: >-
-          model เลือกจาก tool `agent` ใน request ของมัน (แท็บแรก) แล้วส่ง `tool_use` ที่มี `agent: "explore"`
-          และ `task` ที่เขียนให้ครบในตัว ไม่มี `background` จึงรอรายงานใน call นี้ (แท็บสอง)
+          subagent (ลูก) คือ session ใหม่ที่ model ของแม่ (session หลักที่คุณคุยอยู่) เปิดให้ทำงานย่อยแล้วส่งรายงานกลับ
+          explore คือ subagent ในตัว Geno ที่ค้นโค้ดแบบอ่านอย่างเดียว
+          model เลือกจาก tool `agent` ใน request ของมัน (แท็บแรก ดู `description` ที่ไฮไลต์) แล้วส่ง `tool_use` ที่มี `agent: "explore"`
+          และ `task` ที่เขียนให้ครบในตัว ไม่มี `background` จึงรอรายงานใน call นี้ (แท็บสอง ดู `input` ที่ไฮไลต์)
         from: model
         to: engine
         sees:
@@ -24,10 +26,11 @@ scenario:
             source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=2
             select: tools[9]
             highlight: [description]
+            quote: "- explore: Fast read-only search."
           - kind: payload
             source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=6
             select: messages[1].content
-            highlight: ['[1].input']
+            highlight: ['[0].input']
       lane: model
       do: >-
         model ของแม่ขอเรียก `agent` ด้วย `agent: "explore"` และงานค้นหา จบคำตอบด้วย `stop_reason: tool_use`
@@ -49,15 +52,15 @@ scenario:
         title: Geno เปิด session ให้ explore
         text: >-
           แชตขึ้นแถวของ explore พร้อมนาฬิกาและปุ่ม Cancel request แรกของ explore มี system prompt ของ explore
-          (กรอบ subagent กับ role จากนิยามในตัว Geno) และข้อความแรกที่มีแค่ environment กับ `task`
-          ไม่มีบทสนทนาของแม่ explore ค้นอยู่นาน
+          (กรอบ subagent กับ role จากนิยามในตัว Geno) และข้อความแรกที่มีแค่ข้อมูลสภาพแวดล้อม (เช่นโฟลเดอร์และระบบปฏิบัติการ) กับ `task`
+          ไม่มีบทสนทนาของแม่ จากนั้น explore เริ่มเขียนคำตอบแรก
         from: engine
         to: model
         sees:
           - kind: task
             title: explore
             status: running
-            detail: 0:38
+            detail: <เวลา>
             actions:
               - Cancel
           - kind: payload
@@ -110,9 +113,9 @@ scenario:
     - id: aborted
       beat:
         title: explore หยุด
-        text: สิ่งที่ explore กำลังรอหยุดทันที มันจบแบบ cancelled
+        text: สิ่งที่ explore กำลังรอหยุดทันที Geno ตัดคำตอบที่ model ของ explore กำลัง stream อยู่ (ส่งมาทีละชิ้นระหว่างที่ model เขียน) ทิ้ง แล้ว explore จบแบบ cancelled
         from: engine
-        to: model
+        to: engine
       lane: child@explore
       at: loop
       do: >-
@@ -126,15 +129,17 @@ scenario:
         title: Geno ส่งรายงานเท่าที่ explore มี
         text: >-
           Geno รวมข้อความที่ explore เขียนเสร็จแล้วเป็นรายงานบางส่วน และบอกว่ามันถูกยกเลิกก่อนเสร็จ
-          ข้อความที่กำลัง stream อยู่ตอนกด Cancel ไม่นับ ในการบันทึกนี้ explore stream "src/cli.ts:3 calls parseVersion"
-          ไปแล้วครึ่งคำตอบ แต่รายงานคือ "(no report)" พร้อม `status="cancelled" partial="true"` และ `turns="0"`
+          ข้อความที่กำลัง stream อยู่ตอนกด Cancel ไม่นับ ในการบันทึกนี้ explore stream "I will search for calls of parseVersion, then re"
+          ไปแล้วครึ่งคำตอบ แต่รายงานคือ "(no report)" พร้อม `status="cancelled" partial="true"` และ `turns="0"` (explore ยังเรียก model ไม่จบสักครั้ง)
+          รายงานนี้เป็นผลของ call `agent` ที่ถึง model ของแม่ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
         from: engine
-        to: model
+        to: engine
         sees:
           kind: payload
           source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=6
           select: messages[2].content[0]
           highlight: [content]
+          quote: turns="0"
       lane: loop
       at: tools
       do: >-
@@ -147,10 +152,12 @@ scenario:
     - id: ended
       beat:
         title: แถวของ explore ขึ้นว่ายกเลิก
-        text: แถวหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
+        text: >-
+          แถวหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
+          ค่า `duration="1s"` ในรายงานของการบันทึกนี้ไม่ใช่เวลาจริง ตัวบันทึกเขียน `duration` ของ subagent เป็น `1s` เสมอ
         from: panel
         to: you
-        sees: แถว "⊘ explore · <model> · 41s" สถานะ Cancelled
+        sees: แถว "⊘ explore · <model> · <เวลา>" สถานะ Cancelled
       lane: server
       at: updates
       do: >-
@@ -163,18 +170,26 @@ scenario:
       at: rail
       alongside: true
       do: แถวของลูกหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
-      sees: แถว "⊘ explore · <model> · 41s" สถานะ Cancelled
+      sees: แถว "⊘ explore · <model> · <เวลา>" สถานะ Cancelled
       ref: packages/extension/src/chat/subagent-view.ts#childLook
 
     - use: tool-result-returns
 
     - id: goes-on
       beat:
-        title: Model อ่านรายงานบางส่วนแล้วทำต่อ
-        text: การยกเลิกลูกไม่ใช่การปฏิเสธ turn ของแม่ไม่จบ model ทำงานต่อเอง หรือถามคุณว่าจะไปทางไหน
-        from: model
-        to: engine
-        end: Turn ทำต่อ
+        title: Geno เรียก model ของแม่อีกครั้ง
+        text: >-
+          การยกเลิกลูกไม่ใช่การปฏิเสธ turn ของแม่ไม่จบ Geno ส่งบทสนทนาทั้งหมดไปให้ model ของแม่อีกครั้งในคำขอใหม่
+          ท้ายคำขอคือคำขอ `agent` ของ model และรายงานบางส่วนของ explore สองจุดที่ไฮไลต์ในการ์ดคือ `tool_use` นั้น
+          และ `tool_result` ที่ตอบมัน ซึ่งมีรายงาน `status="cancelled" partial="true"`
+        from: engine
+        to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=6
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[1].content[0]', '[2].content[0]']
       lane: loop
       at: step
       do: >-
@@ -183,7 +198,47 @@ scenario:
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      beat:
+        title: Model อ่านรายงานบางส่วนแล้วทำต่อ
+        text: >-
+          model ของแม่รู้เฉพาะสิ่งที่อยู่ในรั้วรายงาน ในทางนี้รายงานคือ "(no report)" model จริงจึงบอกได้แค่ว่า explore
+          ถูกหยุดก่อนรายงานอะไร แล้วทำงานต่อเอง หรือถามคุณว่าจะไปทางไหน
+          การบันทึกนี้ใช้ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บทให้มันตอบแบบนั้น: "You stopped explore before it reported
+          anything, so I have no calls to show yet. Say if you want me to search again."
+          แล้วจบคำตอบด้วย `end_turn` (การ์ด: event ท้าย stream ที่บอกเหตุที่หยุด)
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=7
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
+      lane: model
+      do: >-
+        model ของแม่อ่าน `tool_result` ของ `agent` ที่มี `status="cancelled" partial="true"` แล้วตอบเป็นข้อความโดยไม่ขอ tool
+        จบด้วย `stop_reason: end_turn`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [end_turn]
+      phase: calling-model
+
+    - use: answer-streams
+      beat:
+        title: คำตอบค่อยๆ ขึ้นในแชต
+        text: Geno ส่งแต่ละส่วนที่ model เขียนผ่าน VS Code ไปถึงแผงแชตทันที คุณจึงอ่านได้ก่อน model เขียนเสร็จ
+        from: engine
+        to: panel
+    - use: turn-ends
+      beat:
+        title: Turn จบ
+        text: ปุ่ม Send กลับมา และท้ายคำตอบมีแถวสรุป model token และค่าใช้จ่าย
+        from: engine
+        to: panel
+        sees:
+          kind: composer
+          state: idle
+        end: Turn จบ
 ---
 
 Cancel บนแถวของลูกกับ Stop ของแม่ต่างกันที่เป้าหมาย: Cancel ส่ง `session/cancel` ด้วย id ของลูก จึงหยุดแค่ลูก
