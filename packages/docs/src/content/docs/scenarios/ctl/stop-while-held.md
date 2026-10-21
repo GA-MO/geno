@@ -18,8 +18,9 @@ scenario:
       beat:
         title: "Geno ยังไม่จบ turn เพราะรอรายงาน"
         text: >-
-          model ส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
-          Geno จึงยังไม่จบ turn แต่เปิดรอรายงานฉบับนั้นเอง
+          model ส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง subagent คือ session ลูกที่ model สร้างให้ทำงานย่อย
+          แล้วส่งรายงานกลับเมื่อเสร็จ model จบคำตอบด้วย `end_turn` (ค่าที่ model ใช้บอกว่าตอบจบแล้ว) ว่าจะรอผล ใน VS Code รายงานที่มาทีหลังจะปลุก session
+          คือเริ่ม turn ใหม่เองได้ แต่ใน CLI ไม่มีตัวปลุก Geno จึงยังไม่จบ turn แต่เปิด turn ไว้รอรายงานฉบับนั้นเอง
         from: engine
         to: engine
       do: >-
@@ -73,7 +74,7 @@ scenario:
       beat:
         title: "Geno เลิกรอทันที"
         text: >-
-          การรอรายงานฟังสัญญาณหยุดเดียวกับ turn จึงจบทันที Geno บันทึกว่าคุณเป็นคนหยุด
+          Ctrl-C ครั้งแรกส่งสัญญาณหยุดของ turn การรอรายงานฟังสัญญาณนี้อยู่จึงจบทันที Geno บันทึกลง session log (ไฟล์ที่เก็บทุก event ของแชต) ว่าคุณเป็นคนหยุด
         from: engine
         to: engine
       do: >-
@@ -95,7 +96,7 @@ scenario:
       beat:
         title: "Geno จบ turn"
         text: >-
-          Geno เห็นว่าคุณหยุด จึงจบ turn และไม่ถือ turn ไว้รออีก ทางรับข้อความของ turn ปิด
+          Geno เห็นว่าคุณหยุด จึงจบ turn และไม่เปิด turn ไว้รออีก inbox ของ turn ซึ่งเป็นที่รับรายงานและข้อความที่มาระหว่าง turn ปิดลง
         from: engine
         to: engine
       do: >-
@@ -109,10 +110,19 @@ scenario:
       beat:
         title: "Geno หยุด subagent ทุกตัว"
         text: >-
-          turn ไม่ได้จบด้วยคำตอบ และ CLI ไม่มีตัวปลุก Geno จึงหยุด subagent เบื้องหลังทุกตัว สิ่งที่ explore
-          พบไม่ไปถึงแชตหลัก Geno รอให้มันจบก่อนปิด sandbox
+          turn ไม่ได้จบด้วยคำตอบ และ CLI ไม่มีตัวปลุก ไม่มีใครจะรับรายงานแล้ว Geno จึงหยุด subagent เบื้องหลังทุกตัว
+          สิ่งที่ explore พบไม่ไปถึงแชตหลัก Geno รอให้มันจบก่อนปิด sandbox ซึ่งเป็นกรอบที่จำกัดคำสั่งของ session
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน (การบันทึกใช้ prompt ภาษาอังกฤษ) มันคือ `messages` ของคำขอที่ explore
+          ส่งไปหลังเรียก `list` ดูไฟล์ใน `src` และยังรอคำตอบอยู่ตอนคุณกด Ctrl-C ดู `tool_result` (บล็อกที่ส่งผลของ tool กลับให้ model) ที่ไฮไลต์: นี่คือสิ่งที่ explore ทำได้ถึงตอนนั้น
+          Geno ยกเลิกคำขอนี้ก่อน model ตอบ (บรรทัดถัดไปในไฟล์บันทึกว่าถูกยกเลิก) explore จึงไม่ได้เขียนรายงาน
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/ctl-stop-while-held.jsonl#line=6
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[2].content[0]']
       do: >-
         `finally` ของ `runAgent` เรียก `stopBackground` เมื่อ turn ไม่ได้จบด้วย `end_turn` หรือไม่มีตัวปลุก (ที่นี่เป็นทั้งสองอย่าง):
         abort ลูกเบื้องหลังทุกตัว และตั้งว่ารายงานของพวกมันไม่มีใครฟังแล้ว แล้วรอให้ลูกจบก่อนปิด sandbox
@@ -132,16 +142,17 @@ scenario:
       beat:
         title: "เทอร์มินัลคืน prompt พร้อมรหัส 130"
         text: >-
-          Geno พิมพ์บรรทัด usage แล้ว process ออกด้วยรหัส 130 ซึ่งแปลว่าถูกขัด script ที่เรียก CLI จึงแยกออกได้
+          Geno พิมพ์บรรทัด usage ที่สรุปการใช้งานของรอบนี้ ค่า `turns` ในบรรทัดนั้นนับคำตอบของ model ใน session หลัก ที่นี่คือสองครั้ง ไม่นับของ explore แล้ว process ออกด้วยรหัส 130 ซึ่งแปลว่าถูกขัด
+          ไม่ใช่ 0 ที่แปลว่าสำเร็จ script ที่เรียก CLI จึงแยกออกได้
         from: panel
         to: you
         end: "คุณหยุด process ออก 130"
-        sees: "บรรทัด \"usage: ... turns=3\" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130"
+        sees: "บรรทัด \"usage: ... turns=2\" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130"
       do: >-
-        `finish` ไม่เพิ่มข้อความ error เพราะ event สุดท้ายเป็น `abort` อยู่แล้ว พิมพ์บรรทัด usage แล้ว process ออกด้วย
+        `finish` ไม่เพิ่มข้อความ error เพราะ event สุดท้ายเป็น `abort` อยู่แล้ว พิมพ์บรรทัด usage (`turns` มาจาก `totalOf` ซึ่งนับ event `assistant` ของ session หลักเท่านั้น) แล้ว process ออกด้วย
         `EXIT_CODES.abort`
       sees: >-
-        บรรทัด "usage: ... turns=3" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130
+        บรรทัด "usage: ... turns=2" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130
       ref: packages/engine/src/chat.ts#EXIT_CODES
       end: { turn: stopped, reason: abort }
 ---

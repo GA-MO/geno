@@ -16,10 +16,16 @@ scenario:
       beat:
         title: "Model กำลังเขียนคำตอบ"
         text: >-
-          ข้อความแต่ละส่วนขึ้นในแชตทันที แต่ Geno ยังไม่บันทึกอะไรลงบันทึกของ session จนกว่าคำตอบจะจบ
+          ข้อความแต่ละส่วนขึ้นในแชตทันที แต่ Geno ยังไม่บันทึกอะไรลง session log จนกว่าคำตอบจะจบ
+          การ์ดข้างล่างเป็น stream จริงจากการรันอื่น ดู event สองอันที่ไฮไลต์ แต่ละอันเป็น `text_delta`
+          ที่มีข้อความแค่ไม่กี่ตัวอักษร คือ `http` กับ `://localhost:5173/` model ส่งคำตอบมาทีละชิ้นแบบนี้
         from: model
         to: engine
-        sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, streaming: true }
+        sees:
+          - { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, streaming: true }
+          - kind: payload
+            source: docs/results/real-usecases/runs/A12-background-server/sonnet-1/wire.jsonl#line=16
+            highlight: ['[3].data.delta', '[4].data.delta']
       do: >-
         model กำลัง stream คำตอบ ข้อความแต่ละส่วนไปถึงแผงทันที แต่ยังไม่มีอะไรถูกบันทึกลง log จนกว่าคำตอบจะจบ
       ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
@@ -48,9 +54,9 @@ scenario:
       lane: editor
       at: chat
       beat:
-        title: "VS Code ตอบการ์ดที่ค้างแล้วสั่งหยุด"
+        title: "VS Code สั่ง engine หยุด"
         text: >-
-          ถ้ามีการ์ดขออนุญาตหรือคำถามเปิดอยู่ VS Code ตอบว่ายกเลิกก่อน แล้วสั่ง engine ให้หยุด turn
+          VS Code สั่ง engine ให้หยุด turn ในทางนี้ไม่มีการ์ดค้าง ถ้ามีการ์ดขออนุญาตหรือคำถามเปิดอยู่ VS Code จะตอบว่ายกเลิกก่อน
         from: panel
         to: engine
       do: >-
@@ -63,7 +69,8 @@ scenario:
       beat:
         title: "Geno ยกเลิก turn"
         text: >-
-          engine ส่งสัญญาณหยุดไปทุกที่ที่ turn กำลังทำงาน ทั้งการเรียก model การรอ การรัน tool และ compaction
+          engine ส่งสัญญาณหยุดไปทุกที่ที่ turn กำลังทำงาน ทั้งการเรียก model การรอก่อนลองส่งใหม่ การรัน tool
+          และ compaction (การสรุปบทสนทนาเก่า)
         from: engine
         to: engine
       do: >-
@@ -77,7 +84,8 @@ scenario:
       beat:
         title: "Stream ถูกตัด Geno ไม่ retry"
         text: >-
-          การเรียก model ถูกตัดกลางทาง Geno ไม่ลองใหม่ เพราะรู้ว่าคุณเป็นคนหยุด
+          การเรียก model ถูกตัดกลางทาง ปกติเมื่อการเชื่อมต่อขาด gateway ส่วนที่เรียก model จะลองใหม่
+          แต่ครั้งนี้ Geno ไม่ลองใหม่ เพราะรู้ว่าคุณเป็นคนหยุด
         from: engine
         to: engine
       do: >-
@@ -123,7 +131,8 @@ scenario:
       beat:
         title: "Geno จบ turn แบบ stopped"
         text: >-
-          Stop hook ไม่ทำงานในทางนี้ engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped
+          engine บอก VS Code ว่า turn ถูกยกเลิก งานของแชตนี้ในแผง Tasks (รายการงานที่กำลังทำของ Geno) จบแบบ stopped
+          Stop hook คือคำสั่ง shell ที่คุณตั้งให้รันตอน model จะจบ turn มันไม่ทำงานในทางนี้ เพราะ model ไม่ได้จบด้วย `end_turn` (ค่าที่ model ใช้บอกว่าตอบจบแล้ว)
         from: engine
         to: panel
       do: >-
@@ -156,14 +165,14 @@ scenario:
       beat:
         title: "แชตเก็บกวาด turn ที่หยุด"
         text: >-
-          tool ที่ยังหมุนเปลี่ยนเป็น cancelled การ์ดที่ค้างเปลี่ยนเป็น Cancelled และข้อความในคิวกลับไปที่ช่องพิมพ์
+          ถ้ามี tool ที่ยังหมุนเปลี่ยนเป็น cancelled การ์ดที่ค้างเปลี่ยนเป็น Cancelled และข้อความในคิวกลับไปที่ช่องพิมพ์
           แผงดูว่ามีข้อความตอบอยู่ไหม
         from: panel
         to: panel
         ask: "เขียนไปแล้วไหม"
       do: >-
         reducer ของ `turn-end` เปลี่ยน tool ที่ยังหมุนเป็น cancelled และการ์ดที่เปิดค้างเป็น Cancelled
-        ข้อความที่รออยู่ในคิวกลับไปที่ช่องพิมพ์ แล้ว `missingReply` ดูว่ามีข้อความตอบหลังขั้นสุดท้ายหรือไม่
+        `sendQueued` ของแผงคืนข้อความที่รออยู่ในคิวไปที่ช่องพิมพ์ แล้ว `missingReply` ดูว่ามีข้อความตอบหลังขั้นสุดท้ายหรือไม่
       ref: packages/extension/src/chat/rail.ts#missingReply
       fork:
         ask: model เขียนข้อความออกมาแล้วหรือยังตอนที่ผู้ใช้กด Stop
@@ -180,12 +189,12 @@ scenario:
                   from: panel
                   to: you
                   end: "คุณหยุด ข้อความค้างครึ่ง"
-                  sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, footer: [ stopped after 6.2s, Stopped by you ] }
+                  sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, footer: [ stopped after ..., Stopped by you ] }
                 do: >-
                   ข้อความที่ stream มาแล้วยังอยู่ในแผง จึงไม่มีประกาศ "stopped without a reply"
                   แต่ข้อความนี้ไม่อยู่ใน log การ reload หรือเปิดแชตนี้ใหม่จะไม่เห็นมัน และ model ก็ไม่เห็นมันในคำขอถัดไป
                 sees: >-
-                  ข้อความครึ่งเดียวค้างอยู่ หัวข้อเป็น "stopped after 6.2s" ท้าย turn ขึ้น "Stopped by you" และปุ่ม Send กลับมา
+                  ข้อความครึ่งเดียวค้างอยู่ หัวข้อเป็น "stopped after" ตามด้วยเวลาที่ใช้ ท้าย turn ขึ้น "Stopped by you" และปุ่ม Send กลับมา
                 ref: packages/extension/src/chat/render.ts#turnFooter
                 end: { turn: stopped, reason: cancelled }
           - id: no-text
@@ -211,7 +220,7 @@ scenario:
                 end: { turn: stopped, reason: cancelled }
 ---
 
-Stop เดินทางเป็นสายเดียวจากแผงถึงคำขอ model: ข้อความ `stop` ในแผง, notification ACP `session/cancel`,
+Stop เดินทางเป็นสายเดียวจากแผงถึงคำขอ model: ข้อความ `stop` ในแผง, notification ของ [ACP](/start/glossary/) `session/cancel` (ข้อความที่ไม่ต้องรอคำตอบ),
 `AbortController` ของ turn ในเซิร์ฟเวอร์ engine แล้วจึงถึง stream ของผู้ให้บริการ
 ทุกจุดที่ turn อาจรออยู่ฟังสัญญาณเดียวกัน Stop จึงใช้ได้ทั้งตอน stream ตอนรอ retry และตอนรัน tool
 

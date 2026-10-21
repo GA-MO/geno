@@ -14,7 +14,7 @@ scenario:
     - id: type
       beat:
         title: คุณเลือกคำสั่งจากรายการ `/`
-        text: รายการบอกว่าคำสั่งไหน VS Code ทำเอง และคำสั่งไหน engine ทำ คุณกด Enter แชตส่งข้อความทั้งบรรทัด
+        text: รายการบอกว่าคำสั่งไหน VS Code ทำเอง และคำสั่งไหน engine ทำ คำสั่งที่ไม่รับอะไรต่อท้าย เช่น `/new` กด Enter แล้วส่งเลย คำสั่งที่รับค่า เช่น `/mode` กด Enter แล้วได้ `/mode ` ในช่องพิมพ์ คุณพิมพ์ `plan` แล้วกด Enter อีกครั้งจึงส่งทั้งบรรทัด
         from: you
         to: panel
       lane: user
@@ -82,7 +82,7 @@ scenario:
               - lane: editor
                 beat:
                   title: แชตส่ง `/mode plan` ไปที่ engine
-                  text: "`/mode` ไม่ใช่คำสั่งของ VS Code แชตขึ้น turn ที่มีชิปของคำสั่ง แล้วส่งเป็น prompt"
+                  text: "`/mode` ไม่ใช่คำสั่งของ VS Code แชตวาด turn ใหม่ที่มีชิปของคำสั่ง (ป้ายเล็กที่แสดงคำสั่งที่พิมพ์) แล้วส่งข้อความเป็น prompt ไปที่ engine เหมือนข้อความธรรมดา"
                   from: panel
                   to: engine
                 at: chat
@@ -93,7 +93,7 @@ scenario:
               - lane: server
                 beat:
                   title: engine ทำเองโดยไม่เรียก model
-                  text: คำสั่งในตัวไม่เปิดรอบของ agent ไม่มีงานในแผง Tasks และไม่มีการเรียก model
+                  text: engine เห็นว่าเป็นคำสั่งในตัว จึงไม่เปิดรอบของ agent ซึ่งคือ loop ที่เรียก model และรัน tool ไม่มีงานในแผง Tasks (แผงที่แสดงงานที่กำลังทำ) และไม่มีการเรียก model แชตยังแสดงเป็น turn สั้นๆ แต่ engine ไม่ได้เปิด turn จริง
                   from: engine
                   to: engine
                 at: turns
@@ -106,7 +106,7 @@ scenario:
               - lane: server
                 beat:
                   title: Geno เปลี่ยนโหมดทันที
-                  text: Geno ตรวจว่า plan เป็นโหมดที่มีจริง เปลี่ยนโหมดของ session บันทึกลง log และบอกแชตว่าโหมดเปลี่ยน
+                  text: Geno ตรวจว่า plan เป็นโหมดที่มีจริง เปลี่ยนโหมดของ session บันทึกลง log และบอกแชตว่าโหมดเปลี่ยน โหมด Plan คือโหมดอ่านอย่างเดียว ไม่แก้ไฟล์ และรันเฉพาะคำสั่งที่ปลอดภัย
                   from: engine
                   to: engine
                 at: turns
@@ -118,7 +118,7 @@ scenario:
               - lane: server
                 beat:
                   title: แชตขึ้นคำตอบหนึ่งบรรทัด
-                  text: turn สั้นๆ จบแบบ done ตัวเลือกโหมดในช่องพิมพ์เป็น Plan
+                  text: แชตขึ้นคำตอบหนึ่งบรรทัดว่าโหมดเป็น plan แล้ว turn สั้นๆ ในแชตจบแบบ done ตัวเลือกโหมดในช่องพิมพ์เป็น Plan
                   from: engine
                   to: panel
                   sees:
@@ -149,14 +149,14 @@ scenario:
                 end: { turn: done, reason: end_turn }
 ---
 
-คำสั่งในตัวมีสามกลุ่ม ต่างกันที่ว่าใครทำและต้องเปิดรอบของเอเจนต์ไหม
+คำสั่งในตัวมีสามกลุ่ม ต่างกันที่ว่าใครทำและต้องเปิดรอบของเอเจนต์ ([agent loop](/start/glossary/)) ไหม
 
 | กลุ่ม | คำสั่ง | ใครทำ | เรียก model |
 | --- | --- | --- | --- |
 | editor | `/new` `/clear` `/history` `/model` `/rules` `/memory` `/best-of-n` `/lane` | VS Code | ไม่ |
 | engine | `/mode` `/schedule` | engine โดยไม่เปิดรอบ | ไม่ |
-| engine ที่สรุปบริบท | `/compact` | engine โดยไม่เปิดรอบ | เรียกครั้งเดียวเพื่อสรุป ดู [/compact ระหว่าง turn](/scenarios/ctx/compaction-manual/) |
-| กลายเป็น prompt | `/init` `/workflow` | รอบปกติของเอเจนต์ | ใช่ |
+| engine ที่สรุปบริบท | `/compact` | engine โดยไม่เปิดรอบ | เรียกครั้งเดียวเพื่อสรุป ดู [/compact ระหว่างสอง turn](/scenarios/ctx/compaction-manual/) |
+| กลายเป็น prompt | `/init` `/workflow` | รอบปกติของเอเจนต์ (`/workflow` engine เรียก tool `workflow` เองก่อน ไม่มี model อ่าน prompt ก่อน) | ใช่ |
 
 สิ่งที่ควรสังเกต
 

@@ -14,7 +14,9 @@ scenario:
     - use: tool-call-opens
       beat:
         title: Model ขอรัน `pnpm build` เบื้องหลัง
-        text: "model ส่ง `run_in_background: true` เพื่อไม่ต้องรอ build การ์ดเป็นคำขอจริงจากการรันที่เริ่ม `npm run dev` เบื้องหลังแบบเดียวกัน"
+        text: >-
+          model ขอเรียก `bash` พร้อม `run_in_background: true` คือให้คำสั่งรันต่อไปโดย turn ไม่ต้องรอให้จบ
+          การ์ดเป็นบล็อก `tool_use` จริงจากการรันที่เริ่ม `npm run dev` เบื้องหลังแบบเดียวกัน ดู `run_in_background` ที่ไฮไลต์
         from: model
         to: engine
         sees:
@@ -35,12 +37,15 @@ scenario:
       do: >-
         `approveCommand` ตรวจคำสั่งเบื้องหลังด้วยกฎชุดเดียวกับคำสั่งปกติ (ในโหมด Plan คำสั่งเบื้องหลังถูกปฏิเสธทันที)
         กฎ allow ของ workspace ครอบคลุม `pnpm build` จึงผ่าน
-      ref: packages/core/src/permission-rules.ts#ruledDenial
+      ref: packages/engine/src/tools/agent.ts#approveCommand
 
     - id: start
       beat:
         title: build เริ่มรันเบื้องหลัง
-        text: คำสั่งได้ id `bg-1` และรันใน sandbox ผลทั้งหมดไปลงไฟล์ ผลของ call บอก model ทันทีว่าเริ่มแล้ว
+        text: >-
+          คำสั่งได้ id `bg-1` และรันใน sandbox (กรอบของระบบปฏิบัติการที่จำกัดว่าคำสั่งเขียนไฟล์และต่อเครือข่ายได้แค่ไหน)
+          output ทั้งหมดไปลงไฟล์ Geno ตอบ model ทันทีโดยไม่รอคำสั่งจบ การ์ดคือ `tool_result` จากการรันเดียวกับการ์ดแรก ส่วนที่ไฮไลต์บอก id
+          และที่อยู่ไฟล์ output ซึ่งลงท้ายด้วย `background/bg-1.log`
         from: engine
         to: machine
         sees:
@@ -48,6 +53,7 @@ scenario:
           source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/wire.jsonl#line=3
           select: messages[-1].content[0]
           highlight: [content]
+          quote: background/bg-1.log
       lane: tool
       at: shell
       do: >-
@@ -59,7 +65,7 @@ scenario:
     - id: shown
       beat:
         title: แชตและ Tasks แสดงคำสั่งที่รันอยู่
-        text: ขั้นของคำสั่งและงานในแผง Tasks อัปเดตทุกครั้งที่งานเปลี่ยน
+        text: ขั้นของคำสั่งในแชต และงานในแผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) อัปเดตทุกครั้งที่งานเปลี่ยน
         from: panel
         to: you
         sees:
@@ -97,12 +103,22 @@ scenario:
               - lane: loop
                 beat:
                   title: Model ทำงานอื่นต่อ
-                  text: model อ่านว่า bg-1 เริ่มแล้ว และทำงานอื่น เช่นแก้เอกสาร ระหว่างนั้น build จบด้วย exit 0
+                  text: >-
+                    model อ่านว่า bg-1 เริ่มแล้ว และเรียก tool อื่นต่อทันทีโดยไม่หยุดรอ bg-1 ระหว่างนั้น build จบด้วย exit 0
+                    การ์ดข้างล่างเป็นคำตอบจริงจากการรันเดียวกับการ์ดแรก (ที่เริ่ม dev server) ในรันนั้น tool ถัดไปคือ `tool_search`
+                    (tool ที่โหลด schema ของ tool อื่นก่อน model จะเรียกได้) ดู `input` ที่ไฮไลต์ จุดที่ต้องดูคือคำตอบนี้เรียก tool อื่น
+                    ไม่ใช่การรอ bg-1 แล้วจบคำตอบด้วย `stop_reason: tool_use`
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/session.jsonl#seq=6
+                    select: content
+                    collapse: ['[0].thinking']
+                    highlight: ['[1].input']
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` model อ่านว่า bg-1 เริ่มแล้ว และทำงานอื่นต่อ เช่นแก้เอกสาร
+                  `loopStep` ตัดสิน `call-model` model อ่านว่า bg-1 เริ่มแล้ว และเรียก tool อื่นต่อ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -116,9 +132,12 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno ใส่โน้ตไว้ก่อนเรียก model
-                  text: ที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไป Geno บันทึกว่า build จบ พร้อมท้ายของผล
+                  text: >-
+                    การจบของ build เข้าไปรอในกล่องข้อความของ session (คิวของสิ่งที่รอส่งให้ model) ไม่แทรกกลางงานที่รันอยู่
+                    ที่จุดปลอดภัย คือจังหวะก่อนเรียก model ครั้งถัดไปตอนที่ไม่มี tool กำลังรัน Geno บันทึกโน้ตว่า build จบ
+                    พร้อมท้ายของ output ลงใน log โน้ตนี้ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                 at: drive
                 do: >-
                   ที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไป `deliver()` บันทึก event `background-end` ลง log
@@ -128,15 +147,41 @@ scenario:
               - lane: model
                 beat:
                   title: Model รู้ว่า build ผ่าน
-                  text: คำขอถัดไปมีโน้ต "Background command bg-1 (`pnpm build`) exited with code 0." model ทำงานต่อใน turn เดิม
+                  text: >-
+                    คำขอถัดไปมีโน้ต "Background command bg-1 (`pnpm build`) exited with code 0." model รู้ผลใน turn เดิม ไม่ต้องรอ turn ใหม่
+                    การ์ดทั้งสี่มาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ไม่ใช่การรันเดียวกับการ์ดก่อนหน้า
+                    ในการบันทึกนั้น model อ่าน `package.json` ระหว่างที่ build รัน ในการบันทึก `pnpm` เป็นสคริปต์จำลองบน PATH ที่รันสคริปต์ใน package.json แบบ pnpm และสคริปต์ build เป็นสคริปต์เล็กๆ ที่พิมพ์ผลตามบท
+                    ใบแรกและใบที่สองคือโน้ตในคำขอถัดไป ซึ่งมาต่อท้าย `tool_result` ของการอ่านไฟล์ ใบแรกแสดงช่วงที่บอก exit code
+                    ใบที่สองแสดงท้ายของโน้ตเดียวกัน คือท้ายของ output ในรั้ว `command_output`
+                    ใบที่สามคือคำตอบของ model ใบที่สี่คือท้าย stream ของคำตอบนั้น ในการบันทึกนี้ไม่มีงานเหลือ model จึงจบด้วย `stop_reason: end_turn`
                   from: model
                   to: engine
-                  end: Turn ทำต่อ
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes-mid-turn.jsonl#line=6
+                      select: messages[-1].content[1]
+                      highlight: [text]
+                      quote: exited with code 0
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes-mid-turn.jsonl#line=6
+                      select: messages[-1].content[1]
+                      highlight: [text]
+                      quote: Built in 0.6s
+                    - kind: message
+                      from: geno
+                      text: "The build passed: pnpm build exited with code 0 and built dist/cli.js, dist/update.js and dist/version.js. It runs node scripts/build.mjs, as package.json says."
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes-mid-turn.jsonl#line=7
+                      select: '[-2]'
+                      highlight: [data.delta.stop_reason]
+                  end: Model รู้ผลใน turn เดิม แล้วจบ turn
                 do: >-
                   คำขอถัดไปมีโน้ตว่า "Background command bg-1 (`pnpm build`) exited with code 0." พร้อมที่อยู่ไฟล์ผลและท้ายของผล
-                  ที่ล้อมไว้เป็นข้อมูล model ทำงานต่อโดยรู้ว่า build ผ่าน
+                  ที่ล้อมไว้เป็นข้อมูล model เล่าว่า build ผ่าน แล้วจบด้วย `stop_reason: end_turn`
                 ref: packages/core/src/background.ts#backgroundEndNotice
-                end: { turn: continues }
+                emits: [end_turn]
+                phase: calling-model
+              - use: turn-ends
 
           - id: after-turn
             label: หลัง turn จบแล้ว
@@ -144,9 +189,22 @@ scenario:
               - lane: model
                 beat:
                   title: Model บอกว่าจะแจ้งเมื่อเสร็จ แล้วจบ turn
-                  text: model ไม่วนถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง คำสั่งเบื้องหลังไม่ถือ turn ไว้ และไม่ถูกฆ่าตอน turn จบ
+                  text: >-
+                    model ไม่วนถามสถานะ เพราะ Geno จะปลุก session ให้เอง ปลุกคือ engine เริ่ม turn ใหม่เองโดยไม่มีใครพิมพ์
+                    เมื่องานเบื้องหลังรายงานกลับ คำสั่งเบื้องหลังไม่ถือ turn ไว้ และไม่ถูกฆ่าตอน turn จบ
+                    การ์ดมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ซึ่งเริ่ม `pnpm build` เบื้องหลังแบบเดียวกัน
+                    ในการบันทึก `pnpm` เป็นสคริปต์จำลองบน PATH ที่รันสคริปต์ใน package.json แบบ pnpm และสคริปต์ build เป็นสคริปต์เล็กๆ ที่พิมพ์ผลตามบท
+                    ใบแรกคือข้อความที่ model ตอบ ใบที่สองคือท้าย stream ของคำตอบนั้น ดู `stop_reason` ที่ไฮไลต์ว่าเป็น `end_turn`
                   from: model
                   to: engine
+                  sees:
+                    - kind: message
+                      from: geno
+                      text: The build is running in the background as bg-1. I will tell you when it finishes.
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes.jsonl#line=5
+                      select: '[-2]'
+                      highlight: [data.delta.stop_reason]
                 do: >-
                   model บอกผู้ใช้ว่า build กำลังรันและจะแจ้งเมื่อเสร็จ แล้วจบด้วย `stop_reason: end_turn`
                   (system prompt บอกให้จบ turn แทนการคอยถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง)
@@ -162,20 +220,25 @@ scenario:
                 phase: idle
               - lane: tool
                 beat:
-                  title: build จบหลายนาทีต่อมา
-                  text: build จบด้วย exit 0 และส่งโน้ตเข้ากล่องข้อความของ session
+                  title: build จบทีหลัง
+                  text: >-
+                    build จบด้วย exit 0 และส่งโน้ตเข้ากล่องข้อความของ session (คิวของสิ่งที่รอส่งให้ model)
+                    build ของจริงอาจใช้หลายนาที ส่วนสคริปต์ build จำลองในการบันทึกจบในไม่ถึงวินาที การ์ดถัดไปจึงเขียนว่า "Built in 0.6s"
                   from: machine
                   to: engine
                 at: shell
                 runs: 0
                 do: >-
-                  หลายนาทีต่อมา build จบด้วย exit code 0 งานส่ง `background-end` เข้ากล่องข้อความของ session
+                  ต่อมา build จบด้วย exit code 0 งานส่ง `background-end` เข้ากล่องข้อความของ session
                 ref: packages/core/src/background.ts#TELLS_MODEL
                 emits: [background-end]
               - lane: server
                 beat:
                   title: Geno ปลุก session
-                  text: ไม่มี turn รันอยู่ Geno บันทึกโน้ตลง log รอ 2 วินาที ไม่มีการ์ดค้างและคุณไม่ได้พิมพ์ จึงเปิด turn ใหม่ที่หัวมีกระดิ่ง
+                  text: >-
+                    ไม่มี turn รันอยู่ Geno บันทึกโน้ตลง log ทันที รอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว
+                    (ในการบันทึกตั้งช่วงรอนี้ให้สั้นลงเหลือ 50 มิลลิวินาที)
+                    ไม่มีการ์ด permission ค้างรอคุณ และคุณไม่ได้พิมพ์ จึงเปิด turn ใหม่ที่หัวมีกระดิ่ง
                   from: engine
                   to: panel
                   sees: 'กระดิ่งกับ "woke: 1 task finished" หัวข้อ "working"'
@@ -196,23 +259,44 @@ scenario:
               - lane: model
                 beat:
                   title: Model เล่าผล build
-                  text: model อ่านโน้ตของ bg-1 และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ
+                  text: >-
+                    model อ่านโน้ตของ bg-1 และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ
+                    การ์ดมาจากการบันทึกเดียวกับการ์ดก่อน ใบแรกและใบที่สองคือข้อความสุดท้ายของคำขอใน turn ที่ถูกปลุก ซึ่งมีสองข้อความที่ไฮไลต์
+                    ใบแรกแสดงโน้ตว่า bg-1 จบด้วย exit code 0 ใบที่สองแสดงข้อความว่า Geno เริ่ม turn นี้เอง (woke: 1 task finished)
+                    ใบที่สามคือคำตอบของ model
                   from: model
                   to: engine
-                  end: Model เล่าผล build
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes.jsonl#line=6
+                      select: messages[-1].content
+                      highlight: ['[0].text', '[1].text']
+                      quote: exited with code 0
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/bg-command-ends-wakes.jsonl#line=6
+                      select: messages[-1].content
+                      highlight: ['[0].text', '[1].text']
+                      quote: "woke: 1 task finished"
+                    - kind: message
+                      from: geno
+                      text: "The build passed: pnpm build exited with code 0 and built dist/cli.js, dist/update.js and dist/version.js."
+                  end: Turn ที่ถูกปลุกจบ
                 do: >-
-                  model อ่านโน้ตของ bg-1 ตามด้วยข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผล build ให้ผู้ใช้
+                  model อ่านโน้ตของ bg-1 ตามด้วยข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผล build ให้ผู้ใช้ และจบด้วย `stop_reason: end_turn`
                 ref: packages/core/src/background.ts#backgroundEndNotice
+                emits: [end_turn]
                 phase: calling-model
-                end: { turn: continues }
+              - use: bg-woken-ends
 ---
 
-คำสั่งเบื้องหลังต่างจากลูกเบื้องหลังตรงที่ไม่มีหนี้รายงาน: turn ไม่ถูกถือไว้รอ และ model ไม่ต้องรอผล
-ถ้าคำสั่งจบ model จะได้รู้เสมอ ไม่ว่าจะระหว่าง turn หรือหลังจากนั้น
+[คำสั่งเบื้องหลัง](/start/glossary/)ต่างจากลูกเบื้องหลัง (subagent ที่รันโดยแม่ไม่รอ) ตรงที่ session ไม่ได้ค้างรายงานจากมัน
+ถ้าไม่มีตัวปลุก (เช่นใน CLI) Geno ถือ turn ไว้รอรายงานของลูก ([CLI ถือ turn ไว้รอรายงาน](/scenarios/bg/cli-holds-turn/))
+แต่ไม่เคยถือ turn ไว้รอคำสั่ง ใน CLI คำสั่งถูกฆ่าเมื่อรอบจบ ถ้าคำสั่งจบเอง model จะได้รู้เสมอ ไม่ว่าจะระหว่าง turn หรือหลังจากนั้น
 
 สิ่งที่ควรสังเกต
 
 - **คำสั่งที่ผู้ใช้หยุดไม่ปลุก** model ได้รู้ใน turn ถัดไปของผู้ใช้ แต่ไม่มี turn ที่ถูกปลุก เพราะผู้ใช้รู้อยู่แล้ว
-- **dev server ไม่ปลุก** คำสั่งที่เป็น preview ของ dev server ตั้งใจให้รันต่อ การจบของมันไปกับ turn ถัดไปแทน
+- **dev server ที่ `preview_start` เริ่มไม่ปลุก** คำสั่งที่ tool `preview_start` เริ่ม (dev server ที่ Geno เปิดให้ดูหน้าเว็บ)
+  ตั้งใจให้รันต่อ การจบของมันไปกับ turn ถัดไปแทน ส่วน `pnpm dev` ที่รันด้วย `bash` เบื้องหลังยังปลุกตามปกติ
 - **ผลยาวไม่เข้า context ทั้งหมด** โน้ตมีแค่ท้ายของผล ที่เหลืออยู่ในไฟล์ `bg-1.log` ให้อ่านด้วย `bash_output` หรือ `read`
 - **ใน CLI ไม่มีการปลุก** `gcode agent` ฆ่าคำสั่งเบื้องหลังเมื่อรอบจบ

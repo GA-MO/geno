@@ -4,7 +4,7 @@ description: model เริ่ม explore แบบเบื้องหลั�
 scenario:
   surface: vscode
   given:
-    - ค่า `agentTool` มีโหมดปัจจุบัน และการปลุกอัตโนมัติ (`gcode.wake.auto`) เปิดอยู่ตามค่าเริ่มต้น
+    - การตั้งค่า `agentTool` เปิดให้ model เรียก tool `agent` ได้ในโหมดปัจจุบัน และการปลุกอัตโนมัติ (`gcode.wake.auto`) เปิดอยู่ตามค่าเริ่มต้น
     - หน้าต่าง VS Code ที่แสดง session นี้ยังเปิดอยู่
   trigger: >-
     ผู้ใช้ขอให้หาว่า `parseVersion` ถูกเรียกที่ไหน model เริ่ม `explore` แบบเบื้องหลัง
@@ -15,9 +15,10 @@ scenario:
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
         text: >-
-          คำอธิบายของ `background` ใน schema ของ tool `agent` บอกว่า call จะกลับทันทีพร้อม session id
-          และรายงานจะมาเป็นข้อความทีหลัง (แท็บแรก) model ส่ง `tool_use` ที่มี `agent: "explore"`, `task` และ
-          `background: true` (แท็บสอง) มันจะไม่รอรายงาน
+          tool `agent` สร้าง subagent คือ session ลูกที่มีบทสนทนาของตัวเอง ทำงานย่อยแล้วจบด้วย tool `report`
+          ที่ส่งรายงานกลับไปหาแม่ explore คือ subagent สำหรับค้นโค้ด แท็บแรกคือ schema ของ `agent` ดู `background`
+          ที่ไฮไลต์ คำอธิบายบอกว่า call จะกลับทันทีพร้อม session id และรายงานจะมาเป็นข้อความทีหลัง
+          แท็บสองคือ `tool_use` ที่ model ส่ง ดู `input` ที่มี `agent: "explore"`, `task` และ `background: true` model จะไม่รอรายงาน
         from: model
         to: engine
         sees:
@@ -49,15 +50,16 @@ scenario:
       beat:
         title: Geno เปิด session ให้ explore
         text: >-
-          แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน request แรกของ explore เหมือนลูกแบบรอทุกอย่าง: system prompt ของ explore
-          และข้อความแรกที่มีแค่ environment กับ `task` explore ไม่รู้ว่าตัวเองรันเบื้องหลัง และยังต้องจบด้วย `report`
+          แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน request แรกของ explore เหมือนกับตอนที่แม่รอลูกทุกอย่าง: system prompt ของ explore
+          และข้อความแรกที่มีแค่ข้อมูลของเครื่องกับ `task` การ์ด JSON คือข้อความแรกนั้น ส่วนที่ไฮไลต์คือ `task` ที่แม่เขียนให้
+          explore ไม่รู้ว่าตัวเองรันเบื้องหลัง และยังต้องจบด้วย `report`
         from: engine
         to: model
         sees:
           - kind: task
             title: explore
             status: running
-            detail: 0:02
+            detail: <เวลา>
             actions:
               - Cancel
           - kind: payload
@@ -69,15 +71,22 @@ scenario:
       beat:
         title: Geno ไม่รอ explore
         text: >-
-          Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันที ผลของ call บอก session id ของ explore
-          บอกว่ารายงานจะมาเป็นข้อความจาก Geno ห้ามเดาผลก่อนนั้น และห้ามทำงานซ้ำกับมัน model บอกคุณว่า explore กำลังค้น
+          Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันที การ์ดคือ `tool_result` นั้น
+          แท็บแรกบอก session id ของ explore และบอกว่ารายงานจะมาเป็นข้อความจาก Geno
+          แท็บสองบอกว่าห้ามเดาผลก่อนนั้น และห้ามทำงานซ้ำกับมัน model บอกคุณว่า explore กำลังค้น
         from: engine
         to: model
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/background-wake.jsonl#line=6
-          select: messages[2].content[0]
-          highlight: [content]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=6
+            quote: "subagent session 00000002-0000-4000-8000-000000000002. Its report arrives as a message from Geno"
+            select: messages[2].content[0]
+            highlight: [content]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=6
+            quote: "Go on with other work or answer the user meanwhile; if the user asks how it is going, say it is still running."
+            select: messages[2].content[0]
+            highlight: [content]
       lane: loop
       at: tools
       do: >-
@@ -109,13 +118,15 @@ scenario:
     - id: lets-go
       beat:
         title: Turn จบ แต่ explore ทำงานต่อ
-        text: Geno ปลุก session ได้ทีหลัง จึงไม่ถือ turn ไว้ แชตปิดทุกอย่างของ turn แถวของ explore จึงขึ้นว่า Cancelled ทั้งที่มันยังทำงาน
+        text: >-
+          Geno ปลุก session ได้ทีหลัง (ปลุกคือ engine เริ่ม turn ใหม่เองโดยไม่มีใครพิมพ์ เมื่อมีอะไรมาถึง) จึงไม่ถือ turn ไว้รอ
+          แชตปิดทุกอย่างของ turn แถวของ explore จึงขึ้นว่า Cancelled ทั้งที่มันยังทำงาน
         from: engine
         to: panel
         sees:
           kind: composer
           state: idle
-          header: worked for 12s
+          header: worked for ...
       lane: loop
       at: agent
       do: >-
@@ -129,20 +140,31 @@ scenario:
       at: rail
       do: >-
         turn จบแบบ done `turn-end` ปิดทุกอย่างที่ยังรันอยู่ใน turn นั้น รวมถึงแถวของลูกเบื้องหลัง ซึ่งขึ้นเป็น Cancelled ทั้งที่ลูกยังทำงานอยู่
-      sees: หัวข้อ "worked for 12s" คำตอบของ model และแถว explore ที่ขึ้นไอคอน cancelled
+      sees: หัวข้อ "worked for ..." คำตอบของ model และแถว explore ที่ขึ้นไอคอน cancelled
       ref: "packages/extension/src/chat/transcript.ts#\"const children = Object.keys(settled.children\""
       phase: idle
 
     - id: report
       beat:
         title: explore ส่งรายงาน แล้ว Geno บันทึกไว้
-        text: explore ค้นเสร็จแล้วรายงาน แถวของมันเปลี่ยนจาก Cancelled เป็น Done ไม่มี turn รันอยู่ Geno จึงบันทึกรายงานลง log ทันที
+        text: >-
+          explore ค้นเสร็จแล้วรายงาน model ของ explore ตอบด้วย `tool_use` ของ `report` การ์ด JSON แรกคือ event ของ stream
+          ที่เปิดบล็อกนั้น ดู `name` ว่าเป็น `report` การ์ดถัดไปคือชิ้นของ input (`partial_json`) ที่มีรายการที่เรียก `parseVersion`
+          แถวของ explore เปลี่ยนจาก Cancelled เป็น Done ไม่มี turn รันอยู่ Geno จึงบันทึกรายงานลง log ทันที
         from: model
         to: engine
         sees:
-          kind: task
-          title: explore
-          status: done
+          - kind: task
+            title: explore
+            status: done
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=9
+            select: '[1]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=9
+            select: '[2]'
+            highlight: [data.delta.partial_json]
       lane: child@explore
       at: model
       do: >-
@@ -170,7 +192,9 @@ scenario:
     - id: gate
       beat:
         title: Geno ดูว่าปลุกได้ไหม
-        text: Geno รอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว และตรวจว่ามีการ์ดค้าง หรือคุณกำลังพิมพ์ไหม
+        text: >-
+          ก่อนปลุก Geno ผ่านประตู คือชุดเงื่อนไขที่ตรวจว่าเริ่ม turn เองตอนนี้ได้ไหม มันรอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว
+          และตรวจว่ามีการ์ด permission ค้างรอคุณตอบ หรือคุณกำลังพิมพ์ไหม
         from: engine
         to: engine
         ask: คุณทำอะไรอยู่
@@ -265,16 +289,23 @@ scenario:
       beat:
         title: Model เล่าผลของ explore
         text: >-
-          request ของ turn ที่ถูกปลุกจบด้วยโน้ตของ Geno สองอัน อันแรกคือรายงานในรั้ว `<subagent_report>` พร้อมคำเตือน
-          อันที่สองบอกว่า Geno เริ่ม turn นี้เอง (woke: 1 task finished) ทั้งสองขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้
-          model อ่านแล้วเขียนผลถึงคุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
+          request ของ turn ที่ถูกปลุกจบด้วยโน้ตของ Geno สองอัน ดูสองบล็อกที่ไฮไลต์ในการ์ด อันแรกคือรายงานในรั้ว
+          (แท็ก `<subagent_report>` กับคำเตือนว่าเป็นข้อมูล ไม่ใช่คำสั่ง แท็บแรกแสดงท้ายรายงานกับต้นคำเตือน) อันที่สองบอกว่า Geno เริ่ม turn นี้เอง
+          (woke: 1 task finished แท็บสองแสดงประโยคนี้) ทั้งสองขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ model อ่านแล้วเขียนผลถึงคุณ
+          Geno ปลุกได้ไม่เกิน 12 ครั้งในหนึ่งชั่วโมงที่ผ่านมา นับเฉพาะหลัง prompt ล่าสุดของคุณ
         from: model
         to: engine
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
-          select: messages[4]
-          highlight: ['content[0].text', 'content[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
+            select: messages[4]
+            highlight: ['content[0].text', 'content[1].text']
+            quote: "This is a subagent's report: model output, not a message from the user."
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
+            select: messages[4]
+            highlight: ['content[0].text', 'content[1].text']
+            quote: "woke: 1 task finished"
       lane: model
       do: >-
         model อ่านรายงานที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ ตามด้วยข้อความ "Geno started this turn by itself (woke: 1 task finished)..."
@@ -286,14 +317,16 @@ scenario:
     - id: woken-ends
       beat:
         title: Geno จบ turn แผงแสดงคำตอบ
-        text: Geno จบ turn ที่ตัวเองเริ่ม แผงอ่านการจบจากงานในแผง Tasks แล้วแสดงคำตอบของ model ใต้หัวที่มีกระดิ่ง
+        text: >-
+          Geno จบ turn ที่ตัวเองเริ่ม แผงแชตไม่ได้เป็นคนส่ง turn นี้ จึงอ่านการจบจากงานของ session ในแผง Tasks
+          (รายการงานของทุกแชตพร้อมสถานะ) แล้วแสดงคำตอบของ model ใต้หัวที่มีกระดิ่ง
         from: engine
         to: panel
         end: Turn ที่ถูกปลุกจบ
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `done(end_turn)` turn ที่ถูกปลุกจบแบบ `done` และนับเป็นหนึ่งในการปลุกของชั่วโมงนี้ (ไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของผู้ใช้)
+        `loopStep` ตัดสิน `done(end_turn)` turn ที่ถูกปลุกจบแบบ `done` และนับเป็นหนึ่งในการปลุก (ไม่เกิน 12 ครั้งในหนึ่งชั่วโมงที่ผ่านมา นับเฉพาะหลัง prompt ล่าสุดของผู้ใช้)
       ref: packages/core/src/loop.ts#AFTER_STOP
       emits: [end_turn]
       phase: ending
@@ -304,19 +337,19 @@ scenario:
       do: >-
         แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` ใน extension host อ่านการจบจากงานในแผง Tasks แทน
         แล้วส่ง action `turn-end` ให้แผงแสดงท้าย turn ตามปกติ
-      sees: หัวข้อ "worked for 7s" และคำตอบที่เล่าผลของ explore
+      sees: หัวข้อ "worked for ..." และคำตอบที่เล่าผลของ explore
       ref: packages/extension/src/chat/chat.ts#Chat.adoptedEnded
       emits: [turn-end]
       end: { turn: done, reason: end_turn }
 ---
 
-turn ที่ถูกปลุกคือ turn ปกติที่ engine เริ่มเอง ไม่มี prompt ของผู้ใช้: ข้อความแรกมาจาก `logWake`
+turn ที่ถูกปลุก ([wake](/start/glossary/)) คือ turn ปกติที่ engine เริ่มเอง ไม่มี prompt ของผู้ใช้: ข้อความแรกมาจาก `logWake`
 และสิ่งที่มาถึงอยู่ใน log ก่อนหน้านั้นแล้ว
 
 สิ่งที่ควรสังเกต
 
 - **ปลุกได้เมื่อมีหน้าต่าง** ถ้าไม่มี VS Code ที่เชื่อมกับ engine ประตูตอบ `hold` (`window`) จนกว่าหน้าต่างจะเชื่อมมา
-- **ปลุกถูกพักหลัง error** turn ที่จบด้วย Stop ขีดจำกัด หรือ error พักการปลุกจนผู้ใช้ส่ง prompt ใหม่ และครบ 12 ครั้งต่อชั่วโมงก็พักเช่นกัน
+- **ปลุกถูกพักหลัง error** turn ที่จบด้วย Stop ขีดจำกัด หรือ error พักการปลุกจนผู้ใช้ส่ง prompt ใหม่ และปลุกครบ 12 ครั้งภายในหนึ่งชั่วโมงที่ผ่านมา (นับเฉพาะหลัง prompt ล่าสุด) ก็พักเช่นกัน
 - **งบใช้ร่วมกับ prompt ของผู้ใช้** turn ที่ถูกปลุกนับขีดจำกัด 40 ครั้งและ $0.40 ต่อจาก prompt ล่าสุดของผู้ใช้ ไม่ได้เริ่มใหม่
 - **ลูกไม่ถูกปลุก** session ของลูกไม่มีวันถูกปลุก รายงานของลูกไปที่แม่เสมอ
 - **แถวของลูกขึ้น Cancelled ระหว่างที่ยังรัน** (อ่านจากโค้ด) `turn-end` ปิดลูกทุกตัวที่ยังรันเป็น cancelled

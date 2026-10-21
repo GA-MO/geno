@@ -29,7 +29,8 @@ scenario:
       beat:
         title: "แผงขึ้นป้าย Sending now"
         text: >-
-          ข้อความย้ายออกจากช่องพิมพ์ไปเป็นข้อความที่กำลังส่ง VS Code จำข้อความนี้ไว้แล้วส่งเป็น steer
+          ข้อความย้ายออกจากช่องพิมพ์ไปเป็นข้อความที่กำลังส่ง ส่วนของ Geno ใน VS Code จำข้อความนี้ไว้แล้วส่งเป็น steer
+          steer คือข้อความที่แทรกเข้า turn ที่กำลังทำงาน ปกติมันเข้าได้ตอนที่ Geno จะเรียก model ครั้งถัดไป
         from: panel
         to: engine
         sees: "ช่องพิมพ์ว่าง ป้าย \"Sending now\" เหนือช่องพิมพ์"
@@ -53,8 +54,8 @@ scenario:
       beat:
         title: "ข้อความรอใน inbox แต่ไม่มีรอบหน้า"
         text: >-
-          engine ใส่ข้อความไว้ใน inbox ของ turn จุดที่มันจะเข้า turn ได้คือก่อนเรียก model ครั้งหน้า
-          แต่คำตอบที่กำลังเขียนนี้จะไม่มีครั้งหน้า
+          engine ใส่ข้อความไว้ใน inbox ของ turn คือที่พักข้อความที่รอให้ loop มารับ จุดที่มันจะเข้า turn ได้คือก่อนเรียก
+          model ครั้งหน้า แต่คำตอบที่กำลังเขียนนี้ไม่เรียก tool จึงจะไม่มีการเรียก model ครั้งหน้าใน turn นี้
         from: engine
         to: engine
       do: >-
@@ -67,9 +68,15 @@ scenario:
       beat:
         title: "Model เขียนต่อโดยไม่ถูกขัด"
         text: >-
-          steer ไม่ขัดคำตอบที่กำลัง stream ลองเลือกว่า turn นี้จบอย่างไร
+          steer ไม่ขัดคำตอบที่กำลัง stream การ์ดข้างล่างเป็นคำตอบสุดท้ายจริงจากการรันอื่น ที่ model สรุปงานหลังรัน tool ครบแล้ว
+          ดู `content` มีแค่บล็อก `text` ที่สรุปงาน ไม่มีบล็อก `tool_use` จึงไม่มีงานให้ทำต่อ ลองเลือกว่า turn นี้จบอย่างไร
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A27-resume-thai/sonnet-1/session.jsonl#seq=22
+          select: content
+          highlight: ['[0].text']
         ask: "turn จบอย่างไร"
       do: >-
         model เขียนคำตอบต่อ steer ไม่ขัด stream
@@ -84,9 +91,15 @@ scenario:
                 beat:
                   title: "Model เขียนจนจบเอง"
                   text: >-
-                    model จบคำตอบด้วย end_turn Geno จบ turn และย้ายข้อความที่ค้างไปเป็น turn ถัดไป
+                    model จบคำตอบด้วย `end_turn` (ตอบจบแล้ว ไม่รอผลของ tool) Geno จบ turn และย้ายข้อความที่ค้างไปเป็น turn ถัดไป
+                    การ์ดข้างล่างคือคำตอบเดียวกับการ์ดก่อน คราวนี้แสดงทั้ง event ที่ Geno บันทึกลง session log ดู `stopReason: end_turn`
+                    ในการรันนั้น Geno ปิด tool ของคำขอนี้เพราะงบของ turn ใกล้หมด แต่ `end_turn` มีความหมายเดียวกับในหน้านี้
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A27-resume-thai/sonnet-1/session.jsonl#seq=22
+                    highlight: [stopReason]
                 do: "model จบคำตอบด้วย `stop_reason: end_turn`"
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
@@ -130,15 +143,28 @@ scenario:
                 do: >-
                   ป้าย "Sending now" หายไป turn แรกจบตามปกติ แล้ว turn ใหม่เริ่มด้วยบับเบิลของข้อความที่ส่ง
                 sees: >-
-                  หัวข้อของ turn แรกเป็น "worked for 21s" ตามด้วย turn ใหม่ที่บับเบิล "แล้วอัปเดต README ด้วย" หัวข้อ "working"
+                  หัวข้อของ turn แรกเป็น "worked for" ตามด้วยเวลาที่ใช้ แล้วตามด้วย turn ใหม่ที่บับเบิล "แล้วอัปเดต README ด้วย" หัวข้อ "working"
                 ref: packages/extension/src/chat/webview.ts#render
               - use: model-call
                 beat:
                   title: "Model อ่านข้อความเป็น prompt ใหม่"
                   text: >-
                     model เห็นข้อความของคุณเป็นคำขอของ turn ใหม่ ไม่ใช่ข้อความที่แทรกเข้ามาระหว่างทำงาน
+                    การ์ดข้างล่างเป็นคำขอจริงจากการรันเดียวกับการ์ดก่อนหน้า ที่ผู้ใช้พิมพ์ข้อความใหม่หลัง turn แรกจบ
+                    การ์ดแรกคือข้อความรองสุดท้ายใน `messages` คำตอบสุดท้ายของ turn ก่อน
+                    การ์ดที่สองคือข้อความสุดท้าย "ถึงไหนแล้ว ทำต่อให้เสร็จด้วย" เป็นข้อความธรรมดา ไม่มีโน้ต `[Geno]` ห่อว่าส่งมาระหว่างทำงาน
+                    ข้อความในการ์ดต่างจากในทัวร์นี้ แต่อยู่ตำแหน่งเดียวกัน
                   from: engine
                   to: model
+                  sees:
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A27-resume-thai/sonnet-1/wire.jsonl#line=9
+                      select: messages[-2].content
+                      highlight: ['[0].text']
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A27-resume-thai/sonnet-1/wire.jsonl#line=9
+                      select: messages[-1].content
+                      highlight: ['[0].text']
                   end: "กลายเป็น turn ถัดไป"
 
               - lane: model
@@ -203,13 +229,13 @@ scenario:
                 beat:
                   title: "ข้อความกลับไปที่ช่องพิมพ์"
                   text: >-
-                    ไม่มี turn ทำงานแล้ว แผงจึงคืนข้อความไปที่ช่องพิมพ์ถ้าช่องยังว่าง ป้าย Sending now แค่หายไป ไม่มีข้อความอธิบาย
+                    ไม่มี turn ทำงานแล้ว แผงจึงคืนข้อความไปที่ช่องพิมพ์ เหนือร่างที่คุณพิมพ์ไว้ถ้ามี ป้าย Sending now แค่หายไป ไม่มีข้อความอธิบาย
                   from: panel
                   to: you
                   end: "คุณหยุด ข้อความกลับมา"
                   sees: { kind: composer, state: idle, text: แล้วอัปเดต README ด้วย }
                 do: >-
-                  `followupSteered` เห็นว่าไม่มี turn ทำงานแล้ว จึงคืนข้อความกลับไปที่ช่องพิมพ์ (ถ้าช่องพิมพ์ยังว่าง)
+                  `followupSteered` เห็นว่าไม่มี turn ทำงานแล้ว จึงให้ผล `restore` แล้ว `restoreFollowup` ใส่ข้อความกลับในช่องพิมพ์ เหนือร่างที่พิมพ์ไว้ถ้ามี
                   ข้อความ "did not send" ไม่ขึ้นที่ไหน ป้าย "Sending now" แค่หายไป
                 sees: >-
                   ท้าย turn ขึ้น "Stopped by you" ป้าย "Sending now" หายไป และ "แล้วอัปเดต README ด้วย" กลับมาอยู่ในช่องพิมพ์
@@ -231,7 +257,7 @@ engine ไม่ทิ้งข้อความ แต่ถือไว้จ
 - **Stop คืนข้อความเหมือน Queued** ข้อความ Queued ที่รออยู่กลับไปที่ช่องพิมพ์เมื่อ turn ถูกหยุดหรือล้ม
   steer ที่ค้างกลับไปเฉพาะเมื่อถูกหยุด เมื่อ turn ล้ม engine รันมันเป็น turn ถัดไป ทั้งที่ข้อความ Queued ในกรณีเดียวกันไม่ถูกส่ง
 - **แผงไม่บอกว่าไม่ได้ส่ง** ผล `failed` ของ steer ถึงแชตไม่ขึ้นเป็นข้อความ ผู้ใช้เห็นแค่ข้อความกลับมาในช่องพิมพ์
-  ถ้าผู้ใช้พิมพ์อะไรไว้ในช่องพิมพ์แล้ว ข้อความเดิมไม่ทับ และหายไปเงียบๆ
+  ถ้าผู้ใช้พิมพ์อะไรไว้แล้ว ข้อความเดิมขึ้นเหนือร่างนั้น ไม่ทับและไม่หาย
 - **turn ถัดไปจากหลาย steer** ถ้ามี steer ค้างหลายข้อความ `nextTurns` เรียงให้รันทีละ turn ตามลำดับที่มาถึง
 
 steer ที่ไม่ได้ออกจากแผงเลย ดู [Steer ที่ไม่ถูกส่ง](/scenarios/ctl/steer-refused/)

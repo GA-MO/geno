@@ -13,7 +13,7 @@ scenario:
     - id: list
       beat:
         title: รายการ History มาแทนบทสนทนา
-        text: คุณเปิด History จากปุ่มบนแผงหรือ `/history` รายการมีช่องค้นหา ปุ่มสลับขอบเขต และแถวของแต่ละแชตพร้อมปุ่ม Rename และ Delete
+        text: คุณเปิด History จากปุ่มบนแผงหรือ `/history` รายการนี้มาแทนบทสนทนาในแผง Geno สร้างมันจาก session log ของแต่ละแชต (ไฟล์ที่ Geno ต่อท้ายทุกเหตุการณ์ของแชตและไม่แก้ของเก่า) มีช่องค้นหา ปุ่มสลับขอบเขต และแถวของแต่ละแชตพร้อมปุ่ม Rename และ Delete
         from: panel
         to: you
         sees: ช่องค้นหา ปุ่ม [This project] [All projects] และแถวแชตที่มีชื่อ เวลา จำนวน turn และค่าใช้จ่าย
@@ -29,7 +29,7 @@ scenario:
     - id: act
       beat:
         title: คุณเลือกสิ่งที่จะทำ
-        text: คุณจัดการแชตที่ไม่มี turn ทำงานอยู่ได้สามแบบ
+        text: คุณทำได้สามแบบ คือเปลี่ยนชื่อ ย้ายไปถังขยะ หรือค้นข้อความในทุกแชต การเปลี่ยนชื่อและการลบใช้ได้กับแชตที่ไม่มี turn ทำงานอยู่เท่านั้น
         from: you
         to: panel
         ask: คุณทำอะไร
@@ -61,19 +61,21 @@ scenario:
               - lane: server
                 beat:
                   title: Geno ต่อท้าย log ด้วยชื่อใหม่
-                  text: Geno ตัดชื่อให้เหลือบรรทัดเดียว ชื่อว่างถูกปฏิเสธ แล้วบันทึกชื่อใหม่ต่อท้าย log โดยไม่แก้บรรทัดเดิม งานในแผง Tasks ได้ชื่อใหม่ด้วย
+                  text: >-
+                    Geno ตัดชื่อให้เหลือบรรทัดเดียวยาวไม่เกิน 80 ตัวอักษร แล้วบันทึกชื่อใหม่เป็นบรรทัดใหม่ท้าย session log ชื่อเก่ายังอยู่ แต่บรรทัดล่าสุดชนะ
+                    แผง Tasks (รายการ turn ของทุกแชตที่ทำงาน รอคุณ หรือจบแล้ว) ก็ได้ชื่อใหม่ด้วย
                   from: engine
                   to: engine
                 at: sessions
                 do: >-
-                  `renameSession` ตัดชื่อให้เป็นบรรทัดเดียว (ชื่อว่างถูกปฏิเสธ) แล้วต่อท้าย log ด้วย event `title` ไม่แก้บรรทัดเดิม
+                  `renameSession` ตัดชื่อด้วย `titleFrom` ให้เป็นบรรทัดเดียวไม่เกิน 80 ตัวอักษร (ชื่อว่างถูกปฏิเสธ แต่แผงไม่เคยส่งชื่อว่างหรือชื่อเดิม) แล้วต่อท้าย log ด้วย event `title` ไม่แก้บรรทัดเดิม
                   งานในแผง Tasks ได้ชื่อใหม่ และหน้าต่างที่ส่งคำขอเปลี่ยนชื่อได้ `session_info_update` (หน้าต่างอื่นไม่ได้ update นี้)
                 ref: packages/engine/src/history.ts#renameSession
                 emits: [title, session_info_update]
               - lane: panel
                 beat:
                   title: แถวขึ้นชื่อใหม่
-                  text: รายการโหลดใหม่
+                  text: รายการขอข้อมูลจาก engine ใหม่ แถวของแชตนั้นขึ้นชื่อที่เพิ่งตั้ง
                   from: panel
                   to: you
                   sees: แถว "Leap-year fix"
@@ -90,13 +92,13 @@ scenario:
               - lane: panel
                 beat:
                   title: คุณยืนยัน Move to trash
-                  text: แถวกลายเป็นการยืนยัน แป้นพิมพ์เริ่มที่ Cancel เพื่อกันการลบโดยไม่ตั้งใจ
+                  text: แถวกลายเป็นการยืนยัน ปุ่ม Cancel มีโฟกัสก่อน กด Enter จึงไม่ลบโดยไม่ตั้งใจ
                   from: you
                   to: panel
                   sees: '"Move <ชื่อแชต> to the trash?" ปุ่ม [Cancel] [Move to trash]'
                 at: rail
                 do: >-
-                  กดปุ่ม Delete แล้วแถวกลายเป็นการยืนยัน แป้นพิมพ์เริ่มที่ Cancel ผู้ใช้กด Move to trash แผงโพสต์ `delete-session`
+                  กดปุ่ม Delete แล้วแถวกลายเป็นการยืนยัน ปุ่ม Cancel มีโฟกัสก่อน ผู้ใช้กด Move to trash แผงโพสต์ `delete-session`
                 sees: >-
                   "Move <ชื่อแชต> to the trash?" ปุ่ม [Cancel] [Move to trash]
                 ref: packages/extension/src/chat/history.ts#historyPanel
@@ -109,7 +111,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno ย้ายแชตไปถังขยะ
-                  text: Geno ปฏิเสธถ้าแชตนั้นมี turn รันอยู่ ไม่อย่างนั้นลืมการรอและการปลุกทั้งหมด และหยุดคำสั่งเบื้องหลังของมัน
+                  text: >-
+                    Geno ปฏิเสธถ้าแชตนั้นมี turn รันอยู่ ไม่อย่างนั้นมันลบการปลุกที่ตั้งไว้ (สิ่งที่จะเริ่ม turn ใหม่ให้แชตนี้เองภายหลัง)
+                    หยุดคำสั่งเบื้องหลังของแชต เช่น dev server ที่ model เปิดทิ้งไว้ แล้วย้ายไฟล์ log ไปถังขยะของ Geno ไม่ได้ลบทิ้ง
                   from: engine
                   to: engine
                 at: sessions
@@ -138,7 +142,7 @@ scenario:
               - lane: panel
                 beat:
                   title: คุณพิมพ์ “leap year”
-                  text: ชื่อแชตกรองทันที เมื่อคุณหยุดพิมพ์ 120 ms แชตขอให้ engine ค้นเนื้อหา
+                  text: แผงกรองชื่อแชตทันทีเอง เมื่อคุณหยุดพิมพ์ 120 ms แผงจึงขอให้ engine ค้นในเนื้อหาของทุกแชต
                   from: you
                   to: panel
                 at: rail
@@ -155,7 +159,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno ค้นในทุกแชต
-                  text: Geno อ่านใหม่เฉพาะ log ที่เปลี่ยน แล้วค้นทุกคำในขอบเขตที่เลือก ได้ไม่เกิน 50 แชต พร้อมข้อความตัวอย่าง
+                  text: >-
+                    engine เก็บ index ของข้อความในทุกแชตไว้ และอ่านใหม่เฉพาะ log ที่เปลี่ยนตั้งแต่ครั้งก่อน แชตที่ตรงต้องมีทุกคำที่พิมพ์
+                    ในขอบเขตที่เลือก (This project หรือ All projects) ได้ไม่เกิน 50 แชต แต่ละแชตมีข้อความตัวอย่างที่เจอ
                   from: engine
                   to: panel
                 at: sessions
@@ -179,7 +185,7 @@ scenario:
                 end: { turn: none }
 ---
 
-History อ่าน log ของ session ทุกตัวที่ engine เก็บไว้ ไม่มีฐานข้อมูลแยก
+History อ่าน [session log](/start/glossary/) ของทุกแชตที่ engine เก็บไว้ ไม่มีฐานข้อมูลแยก
 การเปลี่ยนชื่อจึงเป็น event ใหม่ใน log และการลบเป็นการย้ายไฟล์ไปถังขยะ
 
 สิ่งที่ควรสังเกต

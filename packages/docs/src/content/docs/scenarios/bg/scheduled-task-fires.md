@@ -4,7 +4,7 @@ description: งานที่ตั้งไว้ด้วย /schedule ถ�
 scenario:
   surface: vscode
   given:
-    - "ผู้ใช้ตั้งงาน \"Check outdated deps\" ไว้ด้วย `/schedule` ให้รันวันธรรมดาเวลา 09:00 แบบอ่านอย่างเดียว งบ 20 รอบ และ $0.20"
+    - "ผู้ใช้ตั้งงาน \"Check outdated deps\" ไว้ด้วย `/schedule` ให้รันวันธรรมดาเวลา 09:00 แบบอ่านอย่างเดียว เรียก model ได้ 20 ครั้ง และ $0.20"
     - หน้าต่าง VS Code ของโฟลเดอร์นี้เปิดอยู่ จึงมี engine ที่มีหน้าต่างต่ออยู่
   trigger: >-
     นาฬิกาถึง 09:00 ของวันจันทร์
@@ -14,7 +14,10 @@ scenario:
     - id: look
       beat:
         title: Geno ดูงานที่ตั้งเวลาไว้
-        text: engine ของหน้าต่างที่เปิดอยู่ดูไฟล์งานของ workspace อย่างน้อยทุก 60 วินาที และตั้งนาฬิกาไว้ตรงเวลาของงานถัดไป ตอนนี้ถึง 09:00 ของวันจันทร์
+        text: >-
+          งานตามตารางเวลาคือ prompt ที่คุณตั้งให้ Geno รันเองตามเวลา โดยไม่มีใครเฝ้า แต่ละรอบเป็น session ใหม่
+          engine ของหน้าต่างที่เปิดอยู่ดูไฟล์งานของ workspace อย่างน้อยทุก 60 วินาที และตั้งนาฬิกาไว้ตรงเวลาของงานถัดไป
+          ตอนนี้ถึง 09:00 ของวันจันทร์
         from: engine
         to: engine
         ask: พร้อมรันไหม
@@ -38,7 +41,10 @@ scenario:
               - lane: server
                 beat:
                   title: ไม่มีหน้าต่างเปิดอยู่เลย
-                  text: Geno ไม่มี daemon ของระบบ engine จบเองหลังหน้าต่างสุดท้ายปิด จึงไม่มีอะไรเริ่มรอบนี้ เมื่อคุณเปิดหน้าต่าง engine ตัวใหม่ดูงานแล้วจดว่ารอบนี้พลาด
+                  text: >-
+                    Geno ไม่มี daemon (โปรแกรมที่ระบบปฏิบัติการรันค้างไว้ตลอด) engine จบเองหลังหน้าต่างสุดท้ายปิด
+                    จึงไม่มีอะไรเริ่มรอบนี้ เมื่อคุณเปิดหน้าต่าง engine ตัวใหม่ดูงาน ถ้ายังไม่เกิน 1 ชั่วโมงจากเวลาที่ควรรัน
+                    มันรันรอบนั้นช้าไปหนึ่งครั้ง ถ้าเกินแล้ว เช่นในทัวร์นี้ มันจดว่ารอบนี้พลาด
                   from: engine
                   to: engine
                 at: schedules
@@ -50,7 +56,7 @@ scenario:
               - lane: panel
                 beat:
                   title: Tasks บอกว่ารอบนี้พลาด
-                  text: ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด พร้อมวันและเวลา
+                  text: ส่วน Scheduled ในแผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) แสดงรอบที่พลาด พร้อมวันและเวลา
                   from: panel
                   to: you
                   sees: "Missed Mon 12 Oct 09:00: Geno was not running"
@@ -69,12 +75,12 @@ scenario:
               - lane: server
                 beat:
                   title: รอบก่อนยังรันอยู่
-                  text: รอบวันศุกร์ยังไม่จบ Geno ไม่ซ้อนรอบ มันจดว่ารอบนี้พลาดเพราะรอบก่อนยังรัน
+                  text: รอบก่อนหน้ายังไม่จบ Geno ไม่ซ้อนรอบ มันจดว่ารอบนี้พลาดเพราะรอบก่อนยังรัน
                   from: engine
                   to: engine
                 at: schedules
                 do: >-
-                  รอบก่อนหน้า (รอบวันศุกร์) ยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` ตัดสินว่าพลาดเพราะรอบก่อนยังรัน
+                  รอบก่อนหน้ายังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` ตัดสินว่าพลาดเพราะรอบก่อนยังรัน
                   แล้ว `Scheduler.settle` จดรอบที่พลาดลงไฟล์งาน
                 ref: packages/engine/src/schedules.ts#Scheduler.settle
               - lane: panel
@@ -109,7 +115,10 @@ scenario:
     - id: session
       beat:
         title: Geno เปิด session ใหม่ในโหมด Plan
-        text: งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan งานที่แก้ไฟล์ได้จะได้ lane ใหม่และโหมด Auto ขีดจำกัดของ turn คืองบของงาน
+        text: >-
+          งานอ่านอย่างเดียวรันในโฟลเดอร์หลักด้วยโหมด Plan ซึ่งอ่านได้แต่แก้ไฟล์ไม่ได้ งานที่แก้ไฟล์ได้จะได้ lane ใหม่
+          (git worktree คือโฟลเดอร์แยกของ repo บน branch ของตัวเอง) และรันโหมด Auto (โหมดที่ Geno ตัดสินเองว่าคำสั่งปลอดภัยแทนการถามคุณ) ขีดจำกัดของ turn คืองบของงาน
+          ในทัวร์นี้คือเรียก model ได้ 20 ครั้งและ $0.20 ไม่ใช่ 40 ครั้งและ $0.40 ตามปกติ
         from: engine
         to: engine
       lane: server
@@ -124,7 +133,9 @@ scenario:
     - id: tools
       beat:
         title: รอบนี้ไม่มีใครตอบคำถาม
-        text: รอบตามตารางไม่มี tool ถามคุณ ไม่ขยับ editor และตั้งงานใหม่ไม่ได้ ข้อความแรกบอก model ว่าไม่มีใครอ่านจนกว่ารอบจะจบ แผง Tasks ขึ้นงานใหม่ใน Working
+        text: >-
+          รอบตามตารางไม่มี tool ถามคุณ ไม่ขยับ editor และตั้งงานใหม่ไม่ได้ system prompt (ข้อความตั้งต้นที่ Geno ส่งไปกับทุกคำขอ) ของรอบนี้มีโน้ตบอก model ว่าไม่มีใครอ่านจนกว่ารอบจะจบ
+          ให้ทำตามที่ขอแล้วจบด้วยรายงานสั้นๆ แผง Tasks ขึ้นงานใหม่ในกลุ่ม Working
         from: panel
         to: you
         sees: งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since Mon 12 Oct 09:00"
@@ -132,7 +143,8 @@ scenario:
       at: agent
       do: >-
         `runAgent` ของรอบตามตารางไม่มี `ask_user` และ `remember` ไม่ขยับ editor ไม่เปิด terminal และไม่มี tool schedule หรือ workflow
-        ข้อความแรกบอก model ว่าไม่มีใครอ่านจนกว่าจะจบ ไม่มีใครตอบคำถาม ให้ทำตามที่ขอแล้วจบด้วยรายงานสั้นๆ
+        `runAgent` ใส่ `SCHEDULED_RUN_NOTE` ลงใน `system` ของคำขอ ไม่ใช่ในข้อความแรก โน้ตบอก model ว่าไม่มีใครอ่านจนกว่าจะจบ ไม่มีใครตอบคำถาม
+        ให้ทำตามที่ข้อความแรกขอแล้วจบด้วยรายงานสั้นๆ ของสิ่งที่พบหรือเปลี่ยน
       ref: packages/core/src/schedule.ts#SCHEDULED_RUN_NOTE
 
     - id: running
@@ -150,12 +162,25 @@ scenario:
     - id: works
       beat:
         title: Model ตรวจ dependency แล้วเขียนรายงาน
-        text: model ใช้ tool อ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย turn จบแบบ done
+        text: >-
+          model ใช้ tool อ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ในการบันทึกนี้ model อ่านแค่ `package.json` จึงรายงานเวอร์ชันที่ pin ไว้ และบอกว่ายังไม่ได้ตรวจ registry turn จบแบบ done
+          การ์ดมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในการบันทึกนั้นงานถูกตั้งด้วย `/schedule weekdays at 9:00 --max-cost 0.20 --max-turns 20`
+          แต่รอบนี้เริ่มจากปุ่ม Run now ในแผง Tasks แทนนาฬิกา สิ่งที่ model ได้รับเหมือนกัน
+          model อ่าน `package.json` ก่อน แล้วตอบรายงานนี้ ใบแรกคือรายงาน ใบที่สองคือท้าย stream ของคำตอบนั้น
+          ดู `stop_reason` ที่ไฮไลต์ว่าเป็น `end_turn`
         from: model
         to: engine
+        sees:
+          - kind: message
+            from: geno
+            text: "package.json pins zod ^3.22.4, vitest ^1.6.0 (dev) and typescript ^5.4.5 (dev). I only read the file and did not check the registry, so I cannot say which are outdated; run npm outdated to see. I changed nothing; this run is read-only."
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-scheduled-task-fires.jsonl#line=5
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
       lane: model
       do: >-
-        model ทำตาม prompt ด้วย tool อ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของ tool ไว้) แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
+        model ทำตาม prompt ด้วย tool อ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของ tool ไว้) แล้วเขียนรายงานสั้นๆ ของสิ่งที่พบ
         จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
@@ -175,7 +200,7 @@ scenario:
         text: Geno อ่านผลจาก log ของ session แล้วจดผลและค่าใช้จ่ายลงไฟล์งาน ทุกหน้าต่างเห็น คลิกแถวเพื่อเปิด session ของรอบนั้นและอ่านรายงาน
         from: engine
         to: panel
-        sees: "Last run Mon 12 Oct 09:00: Done · $0.03"
+        sees: "Last run Mon 12 Oct 09:00: Done · <ค่าใช้จ่าย>"
         end: รอบจบ ผลอยู่ใน Tasks
       lane: server
       at: schedules
@@ -191,7 +216,7 @@ scenario:
       do: >-
         แถว Scheduled แสดงรอบล่าสุด คลิกเปิด session ของรอบนั้นเพื่ออ่านรายงาน งานของรอบย้ายไปส่วนที่จบแล้ว
       sees: >-
-        "Last run Mon 12 Oct 09:00: Done · $0.03"
+        "Last run Mon 12 Oct 09:00: Done · <ค่าใช้จ่าย>"
       ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
       end: { turn: done, reason: end_turn }
 ---

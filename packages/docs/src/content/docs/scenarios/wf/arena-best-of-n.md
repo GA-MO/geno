@@ -6,6 +6,7 @@ scenario:
   given:
     - workspace เป็น git repository ที่ตั้ง check ของโปรเจกต์ไว้ (เช่น `pnpm test`)
     - แชตที่แสดงอยู่เป็นของ checkout หลัก
+    - "`.gcode.json` ตั้ง `arena.models` ไว้อย่างน้อยสอง model (ถ้าน้อยกว่านั้น `--vary models` กลับไปใช้ seeds)"
   trigger: >-
     ผู้ใช้พิมพ์ `/best-of-n 3 --vary models migrate src/log.ts to pino` แล้วกด Enter
   covers: [wf.arena-best-of-n]
@@ -14,7 +15,10 @@ scenario:
     - id: type
       beat:
         title: คุณพิมพ์ `/best-of-n 3` แล้วกด Start
-        text: คุณขอให้ย้าย `src/log.ts` ไปใช้ pino สามแบบ ให้แต่ละ lane ใช้ model ต่างกัน engine ประมาณราคาต่อ lane แล้วแผง Arena แสดงการ์ด คุณกด Start แล้ว Geno สร้างสาม lane แต่ละตัวมี worktree และ session ของตัวเอง
+        text: >-
+          lane คือสำเนาของ repo ในโฟลเดอร์แยก (git worktree) บน branch ของตัวเอง งานใน lane จึงไม่แตะโฟลเดอร์หลักของคุณ
+          คุณขอให้ย้าย `src/log.ts` ไปใช้ pino สามแบบ ให้แต่ละ lane ใช้ model ต่างกัน engine ประมาณราคาต่อ lane
+          แล้วแผง Arena แสดงการ์ด คุณกด Start แล้ว Geno สร้างสาม lane แต่ละตัวมี worktree และ session ของตัวเอง
         from: you
         to: panel
         sees: การ์ดของ best-of-3 ที่มี lane A B C กับ model ของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
@@ -35,7 +39,7 @@ scenario:
       at: engine-link
       do: >-
         `ArenaHost` ส่งคำขอ `_gcode/arena/preview` engine ประมาณราคาต่อ lane จากค่ามัธยฐานของค่าใช้จ่าย session ล่าสุด 50 ตัว
-        (ถ้ามี session ที่เสียเงินไม่ถึง 3 ตัว ใช้ค่าตั้งต้น $0.032 ต่อ lane) แล้วบวกเพดานของ review เข้าไป
+        (ถ้ามี session ที่เสียเงินไม่ถึง 3 ตัว ใช้ค่าตั้งต้น $0.032 ต่อ lane แล้วปรับตาม model) แล้วบวกเพดานของ review เข้าไป
         แล้วตอบพร้อมรายการ variant ของแต่ละ lane (ที่นี่คือ model ต่างกัน)
       ref: packages/engine/src/arena.ts#arenaPreview
       emits: [_gcode/arena/preview]
@@ -144,7 +148,9 @@ scenario:
     - id: checked
       beat:
         title: Geno ตรวจแต่ละ lane แล้วนับที่ผ่าน
-        text: check ของโปรเจกต์รันใน sandbox ของแต่ละ lane แผงแสดง Checking แล้ว Passed หรือ Failed เมื่อทุก lane จบ Geno นับ lane ที่ผ่าน
+        text: >-
+          check ของโปรเจกต์ คือคำสั่งตรวจที่คุณตั้งไว้ เช่น `pnpm test` รันใน sandbox (กรอบที่จำกัดสิ่งที่คำสั่งแตะได้) ของแต่ละ lane
+          แผงแสดง Checking แล้ว Passed หรือ Failed เมื่อทุก lane จบ Geno นับ lane ที่ผ่าน
         from: engine
         to: machine
         ask: ผ่านกี่ lane
@@ -169,25 +175,61 @@ scenario:
             then: review
 
           - id: fewer
-            label: 1 ตัว หรือไม่มี
+            label: 1 ตัว
             then: results
             steps:
               - lane: server
                 beat:
                   title: ไม่มีอะไรให้เทียบ
-                  text: lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่ต้องเรียก review ถ้าไม่มี lane ผ่านเลย run ได้ป้าย "No lane passed"
+                  text: lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่ต้องเรียก review
                   from: engine
                   to: engine
                 at: sessions
                 do: >-
                   ไม่มีอะไรให้เทียบ `trivialRanking` ให้ lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่เรียก review
-                  ถ้าไม่มี lane ผ่านเลย run ได้ป้าย "No lane passed"
-                ref: packages/engine/src/arena.ts#startArena
+                  เหตุผลของอันดับคือ "The only lane whose task finished and whose check passed."
+                ref: packages/core/src/arena.ts#trivialRanking
+
+          - id: none
+            label: ไม่มี lane ผ่าน
+            steps:
+              - lane: server
+                beat:
+                  title: ไม่มี lane ผ่าน ไม่มีผู้ชนะ
+                  text: >-
+                    ไม่มี lane ไหนผ่าน check Geno ไม่เรียก review เพราะไม่มีอะไรให้จัดอันดับ run จบแบบไม่มีผู้ชนะ
+                  from: engine
+                  to: engine
+                at: sessions
+                do: >-
+                  `trivialRanking` คืนอันดับว่าง พร้อมสรุป "No lane passed its check, so there is nothing to rank."
+                  สถานะของ run เป็น `no-winner`
+                ref: packages/core/src/arena.ts#trivialRanking
+              - lane: panel
+                at: arena
+                beat:
+                  title: Arena ขึ้นป้าย "No lane passed"
+                  text: >-
+                    แผงแสดงผลของแต่ละ lane และป้าย "No lane passed" บน run ไม่มีปุ่ม Pick เพราะ Pick กดได้เฉพาะ run ที่จัดอันดับแล้ว
+                    และ lane ที่ผ่าน ไม่มีอะไรถูก apply เข้าโฟลเดอร์หลัก
+                  from: panel
+                  to: you
+                  sees: ป้าย "No lane passed" บน run และไม่มีปุ่ม Pick
+                  end: ไม่มีผู้ชนะ
+                do: >-
+                  `RUN_BADGES` ให้ run ที่ `no-winner` ป้าย "No lane passed" `canPick` ต้องการ `status === 'ranked'`
+                  จึงไม่มีปุ่ม Pick
+                sees: ป้าย "No lane passed" บน run และไม่มีปุ่ม Pick
+                ref: packages/extension/src/chat/arena-model.ts#canPick
+                phase: idle
+                end: { turn: none }
 
     - id: review
       beat:
         title: review จัดอันดับ lane ที่ผ่าน
-        text: Geno ส่ง diff ของทุก lane ที่ผ่านให้ subagent review ซึ่งจัดอันดับและให้เหตุผล
+        text: >-
+          Geno ส่ง diff ของทุก lane ที่ผ่านให้ subagent ชื่อ review (session ลูกที่มี model และบทสนทนาของตัวเอง)
+          review อ่าน diff แล้วจัดอันดับพร้อมเหตุผล Geno อ่านอันดับจากรายงานของมัน
         from: model
         to: engine
       lane: child@review
@@ -218,7 +260,9 @@ scenario:
     - id: pick
       beat:
         title: คุณกด Pick B
-        text: Geno จดผู้ชนะแล้ว apply lane B เข้าแชตของ checkout หลัก เมื่อเสร็จ แผงชวนให้ติ๊ก hunk ของ lane อื่นมาทับ
+        text: >-
+          Geno จดผู้ชนะแล้ว apply lane B คือ merge การเปลี่ยนของ lane B เข้าโฟลเดอร์หลัก (checkout หลัก) ผ่านแชตของโฟลเดอร์นั้น
+          เมื่อเสร็จ แผงชวนให้ติ๊ก hunk (ก้อนบรรทัดที่เปลี่ยนติดกัน) ของ lane อื่นมาทับ
         from: you
         to: panel
         ask: ทำอะไรต่อ
@@ -261,14 +305,16 @@ scenario:
               - lane: editor
                 beat:
                   title: คุณ graft 2 hunk จาก lane C
-                  text: คุณติ๊ก 2 hunk ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แชตส่งคำสั่ง graft ซึ่ง apply แบบเดียวกับ lane
+                  text: >-
+                    graft คือการนำบาง hunk ของ lane อื่นมาเขียนทับผลของผู้ชนะ คุณติ๊ก 2 hunk ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C"
+                    แชตส่งคำสั่ง graft ซึ่ง apply แบบเดียวกับ lane แต่เขียนเฉพาะ hunk ที่เลือก
                   from: you
                   to: panel
                   end: ไปดูการ apply lane
                 at: chat
                 do: >-
                   ผู้ใช้ติ๊ก 2 hunk ของ lane C ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แล้วกด `graftLane` ส่ง prompt "Graft 2 hunks from lane ..." ที่มี `gcode/laneGraft`
-                  engine ใช้ `applyLaneTurn` แบบเลือก hunk ซึ่งเขียนเฉพาะ hunk เหล่านั้นทับผลของ B ผ่าน review เหมือน Apply
+                  engine ใช้ `applyLaneTurn` แบบเลือก hunk ซึ่งเขียนเฉพาะ hunk เหล่านั้นทับผลของ B ผ่านการตรวจ hunk ใน editor เหมือน Apply
                 ref: "packages/extension/src/chat/chat.ts#\"async graftLane(name: string, hunks: readonly string[]): Promise<acp.StopReason>\""
                 emits: [gcode/laneGraft]
                 goto: wf.lane-apply

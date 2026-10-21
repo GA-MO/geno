@@ -17,9 +17,16 @@ scenario:
         title: "Model ขอ tool สี่ตัวในคำตอบเดียว"
         text: >-
           model ขออ่าน `package.json` และ `src/date.ts` รัน `pnpm add zod` แล้วอ่าน `pnpm-lock.yaml` ตามลำดับ Geno
-          บันทึกคำขอแล้วแชตขึ้นขั้นของแต่ละ call
+          บันทึกคำขอแล้วแชตขึ้นขั้นของแต่ละ call เมื่อ call นั้นเริ่ม การ์ดข้างล่างเป็นคำตอบจริงจากการรันอื่นที่ขอ `read` สองตัวตามด้วย
+          `bash` ในคำตอบเดียวแบบเดียวกัน ดูบล็อก `tool_use` สามบล็อกที่ไฮไลต์ไว้ เรียงตามลำดับที่ model ขอ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A20-thai-question/1/session.jsonl#seq=8
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1]', '[2]', '[3]']
       do: >-
         model ขอเรียก tool สี่ตัวในคำตอบเดียว และจบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -42,6 +49,7 @@ scenario:
       beat:
         title: "ชุดแรกคือ read สองตัวที่รันพร้อมกัน"
         text: >-
+          Geno แบ่ง call เป็นชุด call ในชุดเดียวกันรันพร้อมกัน และชุดถัดไปเริ่มเมื่อชุดก่อนจบ
           การอ่านที่ไม่แก้อะไรรันพร้อมกันได้ แต่ `bash` ไม่ได้ ชุดแรกจึงมีแค่ read สองตัว ทั้งสองอ่านพร้อมกัน และ Geno
           รอให้ทั้งชุดจบก่อนเริ่มชุดถัดไป
         from: engine
@@ -88,8 +96,9 @@ scenario:
       beat:
         title: "Geno ตรวจคำสั่งกับกฎของคุณ"
         text: >-
-          `pnpm add` ไม่อยู่ในรายการคำสั่งปลอดภัยและไม่ตรงกฎของ workspace โหมด Ask จึงต้องถามคุณ ไม่มี hook ตอบแทน Geno
-          หยุด turn แล้วส่งคำถามไปที่แชต งานใน Tasks เปลี่ยนเป็นรอคุณ
+          `pnpm add` ไม่อยู่ในรายการคำสั่งปลอดภัยและไม่ตรงกฎของ workspace โหมด Ask ซึ่งถามคุณก่อนรันคำสั่งเสี่ยง จึงต้องถามคุณ
+          ไม่มี hook (คำสั่ง shell ที่คุณตั้งให้ตัดสินแทน) ตอบแทน Geno พัก turn ไว้แล้วส่งคำถามไปที่แชต
+          งานในแผง Tasks ซึ่งเป็นรายการงานของ Geno เปลี่ยนเป็นรอคุณ
         from: engine
         to: panel
       do: >-
@@ -234,7 +243,7 @@ scenario:
                   title: "Geno ตอบ read ที่ค้างว่าไม่ได้รัน แล้วจบ turn"
                   text: >-
                     read ตัวสุดท้ายได้คำตอบว่าคุณปฏิเสธ call ก่อนหน้าของ turn นี้ ขั้นของมันขึ้นว่าล้มเหลว แล้ว Geno จบ turn
-                    โดยไม่เรียก model อีก Stop hook ไม่ทำงาน
+                    โดยไม่เรียก model อีก hook แบบ Stop ซึ่งปกติรันตอน turn จะจบ ไม่ทำงาน
                   from: engine
                   to: panel
                 do: >-
@@ -312,16 +321,44 @@ scenario:
       beat:
         title: "Geno ส่งผลทั้งสี่ให้ model"
         text: >-
-          Geno เรียก model ต่อ model ได้ผลทั้งสี่เรียงตามที่มันขอ
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอทั้งชุดของ model
+          และผลทั้งหมดในข้อความ user เดียว เรียงตามที่ model ขอ ไม่ใช่ตามชุดที่รัน
+          การ์ดข้างล่างเป็นคำขอจริงจากการรันเดียวกับการ์ดแรก ดูบล็อก `tool_use` สามบล็อกในข้อความ `assistant`
+          แล้วดูข้อความ `user` สุดท้ายที่มี `tool_result` สามบล็อก แต่ละบล็อกอ้าง `tool_use_id` ของคำขอตามลำดับเดิม
         from: engine
         to: model
-        end: "ครบสามชุด model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A20-thai-question/1/requests.jsonl#seq=13
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[1]', '[3].content[2]', '[3].content[3]', '[4]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ผลทั้งสี่ตามลำดับที่มันขอ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ตอบหลังเห็นผลทั้งชุด"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model ขออ่านอีกสามไฟล์ต่อ ดู `input` ของ `read` สามตัวที่ไฮไลต์ไว้
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A20-thai-question/1/session.jsonl#seq=13
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input', '[2].input', '[3].input']
+        end: "ครบสามชุด model ทำต่อ"
+      do: >-
+        model อ่าน `tool_result` ทั้งชุดแล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `read` สามตัว และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 harness ไม่รันทุก call พร้อมกัน และไม่รันทีละตัวทั้งหมด มันแบ่ง call ของคำตอบหนึ่งเป็นชุดที่รันต่อกันตามลำดับที่ model ขอ

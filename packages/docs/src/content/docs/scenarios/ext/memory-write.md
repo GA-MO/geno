@@ -14,9 +14,17 @@ scenario:
     - id: wants
       beat:
         title: Model เสนอโน้ตให้จำ
-        text: คุณเพิ่งบอกว่าโปรเจกต์นี้ใช้ pnpm model เห็นว่าควรจำไว้ในแชตต่อๆ ไป มันเรียก `remember` ด้วยโน้ตและขอบเขต project
+        text: >-
+          คุณเพิ่งบอกว่าโปรเจกต์นี้ใช้ pnpm model เห็นว่าควรจำไว้ในแชตต่อๆ ไป memory คือโน้ตสั้นที่ Geno ใส่ในข้อความแรกของทุกแชตใหม่ model เรียก tool `remember` ด้วยโน้ตและขอบเขต `project` (ใช้เฉพาะโปรเจกต์นี้)
+          `remember` เป็น deferred tool คือ Geno ส่งแค่ชื่อไปก่อน model จึงโหลดนิยามด้วย `tool_search` ก่อนเรียก
+          การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ดู `input` ที่ไฮไลต์ ข้อความของโน้ตตรงกับที่การ์ดของคุณจะแสดง
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/ext-memory-write.jsonl#line=7
+          select: messages[3].content
+          highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `remember` ด้วย `text: "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้"` และ `scope: "project"`
@@ -30,7 +38,7 @@ scenario:
     - id: check
       beat:
         title: Geno ตรวจโน้ตแล้วถามคุณเสมอ
-        text: โน้ตละไม่เกิน 500 ตัวอักษร รวมทั้งหมดไม่เกิน 4,000 ไม่มีโหมด กฎ หรือ classifier ตอบแทนคุณ แม้ในโหมด Auto
+        text: โน้ตละไม่เกิน 500 ตัวอักษร รวมทั้งหมดไม่เกิน 4,000 ถ้าเกิน model ได้ error ที่บอกขีดจำกัดเป็นผลของ call และไม่มีการ์ด ถ้าไม่เกินต้องถามคุณ ไม่มีโหมด กฎ หรือ classifier (model อีกตัวที่ตัดสินคำสั่งแทนคุณในโหมด Auto) ตอบแทนคุณได้ แม้ในโหมด Auto
         from: engine
         to: engine
       lane: tool
@@ -42,8 +50,8 @@ scenario:
 
     - id: ask
       beat:
-        title: Geno หยุด turn แล้วถามคุณ
-        text: Geno ส่งคำขอ permission ที่มีข้อความของโน้ต แชตใช้ข้อความนั้นแทนคำสั่ง
+        title: Geno พัก turn แล้วถามคุณ
+        text: Geno ส่งคำขอ permission (คำขอให้คุณอนุญาต) ที่มีข้อความของโน้ตไปที่แชต แล้วรอ แชตแสดงข้อความของโน้ตในที่ที่การ์ดปกติแสดงคำสั่ง
         from: engine
         to: panel
       lane: server
@@ -103,10 +111,10 @@ scenario:
               - use: tool-result-returns
               - lane: loop
                 beat:
-                  title: Geno บอก model ก่อนเรียกครั้งถัดไป
-                  text: Geno ไม่แก้ข้อความแรกของ session cache จึงไม่หลุด แต่ใส่ข้อความแจ้งว่าคุณอนุมัติโน้ตใหม่ model ใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตด้วย
+                  title: Geno เตรียมข้อความแจ้งให้ model
+                  text: Geno ไม่แก้ข้อความแรกของ session เพราะผู้ให้บริการ cache ส่วนต้นของคำขอไว้ ถ้าส่วนต้นเปลี่ยน cache ใช้ไม่ได้ Geno จึงเขียนข้อความแจ้งว่าคุณอนุมัติโน้ตใหม่ไว้ใน log แทน ข้อความนี้ถึง model ตอนเรียกครั้งถัดไป model ใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตตั้งแต่ข้อความแรก
                   from: engine
-                  to: model
+                  to: engine
                   end: Model ใช้ pnpm ต่อจากนี้
                 at: drive
                 do: >-
@@ -128,9 +136,9 @@ scenario:
               - lane: tool
                 beat:
                   title: ไม่มีอะไรถูกบันทึก
-                  text: ผลของ call บอกว่าคุณไม่ตกลง และอย่าเสนอซ้ำเว้นแต่คุณขอ ผลนี้ไม่จบ turn
+                  text: Geno เขียนข้อความผลไว้ใน log (บันทึกเหตุการณ์ของ session ที่ Geno อ่านเพื่อสร้างคำขอถัดไป) ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร ผลของ call บอกว่าคุณไม่ตกลง และอย่าเสนอซ้ำเว้นแต่คุณขอ ผลนี้ไม่จบ turn
                   from: engine
-                  to: model
+                  to: engine
                 at: executor
                 do: >-
                   ไม่มีอะไรถูกบันทึก ผลของ call คือ "The user declined. Nothing was saved; do not propose it again unless they ask."
@@ -141,9 +149,21 @@ scenario:
               - lane: loop
                 beat:
                   title: Model ทำงานต่อ
-                  text: Geno เรียก model อีกครั้ง model ทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
+                  text: >-
+                    Geno เรียก model อีกครั้ง model ทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
+                    การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน แท็บแรกคือผลของ `remember` ที่ model อ่าน "The user declined. Nothing was saved; ..."
+                    แท็บสองคือ call ถัดไปของ model ซึ่งกลับไปทำงานที่คุณขอ ดู `input` ที่ไฮไลต์ model อ่าน `package.json` เพื่อหาคำสั่งรันเทสต์
                   from: model
                   to: engine
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/ext-memory-write.jsonl#line=9
+                      select: messages[4].content[0]
+                      highlight: [content]
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/ext-memory-write.jsonl#line=9
+                      select: messages[5].content
+                      highlight: ['[1].input']
                   end: Model ทำต่อ
                 at: step
                 do: >-
@@ -154,12 +174,12 @@ scenario:
                 end: { turn: continues, reason: call-model }
 ---
 
-หน่วยความจำคือโน้ตสั้นๆ ที่ไปกับข้อความแรกของทุกแชตใหม่ จึงมีผลกว้างกว่าการอนุญาตคำสั่งครั้งเดียว
+หน่วยความจำ ([memory](/start/glossary/)) คือโน้ตสั้นๆ ที่ไปกับข้อความแรกของทุกแชตใหม่ จึงมีผลกว้างกว่าการอนุญาตคำสั่งครั้งเดียว
 Geno จึงให้ผู้ใช้เห็นข้อความตรงตัวและตัดสินเองทุกครั้ง
 
 สิ่งที่ควรสังเกต
 
-- **ไม่มีทางลัด** การ์ดนี้ไม่มี "Always allow" และไม่ผ่าน classifier ของ Auto ใน run แบบ non-interactive tool นี้ไม่มีให้ model เลย
+- **ไม่มีทางลัด** การ์ดนี้ไม่มี "Always allow" และไม่ผ่าน [classifier](/start/glossary/) ของ Auto ใน run แบบ [non-interactive](/start/glossary/) tool นี้ไม่มีให้ model เลย
 - **ไม่ใช่ deny แบบจบ turn** "Don't remember" ให้ผลเป็นข้อความธรรมดา turn ทำต่อ ต่างจาก Deny บนการ์ดคำสั่ง
 - **ลบหรือแก้ได้ภายหลัง** `/memory` เปิดรายการโน้ต เมื่อผู้ใช้ลบโน้ต การเรียกครั้งถัดไปได้ข้อความว่า
   "These notes were deleted from memory or replaced; stop following them"

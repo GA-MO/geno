@@ -13,7 +13,9 @@ scenario:
     - id: click
       beat:
         title: คุณกด +
-        text: คุณกดปุ่ม New Chat บนหัวแผง `/new` ไปถึงที่เดียวกัน ถ้าแชตที่แสดงยังไม่มี turn เลย ไม่มีอะไรต้องทำ
+        text: >-
+          คุณกดปุ่ม New Chat บนหัวแผง `/new` ไปถึงที่เดียวกัน ถ้าแชตที่แสดงยังไม่มี turn เลย มันเป็นแชตใหม่อยู่แล้ว
+          VS Code จึงไม่ทำอะไร
         from: you
         to: panel
       lane: user
@@ -23,7 +25,7 @@ scenario:
     - id: new-chat
       beat:
         title: แชตดูว่า turn เดิมยังทำงานไหม
-        text: ก่อนออกจากแชตเดิม แชตตรวจว่ามี turn ที่แผงนี้เริ่มไว้และยังทำงานอยู่หรือไม่
+        text: ก่อนออกจากแชตเดิม VS Code ตรวจว่ามี turn ที่แผงนี้ดูแลอยู่ (เริ่มเองหรือรับช่วงมาจากหน้าต่างอื่น) และยังทำงานอยู่หรือไม่ เพราะ turn ที่ยังทำงานต้องถูกปล่อยไว้ ไม่ใช่ปิด
         from: panel
         to: panel
         ask: turn เดิมยังทำไหม
@@ -38,7 +40,7 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `moveTo` ดูว่าแชตเดิมมี turn ที่แผงนี้เริ่มไว้และยังทำงานอยู่หรือไม่
+        `moveTo` ดูว่าแชตเดิมมี turn ที่แผงนี้ดูแลอยู่ (`this.turn`) และยังทำงานอยู่หรือไม่
       ref: packages/extension/src/chat/chat.ts#Chat.moveTo
       fork:
         ask: turn ของแชตเดิมยังทำงานอยู่หรือไม่
@@ -51,7 +53,10 @@ scenario:
               - lane: editor
                 beat:
                   title: แชตปล่อย turn เดิมไว้
-                  text: การ์ดและคำถามที่เปิดอยู่ถูกตอบว่าไม่ได้แสดง engine จะถามใหม่ในหน้าต่างถัดไปที่แสดง session นั้น turn ทำงานต่อจนจบ และเห็นได้ในแผง Tasks
+                  text: >-
+                    การ์ด permission และคำถามที่รอคุณตอบถูกตอบว่าไม่ได้แสดง ไม่ใช่ปฏิเสธ engine จะถามใหม่ในหน้าต่างถัดไปที่แสดง session นั้น
+                    engine เลิกส่งอัปเดตของแชตเดิมมาที่หน้าต่างนี้ แต่ turn ทำงานต่อจนจบ และเห็นได้ในแผง Tasks
+                    (รายการ turn ของทุกแชตที่ทำงาน รอคุณ หรือจบแล้ว)
                   from: panel
                   to: engine
                 at: chat
@@ -68,13 +73,15 @@ scenario:
     - id: fresh
       beat:
         title: Geno สร้าง session ใหม่
-        text: engine สร้าง session ทันที โหลดไฟล์คำสั่ง หน่วยความจำ skill และสภาพแวดล้อม แล้วเขียนบรรทัดแรกของ log
+        text: >-
+          VS Code ขอ engine สร้าง session ใหม่ทันที engine อ่านสิ่งที่จะใส่ในข้อความแรกที่ model เห็น คือไฟล์คำสั่งอย่าง `AGENTS.md`
+          memory ที่คุณอนุมัติไว้ รายชื่อ skill (ชุดคำสั่งสำเร็จรูปที่ model เรียกใช้ได้) และข้อมูลสภาพแวดล้อม แล้วเขียน `session-start` เป็นบรรทัดแรกของ session log ใหม่ (ไฟล์ที่ Geno ต่อท้ายทุกเหตุการณ์ของแชต)
         from: engine
         to: engine
       lane: editor
       at: chat
       do: >-
-        `fresh()` ส่งคำขอ ACP `session/new` พร้อมโฟลเดอร์และ MCP server จาก `mcp.json` ของผู้ใช้ใน VS Code
+        `fresh()` ส่งคำขอ ACP `session/new` พร้อมโฟลเดอร์และ MCP server จาก `mcp.json` ของผู้ใช้ใน VS Code ถ้าโหมดที่ engine ตอบไม่ตรงกับโหมดเริ่มต้นในการตั้งค่า มันส่ง `session/set_mode` ตามไปด้วย
       ref: packages/extension/src/chat/chat.ts#Chat.fresh
 
     - id: start
@@ -89,10 +96,10 @@ scenario:
     - id: show
       beat:
         title: แผงกลับเป็นหน้าเริ่มต้น
-        text: บทสนทนาว่าง ชื่อแชตถูกล้าง แชตที่เพิ่งออกมาอยู่บนสุดของรายการ Continue
+        text: VS Code ให้แผงแสดง session ใหม่และจำ id ไว้สำหรับครั้งหน้าที่เปิดหน้าต่าง บทสนทนาว่าง ชื่อแชตถูกล้าง แชตที่เพิ่งออกมาอยู่บนสุดของรายการ Continue
         from: panel
         to: you
-        sees: หน้าเริ่มต้นกับ Noodle คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
+        sees: หน้าเริ่มต้นกับรูป Noodle (ตัวการ์ตูนของ Geno) คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
       lane: editor
       at: chat
       do: >-
@@ -107,13 +114,15 @@ scenario:
       do: >-
         บทสนทนาว่างจึงวาดหน้าเริ่มต้น หน้าเริ่มต้นขอรายการแชตของโปรเจกต์ใหม่ แชตที่เพิ่งออกมาจึงอยู่ในรายการ Continue
       sees: >-
-        หน้าเริ่มต้นกับ Noodle คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
+        หน้าเริ่มต้นกับรูป Noodle (ตัวการ์ตูนของ Geno) คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
       ref: packages/extension/src/chat/start-page.ts#startPage
 
     - id: close
       beat:
         title: Geno ปิด session เดิมถ้าว่าง
-        text: ถ้าแชตเดิมไม่มี turn ทำงาน engine ปิด MCP server ของมัน log ยังอยู่ เปิดจาก History ได้เสมอ
+        text: >-
+          ถ้าแชตเดิมไม่มี turn ทำงาน VS Code ขอ engine ปิดมัน engine ปิด MCP server ของแชตนั้น (โปรแกรมภายนอกที่เสนอ tool ให้ session)
+          log ยังอยู่ เปิดจาก History ได้เสมอ
         from: engine
         to: engine
         end: แชตใหม่พร้อม
@@ -137,4 +146,4 @@ New Chat ไม่ได้ลบอะไร แชตเดิมอยู่�
 - **turn ที่ปล่อยไว้** ทำงานต่อใน engine การ์ดขออนุญาตของมันไปรออยู่ที่แผง Tasks (ป้ายบนไอคอน Geno นับงานที่รอผู้ใช้)
   ผู้ใช้กลับไปเปิดแชตนั้นจาก Tasks หรือ History ได้
 - **ข้อความที่รอในคิวไม่ถูกล้าง** ถ้าช่องพิมพ์มีข้อความ Queued ของแชตเดิมอยู่ ป้าย Queued ยังค้างในแชตใหม่
-  ดู [พิมพ์ต่อคิวไว้ขณะ turn ทำงาน](/scenarios/ctl/queued-followup/)
+  ดู [พิมพ์ข้อความถัดไปเข้าคิวขณะ turn ทำงาน](/scenarios/ctl/queued-followup/)

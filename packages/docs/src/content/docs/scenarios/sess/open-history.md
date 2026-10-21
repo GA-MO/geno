@@ -32,7 +32,7 @@ scenario:
     - id: ask-list
       beat:
         title: แชตขอรายการแชต
-        text: engine อ่านชื่อ จำนวน turn ค่าใช้จ่าย และเวลาจาก log ของแต่ละแชต
+        text: แผงขอรายการผ่าน VS Code ไปที่ engine (process แยกที่รัน turn และเก็บ log ของทุกแชต) turn คือรอบหนึ่งตั้งแต่คุณส่งข้อความจนได้คำตอบ engine อ่านชื่อ จำนวน turn ค่าใช้จ่าย และเวลาจาก session log ของแต่ละแชต (ไฟล์ที่บันทึกทุกเหตุการณ์ของแชต)
         from: panel
         to: engine
       lane: panel
@@ -56,19 +56,21 @@ scenario:
         text: ช่องค้นหาค้นข้อความในแชตได้ด้วย และสลับเป็น All projects ได้
         from: panel
         to: you
-        sees: รายการแชตแต่ละแถวมีชื่อ ชื่อโปรเจกต์ "4 turns" ค่าใช้จ่าย และเวลา ด้านบนมีช่อง "Search chats" และปุ่ม This project / All projects
+        sees: รายการแชตแต่ละแถวมีชื่อ ชื่อโปรเจกต์ จำนวน turn (เช่น "4 turns") ค่าใช้จ่าย และเวลา ด้านบนมีช่อง "Search chats" และปุ่ม This project / All projects
       lane: panel
       at: rail
       do: >-
         แผงแสดงรายการเรียงตามเวลาล่าสุด ช่องค้นหาค้นข้อความในแชตด้วยคำขอ `_gcode/searchSessions` แล้วแสดงข้อความที่ตรงพร้อม turn ที่เจอ
       sees: >-
-        รายการแชตแต่ละแถวมีชื่อ ชื่อโปรเจกต์ "4 turns" ค่าใช้จ่าย และเวลา ด้านบนมีช่อง "Search chats" และปุ่ม This project / All projects
+        รายการแชตแต่ละแถวมีชื่อ ชื่อโปรเจกต์ จำนวน turn (เช่น "4 turns") ค่าใช้จ่าย และเวลา ด้านบนมีช่อง "Search chats" และปุ่ม This project / All projects
       ref: packages/extension/src/chat/history.ts#historyPanel
 
     - id: pick
       beat:
         title: คุณคลิกแชตที่ต้องการ
-        text: แชตเทียบโฟลเดอร์ของแชตนั้นกับโฟลเดอร์ของหน้าต่าง lane ของโฟลเดอร์นี้นับเป็นที่เดียวกัน
+        text: >-
+          VS Code เทียบโฟลเดอร์ที่แชตนั้นทำงานกับโฟลเดอร์ของหน้าต่างนี้ เพราะ tool ของแชตอ่านและแก้ไฟล์ในโฟลเดอร์ของมัน
+          lane (โฟลเดอร์ git worktree ที่ Geno แยกออกมาจาก repo นี้ให้งานย่อย) นับเป็นโฟลเดอร์เดียวกัน
         from: you
         to: panel
         ask: แชตของที่ไหน
@@ -98,7 +100,7 @@ scenario:
               - lane: editor
                 beat:
                   title: แผงย้ายไปแชตนั้น
-                  text: History ปิด ถ้าแชตปัจจุบันมี turn ทำงานอยู่ turn นั้นทำงานต่อเบื้องหลัง แชตขอโหลดแชตเก่า
+                  text: History ปิด ถ้าแชตปัจจุบันมี turn ทำงานอยู่ turn นั้นทำงานต่อเบื้องหลัง VS Code ขอ engine โหลดแชตเก่า
                   from: panel
                   to: engine
                 at: chat
@@ -109,7 +111,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno เล่น log ซ้ำ
-                  text: engine ปฏิเสธถ้าแชตเป็นของ workspace อื่น แล้วส่งทุก turn ตามลำดับ ข้อความของคุณ คำตอบ และ tool call
+                  text: >-
+                    engine ปฏิเสธถ้าแชตเป็นของ workspace อื่น แล้วอ่าน session log ตั้งแต่ต้นและส่งทุก turn ให้แผงวาดใหม่ตามลำดับ
+                    ข้อความของคุณ คำตอบของ model และ tool call (คำขอให้รัน tool) พร้อมผล model ไม่ได้ถูกเรียกในขั้นนี้
                   from: engine
                   to: panel
                 at: sessions
@@ -143,7 +147,7 @@ scenario:
               - lane: server
                 beat:
                   title: Geno ปิด session ที่ออกมา
-                  text: ถ้าแชตที่ออกมาไม่มี turn ทำงาน engine ปิด MCP server ของมัน ข้อความถัดไปของคุณต่อท้าย log ของแชตที่เปิด
+                  text: ถ้าแชตที่ออกมาไม่มี turn ทำงาน engine ปิด MCP server ของมัน (โปรแกรมภายนอกที่เสนอ tool ให้ session) ข้อความถัดไปของคุณต่อท้าย log ของแชตที่เปิด
                   from: engine
                   to: engine
                   end: คุยต่อในแชตเก่า
@@ -182,7 +186,7 @@ scenario:
                 goto: start.open-window
 ---
 
-แชตหนึ่งแชตผูกกับ workspace ของมัน เพราะ tool ของมันอ่าน เขียน และรันคำสั่งใน workspace นั้น
+แชตหนึ่งแชตผูกกับ [workspace](/start/glossary/) (โฟลเดอร์โปรเจกต์ที่เปิดใน VS Code) ของมัน เพราะ tool ของมันอ่าน เขียน และรันคำสั่งใน workspace นั้น
 แชตของโปรเจกต์อื่นจึงไม่เปิดในหน้าต่างนี้ แต่เปิดในหน้าต่างของโปรเจกต์นั้น และ engine เองก็ปฏิเสธ `session/load`
 ของ session ที่เป็นของ workspace อื่น
 

@@ -14,7 +14,7 @@ scenario:
     - id: type
       beat:
         title: คุณพิมพ์แล้วหยุด
-        text: คุณพิมพ์ `export function isWeekend(` แล้วหยุดครู่หนึ่ง VS Code ขอคำเติม
+        text: คุณพิมพ์ `export function isWeekend(` แล้วหยุดครู่หนึ่ง VS Code ขอคำเติม (inline completion) จากส่วนขยาย Geno
         from: you
         to: panel
       lane: user
@@ -24,7 +24,7 @@ scenario:
     - id: ask
       beat:
         title: ส่วนขยายส่งคำขอให้ llama-server บนเครื่อง
-        text: ส่วนขยายสร้าง prompt จากข้อความก่อนและหลังเคอร์เซอร์ และไฟล์อื่นที่เปิดอยู่ แล้วรอจนคุณหยุดพิมพ์ ไม่มี engine เกี่ยวข้อง
+        text: llama-server คือโปรแกรมที่รัน model ขนาดเล็กบนเครื่องของคุณและตอบผ่าน HTTP ส่วนขยายสร้าง prompt แบบ fill-in-the-middle (ส่งข้อความก่อนและหลังเคอร์เซอร์ ให้ model เขียนสิ่งที่ควรอยู่ตรงกลาง) พร้อมไฟล์อื่นที่เปิดอยู่ รอจนคุณหยุดพิมพ์ แล้วส่งคำขอ HTTP ไปที่ llama-server ไม่มี engine และไม่มี model ของแชตเกี่ยวข้อง
         from: panel
         to: model
       lane: editor
@@ -46,7 +46,7 @@ scenario:
     - id: complete
       beat:
         title: llama-server บนเครื่องเติมโค้ด
-        text: model เติมโค้ดขนาดเล็กบนเครื่องของคุณ stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
+        text: model เติมโค้ดขนาดเล็กบนเครื่องของคุณ stream (ส่งกลับทีละชิ้นระหว่างที่ยังเขียน) ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
         from: model
         to: panel
       lane: model
@@ -132,7 +132,7 @@ scenario:
               - lane: editor
                 beat:
                   title: ไม่มีข้อความจาง
-                  text: ส่วนขยายไม่คืนอะไร ผลยังอยู่ใน cache ถ้าคุณพิมพ์ต่อในทางเดียวกับมัน
+                  text: ส่วนขยายไม่คืนอะไร แต่ยังเก็บผลไว้ในหน่วยความจำ ถ้าคุณพิมพ์ต่อในทางเดียวกับมัน ผลนั้นใช้ต่อได้โดยไม่ต้องขอใหม่
                   from: panel
                   to: panel
                   end: ไม่มีคำเติม
@@ -143,7 +143,10 @@ scenario:
                 end: { turn: none }
 ---
 
-Tab อยู่ใน extension host ทั้งหมด ไม่ใช้ engine ไม่ใช้ ACP และไม่ใช้ model ของแชต
+หน้านี้เล่าการเติมโค้ดอัตโนมัติขณะคุณพิมพ์ ข้อความจาง (ghost text) ที่ขึ้นต่อจากเคอร์เซอร์และกด Tab รับได้
+ต่างจากแชตตรงที่ไม่ผ่าน agent loop เลย
+
+Tab อยู่ใน [extension host](/start/glossary/) ทั้งหมด ไม่ใช้ engine ไม่ใช้ [ACP](/start/glossary/) และไม่ใช้ model ของแชต
 มันคุยกับ llama-server บนเครื่องผ่าน HTTP ซึ่งส่วนขยายเปิดเองถ้า endpoint เป็นเครื่องนี้และยังไม่มีใครตอบ `/health`
 
 | แถบสถานะ | ความหมาย |

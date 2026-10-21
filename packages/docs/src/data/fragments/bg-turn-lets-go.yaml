@@ -34,6 +34,6 @@
   at: rail
   do: >-
     `headerOf` เปลี่ยนหัวข้อเป็นเวลาที่ทำงาน ปุ่ม Send กลับมา ผู้ใช้ทำอย่างอื่นต่อได้
-  sees: หัวข้อ "worked for 9s" และปุ่ม Send กลับมาแทน Stop
+  sees: หัวข้อ "worked for <เวลา>" และปุ่ม Send กลับมาแทน Stop
   ref: packages/extension/src/chat/rail.ts#headerOf
   phase: idle

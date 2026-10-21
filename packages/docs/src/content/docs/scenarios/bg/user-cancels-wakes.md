@@ -14,7 +14,10 @@ scenario:
     - id: sees
       beat:
         title: Tasks บอกว่า session รอถูกปลุก
-        text: turn ก่อนจบไปแล้ว แต่ session รอสามอย่าง subagent explore monitor บน `bg-1` และ wake-up แถวของงานบอกว่ารออะไร พร้อมปุ่ม Cancel
+        text: >-
+          turn ก่อนจบไปแล้ว แต่ session รอสามอย่างที่จะปลุกมันได้ (ปลุกคือ engine เริ่ม turn ใหม่เองโดยไม่มีใครพิมพ์):
+          subagent explore ที่รันเบื้องหลัง monitor ที่เฝ้า output ของคำสั่ง `bg-1` และ wake-up ที่ตั้งเวลาไว้
+          แผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) บอกว่ารออะไร พร้อมปุ่ม Cancel
         from: panel
         to: you
         sees: ป้าย "Waiting to wake" บรรทัด "Wakes on explore, a monitor on bg-1 and a wake-up at 14:30" และปุ่ม [Cancel]
@@ -48,7 +51,9 @@ scenario:
     - id: cancel
       beat:
         title: Geno เลิกรอทุกอย่างของ session
-        text: explore ถูกปิดเสียงแล้วหยุด monitor เลิกเฝ้าและหยุด `bg-1` ที่มันเริ่มเอง นาฬิกาของ wake-up ถูกล้าง
+        text: >-
+          explore ถูกปิดเสียง คือรายงานของมันจะไม่มาถึงอีก แล้วถูกหยุด monitor เลิกเฝ้าและหยุด `bg-1` ที่มันเริ่มเอง
+          นาฬิกาของ wake-up ถูกล้าง คำสั่งเบื้องหลังอื่นยังรันต่อ แต่จบแล้วไม่ปลุก
         from: engine
         to: engine
       lane: server
@@ -83,8 +88,10 @@ scenario:
     - id: child-ends
       beat:
         title: explore ปิดตัวโดยไม่มีรายงาน
-        text: explore จบแบบ cancelled การจบของมันถูกบันทึกหลังเส้นแบ่ง จึงไม่ปลุกใคร
-        from: model
+        text: >-
+          Geno abort explore ก่อนที่ model ของมันจะตอบ explore จึงจบแบบ cancelled โดยไม่มีคำตอบหรือรายงานจาก model
+          การจบของมันถูกบันทึกหลังเส้นแบ่ง จึงไม่ปลุกใคร
+        from: engine
         to: engine
       lane: child@explore
       at: loop
@@ -111,7 +118,7 @@ scenario:
       end: { turn: none }
 ---
 
-Cancel ในแผง Tasks คือคำตอบของผู้ใช้ต่อคำถามว่า "ให้ Geno กลับมาทำต่อเองไหม": ไม่
+Cancel ในแผง Tasks คือคำตอบของผู้ใช้ต่อคำถามว่า "ให้ Geno กลับมาทำต่อเองไหม" ([การปลุก](/start/glossary/)): ไม่
 ทุกอย่างที่ session รอถูกปิด และ Geno จะไม่เริ่ม turn เองจนกว่าผู้ใช้จะส่งข้อความ
 
 | สิ่งที่รอ | หลัง Cancel |

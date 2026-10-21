@@ -16,8 +16,9 @@ scenario:
       beat:
         title: "Model ขอดึงหน้าเว็บพร้อมคำถาม"
         text: >-
-          model ขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร" run
-          จริงด้านล่างเรียก `web_fetch` แบบเดียวกันกับ example.com
+          model ขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร"
+          การ์ดข้างล่างมาจาก run จริงที่เรียก `web_fetch` แบบเดียวกันกับ example.com ดู `input` ที่มีสองฟิลด์
+          `url` คือหน้าที่จะดึง และ `question` คือสิ่งที่ model อยากรู้จากหน้านั้น
         from: model
         to: engine
         sees:
@@ -54,8 +55,9 @@ scenario:
       beat:
         title: "Geno ตรวจกฎของโดเมน"
         text: >-
-          ยังไม่มีกฎของ workspace สำหรับ date-fns.org กฎของ URL ภายนอกในโหมด Ask คือถาม ไม่มี hook ตอบแทน Geno
-          จึงส่งคำถามไปที่แชต พร้อมกฎของโดเมนให้เลือกบันทึก งานใน Tasks เปลี่ยนเป็นรอคุณ
+          กฎของ workspace คือรายการที่คุณบันทึกไว้ว่าโดเมนหรือคำสั่งไหนอนุญาตหรือปฏิเสธ ยังไม่มีกฎสำหรับ date-fns.org
+          กฎในตัวของ URL ภายนอกในโหมด Ask คือถามคุณ ไม่มี hook (คำสั่ง shell ที่คุณตั้งให้ตัดสินแทน) ตอบแทน Geno
+          จึงส่งคำถามไปที่แชต พร้อมกฎของโดเมนให้เลือกบันทึก งานในแผง Tasks ซึ่งเป็นรายการงานของ Geno เปลี่ยนเป็นรอคุณ
         from: engine
         to: panel
       do: >-
@@ -205,12 +207,15 @@ scenario:
       beat:
         title: "Engine ดึงหน้าเองนอก sandbox"
         text: >-
-          engine ปฏิเสธที่อยู่ภายในเครื่องหรือเครือข่ายส่วนตัว ถ้าหน้าพาไปโฮสต์อื่น
-          การไปต่อแต่ละครั้งผ่านกฎและการถามใหม่ หน้าที่ตอบ error หรือช้าเกินทำให้ call ล้มเหลว
+          engine ดึงหน้าเองใน process ของมัน ไม่ได้รันใน sandbox ซึ่งกันเฉพาะคำสั่ง shell
+          ก่อนต่อ engine เช็ก DNS ของโฮสต์ภายนอก ถ้าชื่อนั้นชี้ไปที่อยู่ภายในเครื่องหรือเครือข่ายส่วนตัว ก็ปฏิเสธ
+          (ส่วน `localhost`, 127.0.0.1 และ [::1] ที่ระบุตรงๆ ดึงได้เสมอโดยไม่ถาม) ถ้าหน้าพาไปโฮสต์อื่น (redirect)
+          การไปต่อแต่ละครั้งผ่านกฎและการถามใหม่ หน้าที่ตอบ HTTP 400 ขึ้นไปหรือช้าเกินทำให้ call ล้มเหลว
         from: engine
         to: machine
       do: >-
-        engine ดึงหน้าเองนอก sandbox ผ่าน `guardedResolve` ซึ่งปฏิเสธที่อยู่ภายในเครื่องหรือเครือข่ายส่วนตัวและตรึง DNS ไว้
+        engine ดึงหน้าเองนอก sandbox สำหรับโฮสต์ภายนอก `guardedResolve` ปฏิเสธชื่อที่ DNS ชี้ไปที่อยู่ private, loopback
+        หรือ link-local และตรึงการต่อไว้ที่ที่อยู่ที่ตรวจแล้ว (กัน DNS rebinding) ส่วน `localhost` ไปทางกฎ `web-local-url` ที่อนุญาตทุกโหมด
         ถ้าหน้าพาไปโฮสต์อื่น การไปต่อแต่ละครั้งผ่านกฎและการถามใหม่ หน้าที่ตอบ HTTP 400 ขึ้นไปหรือช้าเกินกำหนดทำให้ call ล้มเหลว
       ref: "packages/engine/src/tools/web.ts#\"response = await get(here, resolve, limit.signal);\""
 
@@ -219,12 +224,20 @@ scenario:
       beat:
         title: "Model ผู้ช่วยอ่านหน้าแล้วตอบคำถาม"
         text: >-
-          หน้าถูกแปลงเป็น markdown แล้วให้ model ผู้ช่วยที่ถูกที่สุดอ่านและตอบคำถาม model หลักจึงไม่ต้องอ่านทั้งหน้า
+          หน้าถูกแปลงเป็น markdown แล้วให้ model ผู้ช่วยอ่านและตอบคำถาม (model ของบทบาท explore ถ้าตั้งไว้ ไม่อย่างนั้น model ของ classifier ถ้าตั้งไว้ ไม่อย่างนั้นใช้ model ของ session เอง) model หลักจึงไม่ต้องอ่านทั้งหน้า
+          การ์ดข้างล่างเป็นคำตอบจริงของ model ผู้ช่วยจากการรันอื่นที่ดึงหน้า `/health` ของเซิร์ฟเวอร์ในเครื่อง
+          ซึ่งไม่ต้องถามเพราะเป็น `localhost`
+          คำตอบมาเป็น stream ทีละชิ้น ดู event ที่ไฮไลต์ `content_block_start` เปิดบล็อกข้อความ
+          แล้ว `text_delta` ส่งข้อความชิ้นแรกคือ "The" ข้อความเต็มอยู่ในผลของ call ในขั้นถัดไป
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s1-2/wire.jsonl#line=12
+          highlight: ['[2].data.content_block', '[3].data.delta']
       do: >-
-        model ผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` เลือก model ที่ถูกที่สุดก่อน:
-        model ของบทบาท explore ถ้าตั้งไว้ แล้ว classifier แล้วจึงเป็น model ของ session
+        model ผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` `readerChoices` เรียงตัวเลือก:
+        model ของบทบาท explore ถ้าตั้ง `GCODE_EXPLORE_PROVIDER` แล้ว model ของ classifier ถ้าตั้ง `GCODE_CLASSIFIER_*` แล้วจึงเป็น model ของ session `helperCall` ใช้ตัวแรกที่มี credentials
       ref: packages/engine/src/tools/web.ts#readerChoices
 
     - id: answer
@@ -233,7 +246,9 @@ scenario:
       beat:
         title: "Geno ล้อมรั้วคำตอบว่าเป็นข้อมูล"
         text: >-
-          คำตอบอยู่ในรั้ว ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้ ผลมีบันทึกว่าคุณอนุญาต แล้วกลับมาที่แชต
+          Geno ครอบคำตอบด้วยรั้ว คือแท็ก `<web_fetch_answer>` ที่บอก model ว่านี่คือข้อมูลจากเว็บ ไม่ใช่คำสั่ง
+          ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้ ผลมีบันทึกว่าคุณอนุญาต แล้วกลับมาที่แชต
+          ผลนี้ถึง model ตอนเรียกครั้งถัดไป
         from: engine
         to: engine
         sees: { kind: step, label: fetch date-fns.org, status: done }
@@ -250,19 +265,50 @@ scenario:
       beat:
         title: "Model ได้คำตอบจากหน้าเว็บ"
         text: >-
-          Geno เรียก model ต่อ model ได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอ `web_fetch` ของ model
+          และคำตอบในรั้วที่ Geno เตรียมไว้ model ได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
+          การ์ดข้างล่างเป็นข้อความท้ายสุดของคำขอจริงจากการรันอื่นที่ดึงหน้า `/health` ของเซิร์ฟเวอร์ในเครื่องด้วย `web_fetch` แบบเดียวกัน
+          บทสนทนาก่อนหน้ายาวเกินกว่าจะแสดงทั้งหมด ดู `content` ของ `tool_result` ที่ขึ้นต้นด้วยรั้ว `<web_fetch_answer>`
+          ข้างในคือคำตอบของ model ผู้ช่วย
         from: engine
         to: model
-        end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s1-2/wire.jsonl#line=13
+          select: messages[-1]
+          highlight: ['content[0]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้คำตอบจากหน้าเว็บ ไม่ใช่หน้าเว็บทั้งหน้า
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ตอบหลังเห็นคำตอบ"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model ได้ JSON ของหน้า `/health` แล้ว
+          แต่ไม่แน่ใจว่า model ผู้ช่วยคัดลอกมาตรงทุกตัวหรือไม่ จึงขอรัน `bash` เพื่อดึงหน้าเองอีกครั้ง
+          ดู `command` ใน `input` ที่ไฮไลต์ไว้
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s1-2/session.jsonl#seq=18
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input']
+        end: "model ทำต่อ"
+      do: >-
+        model อ่าน `tool_result` ของ `web_fetch` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+        turn วนต่อไปจนกว่า model จะตอบโดยไม่ขอ tool
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
-`web_fetch` ไม่ส่งหน้าเว็บให้ model หลัก มันส่งหน้าให้ model ผู้ช่วยตัวเล็กอ่านแล้วตอบคำถาม
+`web_fetch` ไม่ส่งหน้าเว็บให้ model หลัก มันส่งหน้าให้ model ผู้ช่วยอ่านแล้วตอบคำถาม (ถ้าไม่ได้ตั้ง model ของ explore หรือ classifier ผู้ช่วยคือ model ของ session เอง)
 model หลักจึงได้คำตอบสั้นๆ ในรั้วข้อมูล ซึ่งกันไม่ให้ข้อความในหน้าเว็บกลายเป็นคำสั่ง
 
 | โหมด | URL ของโฮสต์อื่น |
@@ -272,12 +318,13 @@ model หลักจึงได้คำตอบสั้นๆ ในรั�
 | Plan | อนุญาต |
 | ไม่มีคนดู (non-interactive) | ปฏิเสธ |
 
-URL บนเครื่องนี้ (`localhost`) ผ่านเสมอ และ URL ที่ `web_fetch` ห้ามดึงถูกปฏิเสธเสมอในทุกโหมด
+URL บนเครื่องนี้ (`localhost`, 127.0.0.1 และ [::1]) ผ่านเสมอโดยไม่ถาม และ URL ที่ `web_fetch` ห้ามดึงถูกปฏิเสธเสมอในทุกโหมด
+เช่น URL ที่ไม่ใช่ http หรือ https และ IP ส่วนตัวที่เขียนตรงๆ อย่าง 192.168.1.5
 
 สิ่งที่ควรสังเกต
 
 - **การดึงไม่ได้อยู่ใน sandbox** sandbox ปิดเครือข่ายของคำสั่ง shell แต่ `web_fetch` รันใน process ของ engine
-  ด่านของมันคือกฎ `web-remote-url` และ `guardedResolve` ที่ห้ามที่อยู่ส่วนตัว
+  ด่านของมันคือกฎ `web-remote-url` และ `guardedResolve` ที่ห้ามชื่อโฮสต์ภายนอกซึ่ง DNS ชี้ไปที่อยู่ส่วนตัว
 - **Always allow บันทึกเป็นโดเมน** ไม่ใช่ URL กฎ `WebFetch(domain:date-fns.org)` ครอบคลุมทุกหน้าบนโฮสต์นั้น
 - **Plan ดึงเว็บได้** ต่างจากคำสั่ง shell การอ่านเว็บไม่เปลี่ยนอะไรใน workspace โหมด Plan จึงอนุญาต
 

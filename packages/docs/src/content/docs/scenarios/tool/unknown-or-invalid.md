@@ -16,9 +16,17 @@ scenario:
       beat:
         title: "Model เรียก tool ตามความเคยชิน"
         text: >-
-          ชื่อหรือ input ของ tool call นี้มาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการ tool ของ Geno
+          ชื่อหรือ input ของ tool call แบบนี้มักมาจากความเคยชินกับ harness อื่น (โปรแกรมรอบ model แบบ Geno ที่ตั้งชื่อ tool ต่างกัน)
+          ไม่ใช่จากรายการ `tools` ในคำขอของ Geno การ์ดข้างล่างเป็นคำตอบจริงจากการรันอื่น model เรียก `task_stop`
+          ซึ่งเป็น tool หยุดงานเบื้องหลัง ดู `input` ที่ไฮไลต์ไว้ มีแค่ `wait` แต่ไม่มี `id` ที่ schema บังคับ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/2/session.jsonl#seq=20
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       do: >-
         model ขอเรียก tool ชื่อหรือ input ของมันมาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการ tool ของ Geno
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -60,9 +68,9 @@ scenario:
                   title: "ไม่มี tool ชื่อ write_file"
                   text: >-
                     Geno รู้ว่าเป็นชื่อ tool เขียนไฟล์ของ harness อื่น จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน
-                    ตามด้วยรายชื่อ tool ทั้งหมด ชื่อขั้นในแชตเป็นชื่อกับ JSON ของ input
+                    ตามด้วยรายชื่อ tool ทั้งหมด ชื่อขั้นในแชตเป็นชื่อกับ JSON ของ input ผลนี้ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                   sees: { kind: step, label: 'write_file {"path":"src/date.ts","content":"..."}', status: failed }
                 do: >-
                   ไม่มี executor ชื่อ `write_file` `unknownTool` เห็นว่าเป็นชื่อ tool เขียนไฟล์ของ harness อื่น
@@ -80,8 +88,9 @@ scenario:
                   title: "input ของ bash ไม่ตรง schema"
                   text: >-
                     `bash` ได้ `cmd` แทน `command` schema ไม่รับฟิลด์ที่ไม่รู้จัก ผลบอกฟิลด์ที่ขาดและฟิลด์ที่ไม่รู้จัก
+                    ผลนี้ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                   sees: { kind: step, label: 'bash {"cmd":"ls"}', status: failed }
                 do: >-
                   `bash` ได้ `{"cmd": "ls"}` แทน `command` schema ของมันเป็น `strictObject` จึงไม่ผ่าน executor โยน `ToolError`
@@ -112,16 +121,45 @@ scenario:
       beat:
         title: "Model อ่านวิธีที่ถูกแล้วเรียกใหม่"
         text: >-
-          turn ไม่หยุด Geno เรียก model ต่อ model ได้ผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก
+          turn ไม่หยุด Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือ call ที่ผิดของ model
+          และผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก การ์ดข้างล่างเป็นข้อความท้ายสุดของคำขอจริงจากการรันเดียวกับการ์ดแรก
+          ดู `is_error: true` ซึ่งบอก model ว่า call ล้มเหลว และ `content` ที่ขึ้นต้นด้วย "invalid input"
+          ผลบอกว่า `wait` เป็นฟิลด์ที่ไม่รู้จัก และขาด `id`
         from: engine
         to: model
-        end: "model เรียกใหม่"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/2/requests.jsonl#seq=23
+          select: messages[-1]
+          highlight: ['content[0]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ `tool_result` ที่มี `is_error: true` และข้อความบอกวิธีที่ถูก
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model เรียกใหม่ด้วย input ที่ถูก"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model เห็นว่าขาดฟิลด์ จึงเรียก `task_stop` ใหม่ด้วย `id` ที่ถูก
+          ดู `input` ที่ไฮไลต์ไว้ ตอนนี้เป็น `id: "bg-1"` ซึ่งตรง schema
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/2/session.jsonl#seq=23
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: "model เรียกใหม่"
+      do: >-
+        model อ่าน `tool_result` ที่มี `is_error: true` แล้วตอบด้วย call ใหม่ที่ input ตรง schema
+        และจบคำตอบด้วย `stop_reason: tool_use` turn วนต่อไปจนกว่า model จะตอบโดยไม่ขอ tool
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 ทุกอย่างที่ model เรียกผิดกลับไปเป็นผล `error` ให้ model อ่าน ไม่มีอะไรทำให้ turn ล้ม
@@ -131,9 +169,8 @@ Geno ไม่ซ่อมหรือเดา input ให้ model ต้อ�
 
 - **ชื่อของ harness อื่นได้คำแนะนำ** `create`, `write`, `create_file`, `write_file` และ `Write` ได้ข้อความที่ชี้ไปที่ `edit` กับ `create: true`
   ชื่ออื่นได้แค่รายชื่อ tool
-- **tool ที่เลื่อนไว้ไม่ใช่ชื่อที่ไม่มี** tool MCP และ tool ที่ไม่ใช่แกนหลักมีอยู่จริงแต่ถูกปฏิเสธจนกว่าจะโหลดด้วย `tool_search`
+- **tool ที่เลื่อนไว้ไม่ใช่ชื่อที่ไม่มี** tool MCP และ tool นอกชุดหลักมีอยู่จริง แต่ model ยังไม่เห็น schema ของมัน
+  ถ้าเรียกตรงๆ ด้วย input ที่ตรง schema Geno โหลดให้แล้วรัน ถ้าไม่ตรงจะไม่รัน และตอบด้วยนิยามเต็มกับสิ่งที่ผิด
   ดู [Model โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
 - **input ที่ถูกตัดเพราะ `max_tokens` ไม่มาทางนี้** call ที่ถูกตัดได้คำตอบ `cut-off` จาก loop ก่อนถึง executor
   ดู [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/)
-
-tool ที่มีจริงแต่ยังไม่ได้โหลด ดู [Model โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)

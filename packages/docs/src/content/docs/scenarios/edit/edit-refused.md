@@ -14,9 +14,15 @@ scenario:
     - id: asks
       beat:
         title: Model ขอแก้ `src/date.ts`
-        text: model ส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน
+        text: model ส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน การ์ดเป็นคำขอจริงจากการรันที่แก้ `src/config.ts` ซึ่ง `old_str` เรียงบรรทัดผิด ใน input ที่ไฮไลต์ `old_str` มี `timeout` ก่อน `retries` แต่ในไฟล์จริง `retries` มาก่อน
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=6
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       lane: model
       do: >-
         model ขอ `edit` ไฟล์ `src/date.ts` จบด้วย `stop_reason: tool_use`
@@ -86,9 +92,9 @@ scenario:
               - lane: tool
                 beat:
                   title: Model ยังไม่ได้อ่านไฟล์
-                  text: Geno ไม่รู้ว่า model แก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร การ์ดเป็นผลจริงจากการรันที่ model แก้สามไฟล์โดยไม่อ่านก่อน
+                  text: Geno ไม่รู้ว่า model แก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร และเขียนเหตุผลไว้ในผลที่ถึง model ตอนเรียกครั้งถัดไป การ์ดเป็นผลจริงจากการรันที่ model แก้สามไฟล์โดยไม่อ่านก่อน มันคือ event `tool-result` ใน session log ดู `status` ที่เป็น `error` และ `output` ที่ไฮไลต์ ซึ่งเป็นข้อความที่ model จะได้อ่าน
                   from: engine
-                  to: model
+                  to: engine
                   sees:
                     kind: payload
                     source: docs/results/real-usecases/runs/A27-resume-thai/2/session.jsonl#seq=30
@@ -107,9 +113,9 @@ scenario:
               - lane: tool
                 beat:
                   title: ไฟล์เปลี่ยนหลัง model อ่าน
-                  text: ข้อความตอนนี้ไม่ตรงกับที่ model เห็น Geno จึงไม่แทนอะไร และบอกให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
+                  text: ข้อความตอนนี้ไม่ตรงกับที่ model เห็น เช่นคุณพิมพ์เพิ่มใน editor หลัง model อ่าน Geno จึงไม่แทนอะไร และเขียนในผลว่าให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
                   from: engine
-                  to: model
+                  to: engine
                 at: executor
                 do: >-
                   ผู้ใช้พิมพ์ใน buffer หลังจาก model อ่านไฟล์ hash ของข้อความปัจจุบันจึงไม่ตรงกับฐาน `proposeChange` ล้มเหลวแบบ `stale-base`
@@ -123,12 +129,13 @@ scenario:
               - lane: tool
                 beat:
                   title: หา `old_str` ไม่เจอ
-                  text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ส่งช่วงบรรทัดที่ใกล้ที่สุดกลับไป ให้ model คัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงจากการรันหนึ่ง
+                  text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ใส่ช่วงบรรทัดที่ใกล้ที่สุดไว้ในผล ให้ model คัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงของคำขอในการ์ดแรก ใน `output` ดูบรรทัด 3-4 ที่ใกล้ที่สุดพร้อมเลขบรรทัด และคำสั่งให้คัดลอกโดยไม่เอาเลขบรรทัดมาด้วย
                   from: engine
-                  to: model
+                  to: engine
                   sees:
                     kind: payload
                     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=7
+                    quote: "without the line numbers and the tab after them"
                     highlight:
                       - output
                 at: executor
@@ -136,7 +143,7 @@ scenario:
                 do: >-
                   `strReplace` หาแบบตรงตัวไม่พบ หาอีกครั้งแบบไม่สนการเยื้องและช่องว่างท้ายบรรทัดก็ไม่พบ
                   ผลบอกช่วงบรรทัดที่ใกล้ที่สุดพร้อมเลขบรรทัด และให้คัดลอก `old_str` จากไฟล์ตรงๆ
-                  ("old_str does not appear in src/date.ts, even ignoring indentation and trailing whitespace. The closest text is lines 12-18: ...")
+                  (ในการรันจริงคือ "old_str does not appear in src/config.ts, even ignoring indentation and trailing whitespace. The closest text is lines 3-4: ...")
                 ref: packages/core/src/str-replace.ts#strReplace
                 emits: [zero-matches]
           - id: many
@@ -146,9 +153,9 @@ scenario:
               - lane: tool
                 beat:
                   title: "`old_str` ตรงหลายที่"
-                  text: "Geno ไม่เดาว่าจะแก้ที่ไหน มันบอกจำนวนและบรรทัดที่เจอ ให้ model ใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
+                  text: "Geno ไม่เดาว่าจะแก้ที่ไหน ผลบอกจำนวนและบรรทัดที่เจอ ให้ model ใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
                   from: engine
-                  to: model
+                  to: engine
                 at: executor
                 runs: 1
                 do: >-
@@ -178,11 +185,16 @@ scenario:
 
     - id: next
       beat:
-        title: Model อ่านเหตุผลแล้วลองใหม่
-        text: turn ไม่จบ ผลไปถึง model เป็น error model มักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง
-        from: model
-        to: engine
-        end: Model อ่านไฟล์ใหม่แล้วลองอีกครั้ง
+        title: Geno เรียก model อีกครั้ง
+        text: "turn ไม่จบ Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอ edit ของ model และผลที่เป็น error การ์ดข้างล่างเป็น `messages` ของคำขอจริงจากการรันเดียวกับทาง `old_str` ไม่ตรง ข้อความเก่าพับไว้ ที่ไฮไลต์คือคำขอ `edit` และ `tool_result` ที่ตอบมัน ดู `is_error: true` ซึ่งบอก model ว่า tool ล้มเหลว"
+        from: engine
+        to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/wire.jsonl#line=5
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[1]', '[4].content[0]']
       lane: loop
       at: step
       do: >-
@@ -191,10 +203,34 @@ scenario:
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      beat:
+        title: Model อ่านเหตุผลแล้วลองใหม่
+        text: model ตอบหลังได้คำขอนี้เท่านั้น model มักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง ในการรันจริงนี้ผลมีบรรทัดที่ใกล้ที่สุดอยู่แล้ว model จึงเห็นว่าเรียงบรรทัดผิด และส่ง edit ใหม่ทันทีโดยไม่อ่านไฟล์ซ้ำ ในการ์ด ดูข้อความที่ model ยอมรับว่าเรียงผิด และ `old_str` ใหม่ที่ `retries` มาก่อน
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=9
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].text', '[2].input']
+        end: Model ลองแก้อีกครั้ง
+      lane: model
+      do: >-
+        model อ่าน `tool_result` ที่เป็น `is_error: true` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `edit` ที่ใช้ `old_str` ตามไฟล์จริง
+        และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
+หน้านี้เล่าสี่เหตุที่ `edit` ไม่ยอมเขียนไฟล์ และสิ่งที่ model ได้กลับไปเพื่อแก้ตัวเอง
+ต่อจาก [แก้ไฟล์แล้วแสดงเป็น diff](/scenarios/edit/applied-as-diff/) ซึ่งเล่าทางที่สำเร็จ
+
 `edit` ยอมเขียนเฉพาะเมื่อมั่นใจว่า model แก้ข้อความที่มันเห็นจริง การปฏิเสธทุกแบบเป็น `ToolError` ธรรมดา
+คือ error ของ tool ที่ส่งกลับให้ model เป็น [`tool_result`](/start/glossary/) ที่มี `is_error: true` ไม่ใช่การปฏิเสธเรื่องสิทธิ์
 แผงแสดงขั้นเป็นล้มเหลว และ turn ทำงานต่อ
 
 | เหตุ | ข้อความที่ model ได้ | ทางแก้ของ model |

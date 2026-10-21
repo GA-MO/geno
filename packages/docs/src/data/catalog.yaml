@@ -834,7 +834,7 @@ scenarios:
     terminal: Per answer
   - id: perm.auto-classifier-denies
     thai: classifier ปฏิเสธ
-    english: Classifier denies outright
+    english: Classifier refuses (deny or ask); the reason goes back to the model
     chapter: 8
     priority: P2
     lanes:
@@ -936,13 +936,13 @@ scenarios:
     terminal: Model continues
   - id: perm.classifier-unavailable
     thai: classifier ปิดหรือใช้ไม่ได้
-    english: Classifier off or failing
+    english: Classifier off, not set up, or its key or model refused
     chapter: 8
     priority: P3
     lanes:
       - policy
       - panel
-    terminal: Cards, with one notice that the classifier is not working
+    terminal: A card each call, with one notice per session unless it was turned off
   - id: perm.rm-rf-refused-run
     thai: การรันจริง ขอ rm -rf ในโหมด Ask แล้วถูกปฏิเสธ
     english: "Real run: rm -rf asked in Ask mode and refused"

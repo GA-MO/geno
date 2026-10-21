@@ -14,7 +14,10 @@ scenario:
     - id: dies
       beat:
         title: engine หยุดกลางทาง
-        text: process ของ engine ถูก kill หรือ crash ขณะ worker กำลังรัน `pnpm test` log ของแม่จดว่า worker เริ่มแล้ว แต่ไม่มีบันทึกว่าจบ
+        text: >-
+          worker คือ subagent (session ลูกที่แม่ส่งงานย่อยให้ทำ) แม่รอรายงานของมันอยู่ใน call `agent`
+          process ของ engine ถูก kill หรือ crash ขณะ worker กำลังรัน `pnpm test` ลูกทำงานอยู่ใน process เดียวกันจึงหยุดไปด้วย
+          log ของแม่จดว่า worker เริ่มแล้ว แต่ไม่มีบันทึกว่าจบ
         from: engine
         to: engine
       lane: server
@@ -28,7 +31,7 @@ scenario:
     - id: closed
       beat:
         title: แชตขึ้นว่า turn ล้มเหลว
-        text: การเชื่อมต่อขาด คำขอของ turn ล้มเหลว แชตขึ้นแถบ error และแถวของ worker ถูกปิดไปพร้อม turn
+        text: การเชื่อมต่อระหว่าง VS Code กับ engine ขาด คำขอของ turn ล้มเหลว แชตขึ้นแถบ error และแถวของ worker ถูกปิดไปพร้อม turn
         from: panel
         to: you
         sees:
@@ -69,7 +72,9 @@ scenario:
     - id: recover
       beat:
         title: engine ตัวใหม่หางานที่ค้าง
-        text: การเชื่อมต่อแรกของ engine ตัวนี้หา subagent ที่เปิดค้างโดย engine ที่ไม่อยู่แล้ว
+        text: >-
+          การเชื่อมต่อแรกของ engine ตัวนี้อ่าน log หา subagent ที่ค้าง คือมีบันทึกว่าเริ่มแต่ไม่มีบันทึกว่าจบ
+          และ engine ที่เปิดมันไม่อยู่แล้ว
         from: engine
         to: engine
       lane: server
@@ -82,7 +87,10 @@ scenario:
     - id: child-answered
       beat:
         title: Geno ปิด call ที่ค้างทั้งของลูกและแม่
-        text: "`pnpm test` ของ worker ได้ผลว่า Geno หยุดระหว่างที่มันรัน ผลอาจหายไป call ของแม่ได้ผลแบบเดียวกัน พร้อมโน้ตว่า worker ถูกตัดและทำต่อได้อย่างไร"
+        text: >-
+          Geno เขียนผลให้ทุก call ที่ค้าง `pnpm test` ของ worker ได้ผลว่า Geno หยุดระหว่างที่มันรัน ผลอาจหายไป
+          call `agent` ของแม่ได้ผลแบบเดียวกัน พร้อมโน้ตว่า worker ถูกตัดและทำต่อได้อย่างไร
+          โน้ตนี้รอไปกับ turn ถัดไป มันไม่เริ่ม turn ใหม่เอง
         from: engine
         to: engine
       lane: child@worker
@@ -105,7 +113,9 @@ scenario:
     - id: task-row
       beat:
         title: Tasks บอกว่า worker ถูกตัด
-        text: งานของ session ขึ้นป้าย Cut off พร้อมสิ่งที่ worker ทำไปแล้ว ช่องข้อความ และปุ่ม Resume ปุ่มขึ้นเฉพาะตอนที่ session ไม่มี turn ทำงาน
+        text: >-
+          ในแผง Tasks (แผงที่รวมงานของแต่ละ session) งานของ session นี้ขึ้นป้าย Cut off พร้อมสิ่งที่ worker ทำไปแล้ว
+          ช่องข้อความ และปุ่ม Resume ปุ่มขึ้นเฉพาะตอนที่ session ไม่มี turn ทำงาน
         from: panel
         to: you
         sees:
@@ -154,9 +164,10 @@ scenario:
     - id: issued
       beat:
         title: Geno ส่งข้อความถึง worker ในนามคุณ
-        text: Geno สร้าง call ส่งข้อความเอง ไม่ถาม model ของแม่ก่อน
+        text: >-
+          Geno สร้าง call `message_agent` (tool ที่ส่งข้อความถึงลูกตัวเดิม) เองในนามคุณ ไม่ถาม model ของแม่ก่อน
         from: engine
-        to: model
+        to: engine
       lane: loop
       at: agent
       do: >-
@@ -218,13 +229,17 @@ scenario:
     - id: ends
       beat:
         title: Turn จบโดยไม่เรียก model ของแม่
-        text: รายงานและโน้ตเรื่องการถูกตัดรออยู่ใน log ให้ model อ่านใน turn ถัดไปของคุณ คุณอ่านรายงานได้จากผลของขั้น message_agent
+        text: >-
+          รายงานและโน้ตเรื่องการถูกตัดรออยู่ใน log ให้ model อ่านใน turn ถัดไปของคุณ คุณอ่านรายงานได้จากผลของขั้น message_agent
+          turn นี้จบที่ขั้น message_agent โดยไม่มีข้อความของ Geno ตามหลัง แชตจึงขึ้นประกาศ Geno stopped without a reply
+          พร้อมปุ่ม Continue กับ Retry เหมือนหลัง `@agent` ทุกครั้ง กด Continue แล้ว model ของแม่จะอ่านรายงานและตอบคุณ
         from: engine
         to: panel
         sees:
-          kind: composer
-          state: idle
-          header: worked for 1m 4s
+          - { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
+          - kind: composer
+            state: idle
+            header: worked for 1m 4s
         end: Turn จบ รายงานรอ turn ถัดไป
       lane: loop
       at: step
@@ -239,8 +254,9 @@ scenario:
       lane: panel
       at: rail
       do: >-
-        turn จบแบบ done ผู้ใช้อ่านรายงานของ worker ได้จากผลของขั้น `message_agent`
-      sees: หัวข้อ "worked for 1m 4s" ขั้น "message_agent ..." และแถว worker ขึ้นเครื่องหมายถูก
+        turn จบแบบ done ผู้ใช้อ่านรายงานของ worker ได้จากผลของขั้น `message_agent` ไม่มีข้อความหลังขั้นสุดท้าย
+        `missingReply` จึงคืน "Its last reply had no text." และแชตแสดงประกาศพร้อม Continue กับ Retry
+      sees: หัวข้อ "worked for 1m 4s" ขั้น "message_agent ..." แถว worker ขึ้นเครื่องหมายถูก และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: done, reason: end_turn }
 ---
@@ -252,5 +268,5 @@ engine ตัวถัดไปอ่าน log แล้วปิดสิ่�
 
 - **ไม่มีอะไรทำต่อเอง** โน้ต `interrupted` ไม่ปลุก session ผู้ใช้ต้องกด Resume หรือ model ต้องเรียก `message_agent` เอง
 - **บอกครั้งเดียว** engine สองตัวที่เริ่มพร้อมกันแย่งกันด้วย lock และ run ที่อยู่ในโน้ตแล้วไม่ถูกบอกซ้ำ ถ้า engine ตายกลางการปิด รอบถัดไปปิดต่อได้
-- **ลูกของ workflow** ถ้าลูกที่ถูกตัดเป็นขั้นของ workflow โน้ตไปที่ session ที่เริ่ม workflow และบอกว่ารายงานของ workflow จะไม่มา
-- **Resume ไม่เรียก model ของแม่** turn ที่ Resume สร้างจบทันทีหลังลูกรายงาน ถ้าอยากให้แม่สรุป ผู้ใช้ต้องส่งข้อความต่อ
+- **ลูกของ workflow** ถ้าลูกที่ถูกตัดเป็นขั้นของ [workflow](/start/glossary/) (ไฟล์ที่รัน subagent ตามลำดับตายตัว) โน้ตไปที่ session ที่เริ่ม workflow และบอกว่ารายงานของ workflow จะไม่มา
+- **Resume ไม่เรียก model ของแม่** turn ที่ Resume สร้างจบทันทีหลังลูกรายงาน แชตจึงขึ้นประกาศ "Geno stopped without a reply" ถ้าอยากให้แม่สรุป ผู้ใช้กด Continue หรือส่งข้อความต่อ

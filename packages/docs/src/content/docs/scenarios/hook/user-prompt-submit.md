@@ -14,7 +14,7 @@ scenario:
     - use: prompt-starts-turn
       beat:
         title: คุณส่ง prompt
-        text: คุณพิมพ์ในแชตแล้วกด Enter แชตเริ่ม turn และส่ง prompt ไปที่ engine
+        text: คุณพิมพ์ในแชตแล้วกด Enter แชตเริ่ม turn (รอบที่ Geno ทำงานตั้งแต่รับข้อความจนตอบเสร็จ) และส่ง prompt ไปที่ engine
         from: you
         to: panel
         sees:
@@ -24,7 +24,7 @@ scenario:
     - id: run
       beat:
         title: Geno ส่ง prompt ให้ hook ก่อน model
-        text: Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึง model ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
+        text: hook คือคำสั่ง shell ที่คุณตั้งไว้ใน settings ให้ Geno รันเมื่อเกิดเหตุการณ์หนึ่ง UserPromptSubmit คือเหตุการณ์ที่คุณส่ง prompt ก่อน model เห็น Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึง model ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
         from: engine
         to: machine
         ask: hook ตอบอะไร
@@ -96,14 +96,14 @@ scenario:
               - lane: loop
                 beat:
                   title: Turn ล้มเหลว
-                  text: Stop hook ไม่ทำงานในทางนี้ แชตไม่ขึ้นปุ่ม Continue หรือ Retry เพราะมีแถบ error แล้ว ปุ่ม Send กลับมา
+                  text: Stop hook (hook ที่รันตอน turn จะจบ) ไม่ทำงานในทางนี้ แชตไม่ขึ้นปุ่ม Continue หรือ Retry เพราะมีแถบ error แล้ว ปุ่ม Send กลับมา
                   from: engine
                   to: panel
                   end: prompt ไม่ถึง model
                   sees:
                     kind: composer
                     state: idle
-                    header: failed after 1s
+                    header: failed after ...
                 at: step
                 do: >-
                   `loopStep` เห็น error ล่าสุด `ERROR_REASON` แปลง `blocked` เป็น `done(error)` Stop hook ไม่ทำงาน
@@ -127,7 +127,7 @@ scenario:
                 at: rail
                 do: >-
                   หัวข้อเป็น "failed after ..." ไม่มีประกาศ Continue หรือ Retry เพราะ turn มีแถบ error แล้ว
-                sees: หัวข้อ "failed after 1s" และปุ่ม Send กลับมา
+                sees: หัวข้อ "failed after" ตามด้วยเวลาที่ใช้ และปุ่ม Send กลับมา
                 ref: packages/extension/src/chat/rail.ts#headerOf
                 end: { turn: failed, reason: error }
 
@@ -137,12 +137,12 @@ scenario:
               - lane: policy
                 beat:
                   title: hook พิมพ์ชื่อ branch
-                  text: 'สคริปต์จบด้วย exit 0 และพิมพ์ "branch: feat/login" สำหรับ hook นี้ ข้อความที่พิมพ์ออกมานับเป็นบริบท'
+                  text: 'สคริปต์จบด้วย exit 0 และพิมพ์ "branch: main" สำหรับ hook นี้ ข้อความที่พิมพ์ออกมานับเป็นบริบท'
                   from: machine
                   to: engine
                 at: hooks
                 do: >-
-                  สคริปต์จบด้วย exit 0 และพิมพ์ "branch: feat/login" ลง stdout UserPromptSubmit เป็นเหตุการณ์ที่ stdout
+                  สคริปต์จบด้วย exit 0 และพิมพ์ "branch: main" ลง stdout UserPromptSubmit เป็นเหตุการณ์ที่ stdout
                   นับเป็นบริบท ข้อความนี้จึงเป็นโน้ตของ hook (JSON `additionalContext` ก็ได้ผลเดียวกัน)
                 ref: packages/core/src/hooks.ts#promptDecision
               - lane: loop
@@ -159,29 +159,47 @@ scenario:
               - use: model-call
                 beat:
                   title: Geno ส่ง prompt ให้ model
-                  text: Geno เก็บ checkpoint แล้วส่งบทสนทนาให้ model
+                  text: >-
+                    Geno เก็บ checkpoint (ภาพถ่ายไฟล์ใน workspace ไว้ย้อนกลับได้) แล้วส่งบทสนทนาให้ model
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน hook ในการบันทึกรัน `git branch --show-current` จริงและได้ `main`
+                    ดูข้อความ user ข้อความแรก บล็อกแรกที่พับไว้คือข้อมูลสภาพแวดล้อมที่ Geno ใส่ให้ทุก session ต่อด้วย prompt ของคุณ และโน้ตของ hook ที่ไฮไลต์
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/hook-user-prompt-submit.jsonl#line=2
+                    select: messages[0]
+                    collapse: ['content[0].text']
+                    highlight: ['content[1].text', 'content[2].text']
               - lane: model
                 beat:
                   title: Model ตอบโดยรู้ว่าอยู่ branch ไหน
-                  text: "model ได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
+                  text: >-
+                    model ได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: main` ในข้อความ user เดียวกัน คำว่า `[Geno]` บอก model ว่าเป็นโน้ตจาก Geno ไม่ใช่สิ่งที่คุณพิมพ์
+                    การ์ดข้างล่างเป็น event หนึ่งใน stream ของคำตอบจากการบันทึกเดียวกับการ์ดก่อน model ส่งข้อความทีละประโยค
+                    ประโยคแรกที่ไฮไลต์ใช้ชื่อ branch จาก hook ประโยคถัดไป (อยู่ใน event ถัดไป ไม่อยู่ในการ์ด) แนะนำให้ push ขึ้น feature branch แล้วเปิด pull request
                   from: model
                   to: engine
-                  end: Model ตอบต่อ
+                  end: Model ตอบโดยใช้ข้อมูลจาก hook
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/hook-user-prompt-submit.jsonl#line=3
+                    select: '[2]'
+                    highlight: [data.delta.text]
                 do: >-
-                  model ได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"
-                  ในข้อความผู้ใช้เดียวกัน แล้วตอบโดยรู้ว่าอยู่ branch ไหน
+                  model ได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: main"
+                  ในข้อความผู้ใช้เดียวกัน แล้วตอบโดยรู้ว่าอยู่ branch ไหน ในการบันทึก model ตอบเป็นข้อความและจบด้วย `stop_reason: end_turn`
                 ref: packages/core/src/hooks.ts#hookNoteText
-                end: { turn: continues }
+                emits: [end_turn]
+                end: { turn: done, reason: end_turn }
 ---
 
-UserPromptSubmit เป็น hook ตัวเดียวที่ทำงานก่อน model เห็นอะไรเลย และทำงานเฉพาะกับ prompt ที่ผู้ใช้พิมพ์
-ข้อความ steer turn ที่ถูกปลุก และการ resume ไม่ผ่าน hook นี้ (`isTyped`)
+UserPromptSubmit เป็น [hook](/start/glossary/) ที่ทำงานกับทุก prompt ที่ผู้ใช้พิมพ์ ก่อน model เห็น prompt นั้น (SessionStart hook ทำงานก่อนนั้นอีก ตอน session เปิดครั้งแรกใน engine)
+ข้อความ [steer](/start/glossary/) turn ที่[ถูกปลุก](/start/glossary/) และการเปิด session เดิมทำต่อ (resume) ไม่ผ่าน hook นี้ (`isTyped` ในโค้ดเป็นตัวตัดสิน)
 
 สิ่งที่ควรสังเกต
 
-- **บล็อกแล้ว prompt หายจากบทสนทนาของ model** `KEEPS_PENDING_PROMPT.blocked` เป็น false
+- **บล็อกแล้ว prompt หายจากบทสนทนาของ model** Geno ไม่เก็บ prompt ที่ถูกบล็อกไว้ส่งต่อ (`KEEPS_PENDING_PROMPT.blocked` เป็น false)
   ต่างจาก error ของผู้ให้บริการที่ prompt ยังค้างอยู่ให้ไปกับข้อความถัดไป
 - **โน้ตไปและหายพร้อม prompt** โน้ตของ UserPromptSubmit ถูกวางไว้ข้าง prompt ของมัน ถ้า prompt ถูกทิ้ง โน้ตก็ถูกทิ้งด้วย
 - **โน้ตอยู่ใน log** event `hook-context` ทำให้ resume หรือเล่นซ้ำส่ง byte เดิมให้ model โดยไม่ต้องรัน hook ใหม่

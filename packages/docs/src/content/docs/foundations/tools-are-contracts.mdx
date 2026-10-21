@@ -54,7 +54,7 @@ model อ่านคำอธิบายนี้ทุก request เหม�
 ไม่มีกลไกพิเศษ model เขียนบล็อก `tool_use` ในคำตอบ มี `id` `name` และ `input`
 แล้วจบคำตอบด้วย `stop_reason: tool_use` ซึ่งแปลว่า "รอผลอยู่"
 `loopStep` ใน `packages/core/src/loop.ts` เห็น `tool_use` ที่ยังไม่มีผล จึงตัดสินว่าขั้นต่อไปคือรัน tool
-ตัวอย่างคำตอบที่ขอ tool สามตัวพร้อมกันอยู่ใน[หน้าที่ 6](/foundations/what-comes-back/)
+ตัวอย่างคำตอบที่ขอ tool สามตัวพร้อมกันอยู่ใน[Model ตอบกลับอะไรได้บ้าง](/foundations/what-comes-back/)
 
 ## tool ที่ส่งแค่ชื่อ: `tool_search`
 
@@ -63,7 +63,9 @@ Geno มี tool หลายสิบตัว ถ้าส่ง schema คร
 
 - **core** ส่ง schema เต็มทุกครั้ง: `agent` `ask_user` `bash` `check` `edit` `glob` `grep` `list` `read` `skill` `todo` (`CORE_TOOL_NAMES`)
 - **deferred** ไม่อยู่ใน `tools` แต่ชื่อกับประโยคแรกของคำอธิบายอยู่ในคำอธิบายของ `tool_search` ซึ่งเป็น tool ตัวสุดท้าย
-  Geno ใช้วิธีนี้เมื่อประหยัดได้อย่างน้อย 300 token หรือเมื่อมี MCP tool ซึ่ง deferred เสมอ
+  Geno ใช้วิธีนี้เมื่อประหยัดได้อย่างน้อย 300 token หรือเมื่อมี MCP tool (tool จากโปรแกรมภายนอกที่ต่อกับ Geno ผ่าน MCP) ซึ่ง deferred เสมอ
+  แต่ MCP tool ไม่อยู่ในคำอธิบายของ `tool_search` Geno บอกชื่อของมันในโน้ต `[Geno]` เมื่อ server ต่อติด
+  คำอธิบายของ `tool_search` จึงไม่เปลี่ยนตามจำนวน server แล้ว model โหลด MCP tool ด้วย `tool_search` แบบเดียวกัน
 
 ในรายการ A05 ผู้ใช้ถามหัวข้อของหน้าเว็บ `web_fetch` เป็น deferred model จึงขอโหลดก่อน
 
@@ -74,13 +76,13 @@ Geno มี tool หลายสิบตัว ถ้าส่ง schema คร
 <Payload of={frontmatter.payloads.searchResult} />
 
 สังเกตว่า `tools` ของ request ถัดไปไม่เปลี่ยน schema มาถึง model เป็นข้อความใน `tool_result` เท่านั้น
-ทำให้ส่วนต้นของ request ที่ cache ไว้ไม่พัง ถ้า model เรียก deferred tool ก่อนโหลด Geno ตอบเป็น error ว่าให้เรียก `tool_search` ก่อน (`unloadedCallError`)
+ทำให้ส่วนต้นของ request ที่ cache ไว้ไม่พัง ถ้า model เรียก deferred tool ก่อนโหลด Geno โหลดให้แล้วรัน call นั้นเลย และแนบ schema ไว้หน้าผล (`autoLoadedText`) ถ้า input ไม่ตรง schema Geno ไม่รัน และตอบ error ที่มี schema ให้ model เรียกใหม่ (`unloadedInputError`)
 ผลข้างเคียงหนึ่งคือ qwen เขียนตัวเลขและ boolean ของ tool แบบนี้เป็นสตริง Geno จึงแปลงตาม schema ให้ก่อนรัน (`coerceToSchema`)
 ดูทัวร์ [โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
 
 ## Geno ตรวจ input ก่อนรันเสมอ
 
-model เขียน JSON ผิดได้ ทุก executor จึงตรวจ input กับ schema ของตัวเองก่อน (`executor` ใน `packages/engine/src/tools/context.ts`)
+model เขียน JSON ผิดได้ ทุก executor (ฟังก์ชันใน engine ที่รัน tool แต่ละตัว) จึงตรวจ input กับ schema ของตัวเองก่อน (`executor` ใน `packages/engine/src/tools/context.ts`)
 ถ้าไม่ผ่าน tool ไม่ทำงาน และ model ได้ error ว่า `invalid input: …`
 
 ตัวอย่างจริงจากรายการ A35 รอบที่ 1 model ส่ง `files` เป็นสตริงที่หน้าตาเหมือน JSON array แทนที่จะเป็น array
@@ -96,7 +98,13 @@ model ลองอีกสามครั้ง เปลี่ยน path เ�
 
 ## โหมดปฏิเสธตอนรัน ไม่ใช่ตอนส่ง
 
-ทุกโหมด (Ask Auto Plan) ได้ `tools` ชุดเดียวกันและ system prompt เดียวกัน
+Geno มีสามโหมดที่คุณเลือกในแผง
+
+- **Ask** ถามคุณก่อนคำสั่งเสี่ยง
+- **Auto** รันสิ่งที่ปลอดภัยและคำสั่งทั่วไปใน sandbox เอง ให้ classifier (การเรียก model แยก) ตัดสินคำสั่งที่กฎจับว่าเสี่ยง และถ้า classifier ไม่อนุญาต model ได้เหตุผลกลับไปเป็นผลของ tool แทนการ์ด
+- **Plan** อ่านอย่างเดียว
+
+ทุกโหมดได้ `tools` ชุดเดียวกันและ system prompt เดียวกัน
 โหมด Plan บอก model ผ่านโน้ต `[Geno]` ว่าแก้อะไรไม่ได้ และถ้า model ยังเรียก `edit` Geno ปฏิเสธตอนรัน
 ผลที่ได้คือ `tool_result` ที่บอกเหตุผล ไม่ใช่ tool ที่หายไปจากรายการ ดูทัวร์ [โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์](/scenarios/perm/plan-refuses/)
 

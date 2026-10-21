@@ -19,9 +19,9 @@ export const RECORDED = 'packages/docs/src/data/recorded';
 for (const name of ['GIT_AUTHOR_DATE', 'GIT_COMMITTER_DATE']) process.env[name] = '2026-10-01T09:00:00Z';
 
 const FIXED_AT = '2026-10-12T09:00:00.000Z';
-const NORMALIZED = 'temp paths, session ids, Geno-made call ids, timestamps and subagent durations';
+const NORMALIZED = 'temp paths, session ids, Geno-made call ids, timestamps, the session date, process ids and subagent durations';
 
-/** Replaces what differs between runs: temp paths, session and call ids, clock times and durations. */
+/** Replaces what differs between runs: temp paths, session and call ids, clock times, dates, pids and durations. */
 function normalizer(roots: { readonly workspace: string; readonly home: string; readonly tmp: string; readonly scratch: RegExp }) {
   const ids = new Map<string, string>();
   const idFor = (found: string, make: (n: number) => string): string => {
@@ -33,6 +33,13 @@ function normalizer(roots: { readonly workspace: string; readonly home: string; 
     return id;
   };
   const hex = (n: number, width: number) => n.toString(16).padStart(width, '0');
+  // Each pid becomes 4001, 4002 and so on, whatever its length; a pid already replaced stays.
+  const pids = new Map<string, string>();
+  const pidFor = (pid: string): string => {
+    if ([...pids.values()].includes(pid)) return pid;
+    if (!pids.has(pid)) pids.set(pid, String(4000 + pids.size + 1));
+    return pids.get(pid)!;
+  };
   return (text: string): string => {
     let out = text.replace(roots.scratch, (_, start: string) => `/tmp/gcode-1000/${idFor(start, (n) => hex(n, 8))}`);
     out = out.replaceAll(roots.workspace, '/home/dev/shop').replaceAll(roots.home, '/home/dev').replaceAll(roots.tmp, '/tmp');
@@ -40,6 +47,8 @@ function normalizer(roots: { readonly workspace: string; readonly home: string; 
     for (const [found, id] of ids) if (found.includes('-')) out = out.replaceAll(`-${found.slice(0, 8)}`, `-${id.slice(0, 8)}`);
     out = out.replace(/toolu_gcode_[0-9a-f]{32}/g, (found) => idFor(found, (n) => `toolu_gcode_${hex(n, 32)}`));
     out = out.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, FIXED_AT);
+    out = out.replace(/Date: \d{4}-\d{2}-\d{2}/g, `Date: ${FIXED_AT.slice(0, 10)}`);
+    out = out.replace(/\(pid (\d+)\)/g, (_, pid: string) => `(pid ${pidFor(pid)})`);
     return out.replace(/duration=(\\?)"\d+s/g, 'duration=$1"1s');
   };
 }
@@ -86,7 +95,7 @@ function lines(flow: Flow, { exchanges, editor = [] }: Recording, engineCommit: 
   return [
     header,
     ...asked(0),
-    ...exchanges.flatMap((exchange, i) => [{ id: i + 1, url: exchange.url, request: exchange.body }, exchange.aborted === true ? { id: i + 1, aborted: "the engine aborted this request before any reply came" } : { id: i + 1, status: exchange.status, response: exchange.response }, ...asked(i + 1)]),
+    ...exchanges.flatMap((exchange, i) => [{ id: i + 1, url: exchange.url, request: exchange.body }, exchange.aborted === true ? { id: i + 1, aborted: "the engine aborted this request before any reply came" } : { id: i + 1, status: exchange.status, ...(exchange.headers === undefined ? {} : { headers: exchange.headers }), response: exchange.response }, ...asked(i + 1)]),
   ].map((line) => JSON.stringify(line));
 }
 
@@ -102,8 +111,9 @@ async function main(): Promise<void> {
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${flow.name}: no end after 60s`)), 60_000).unref());
     const recording = await Promise.race([flow.run(), timeout]);
     const { exchanges, workspace, home } = recording;
-    const failed = exchanges.findIndex((exchange) => exchange.status !== 200 && exchange.aborted !== true);
-    if (failed >= 0) throw new Error(`${flow.name}: request ${failed + 1} got HTTP ${exchanges[failed]!.status}: ${exchanges[failed]!.response.slice(0, 400)}`);
+    // The fake answers a request its script has no answer for with a 400 that names itself; a flow's own HTTP errors stay.
+    const missed = exchanges.findIndex((exchange) => exchange.status !== 200 && exchange.response.includes('fake model: '));
+    if (missed >= 0) throw new Error(`${flow.name}: request ${missed + 1} got HTTP ${exchanges[missed]!.status}: ${exchanges[missed]!.response.slice(0, 400)}`);
     const normalize = normalizer({ workspace, home, tmp, scratch });
     const text = `${normalize(lines(flow, recording, engineCommit).join('\n'))
       .split('\n')

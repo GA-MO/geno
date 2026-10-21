@@ -72,6 +72,6 @@
   do: >-
     `headerOf` เปลี่ยนหัวข้อเป็น "failed after ..." `missingReply` เห็นแถบ error อยู่แล้วจึงไม่แสดงประกาศ Continue และ Retry
     ถ้ามีข้อความรอในคิว ข้อความนั้นกลับไปอยู่ในช่องพิมพ์แทนที่จะถูกส่ง
-  sees: หัวข้อ "failed after 41s" ปุ่ม Send กลับมาแทน Stop และแถบ error ยังอยู่ท้าย turn
+  sees: หัวข้อ "failed after <เวลา>" ปุ่ม Send กลับมาแทน Stop และแถบ error ยังอยู่ท้าย turn
   ref: packages/extension/src/chat/rail.ts#headerOf
   end: { turn: failed, reason: error }

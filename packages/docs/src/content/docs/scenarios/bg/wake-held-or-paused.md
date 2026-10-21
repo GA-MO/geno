@@ -1,6 +1,6 @@
 ---
 title: การปลุกถูกรอหรือถูกพัก
-description: รายงานมาถึงตอน session ว่าง แต่ประตูของตัวปลุกยังไม่เปิด เพราะมีการ์ดค้าง ไม่มีหน้าต่าง turn ก่อนจบด้วย error หรือปลุกครบ 12 ครั้งแล้ว สิ่งที่มาถึงรออยู่ใน log
+description: รายงานมาถึงตอน session ว่าง แต่ Geno ยังเริ่ม turn เองไม่ได้ เพราะมีการ์ดค้าง ไม่มีหน้าต่าง turn ก่อนจบด้วย error หรือปลุกครบ 12 ครั้งแล้ว สิ่งที่มาถึงรออยู่ใน log
 scenario:
   surface: vscode
   given:
@@ -14,9 +14,22 @@ scenario:
     - id: report
       beat:
         title: explore รายงานเสร็จ
-        text: session นี้ไม่มี turn ทำงาน แต่รอ explore ที่เริ่มไว้ใน turn ก่อน explore ส่งรายงานแล้วจบ
+        text: >-
+          session นี้ไม่มี turn ทำงาน แต่รอ explore ที่เริ่มไว้ใน turn ก่อน (explore คือ subagent สำหรับค้นโค้ด
+          เป็น session ลูกที่ต้องจบด้วย tool `report` ที่ส่งรายงานกลับมา) explore ส่งรายงานแล้วจบ
+          การ์ดข้างล่างเป็น stream จริงจากการบันทึกที่ explore เบื้องหลังรายงานหลัง turn ของแม่จบไปแล้วแบบเดียวกัน:
+          block `tool_use` ชื่อ `report` และข้อความรายงานที่ stream ตามมา
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=9
+            select: '[1]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=9
+            select: '[2]'
+            highlight: [data.delta.partial_json]
       lane: child@explore
       at: model
       do: >-
@@ -28,7 +41,9 @@ scenario:
     - id: logged
       beat:
         title: Geno บันทึกรายงานลง log ทันที
-        text: ไม่มี turn รับรายงาน Geno จึงบันทึกมันลง log ก่อน แล้วค่อยดูว่าปลุกได้ไหม
+        text: >-
+          ไม่มี turn รับรายงาน Geno จึงบันทึกมันลง log ก่อน แล้วค่อยดูว่าปลุกได้ไหม ปลุกคือ engine เริ่ม turn ใหม่เอง
+          โดยไม่มีใครพิมพ์ เพื่อให้ model อ่านสิ่งที่มาถึง
         from: engine
         to: engine
       lane: server
@@ -42,7 +57,11 @@ scenario:
     - id: gate
       beat:
         title: Geno ดูว่าปลุกได้ไหม
-        text: Geno ไล่กฎตามลำดับ การปลุกปิดอยู่ไหม มี turn รัน การปลุกถูกพัก มีการ์ดค้าง คุณกำลังพิมพ์ หรือไม่มีหน้าต่าง
+        text: >-
+          ก่อนปลุก Geno ผ่านประตู คือชุดเงื่อนไขที่ไล่ตามลำดับ การปลุกปิดอยู่ไหม มี turn รัน การปลุกถูกพัก
+          มีการ์ด permission ค้างรอคุณ คุณกำลังพิมพ์ ยังไม่ครบ 2 วินาทีที่รอให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว
+          หรือไม่มีหน้าต่าง VS Code ต่ออยู่ ข้อแรกที่ตรงเป็นคำตอบ
+          `hold` คือรอจนเงื่อนไขนั้นหาย `paused` คือพักจนคุณส่ง prompt
         from: engine
         to: engine
         ask: ปลุกได้ไหม
@@ -62,7 +81,7 @@ scenario:
               - lane: server
                 beat:
                   title: รอ เพราะมีการ์ดค้าง
-                  text: subagent อีกตัวของ session นี้รอการ์ด permission Geno ไม่ให้ turn ใหม่แทรกขณะคุณตัดสินใจ
+                  text: ถ้ามีลูกอีกตัวของ session นี้ที่รอการ์ด permission อยู่ Geno ไม่ให้ turn ใหม่แทรกขณะคุณตัดสินใจ
                   from: engine
                   to: engine
                 at: tasks
@@ -117,10 +136,12 @@ scenario:
               - lane: server
                 beat:
                   title: พัก เพราะ turn ก่อนจบด้วย error
-                  text: turn ล่าสุดจบด้วย Stop ขีดจำกัด หรือ error อื่น การปลุกพักไว้จนคุณส่ง prompt ทางนี้ไม่มีอะไรรอต่อ แผง Tasks จึงไม่บอกว่าพัก
+                  text: >-
+                    turn ล่าสุดจบด้วย Stop ขีดจำกัด หรือ error อื่น การปลุกพักไว้จนคุณส่ง prompt ทางนี้ไม่มีอะไรรอต่อ (ถ้า turn ที่ Stop คือ turn ที่เริ่ม explore เอง explore ถูกหยุดด้วย Geno บันทึกว่ามันจบ แต่ไม่มีรายงานส่งให้ model)
+                    แผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) จึงไม่บอกว่าพัก
                   from: engine
                   to: engine
-                  sees: แถวของ session ขึ้นเหมือนงานที่จบแล้วตามปกติ
+                  sees: แถวของ session ขึ้นตามที่ turn นั้นจบ (Stopped หรือ Failed) ไม่มีบรรทัดบอกว่าการปลุกพัก
                 at: wakes
                 do: >-
                   turn ล่าสุดของ session จบด้วย error (ผู้ใช้กด Stop ขีดจำกัด หรือ error อื่น) `wakePauseOf` ตอบว่าพักไว้จนผู้ใช้ส่ง prompt
@@ -133,7 +154,7 @@ scenario:
                 do: >-
                   แผง Tasks แสดงข้อความพักเฉพาะเมื่อ session ยังรออย่างอื่นอยู่ หรือเมื่อพักเพราะครบเพดาน
                   ในทางนี้ explore รายงานแล้วและไม่มีอะไรรอต่อ งานของ session จึงไม่แสดงอะไรเกี่ยวกับรายงานที่มาถึง
-                sees: แถวของ session ขึ้นเหมือนงานที่จบแล้วตามปกติ ไม่มีบรรทัด "Wake-ups paused after Stop"
+                sees: แถวของ session ขึ้นตามที่ turn นั้นจบ (Stopped หรือ Failed) ไม่มีบรรทัด "Wake-ups paused after Stop"
                 ref: packages/extension/src/chat/lanes-model.ts#taskRowOf
               - lane: user
                 beat:
@@ -141,9 +162,25 @@ scenario:
                   text: รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก prompt ของคุณยังปลดการพักด้วย
                   from: you
                   to: panel
-                  end: prompt ของคุณพารายงานไป
                 do: ภายหลังผู้ใช้ส่ง prompt ใหม่ใน session นี้
               - lane: loop
+                beat:
+                  title: Geno ส่งรายงานไปกับ prompt ของคุณ
+                  text: >-
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model ในคำขอแรกของ turn นี้ ข้อความสุดท้ายมีรายงานในรั้ว `<subagent_report>`
+                    (กรอบที่บอก model ว่าเป็นข้อมูล ไม่ใช่คำสั่ง) ตามด้วย prompt ของคุณ model จึงอ่านทั้งสองอย่างพร้อมกัน
+                    สองบล็อกที่ไฮไลต์ในการ์ดคือรายงานกับ prompt การ์ดข้างล่างเป็นคำขอจริงจากการรันที่คุณกด Stop
+                    ขณะ review รันเบื้องหลัง รายงานของ review เข้า log หลัง turn จบ แล้วไปกับ prompt ถัดไปแบบเดียวกัน
+                    ในการรันนั้นรายงานมีสถานะ `cancelled` เพราะ Stop หยุด review ด้วย
+                  from: engine
+                  to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
+                    quote: "status=\"cancelled\""
+                    select: messages[-1]
+                    highlight: ['content[1].text', 'content[2].text']
+                  end: prompt ของคุณพารายงานไป
                 at: drive
                 do: >-
                   รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก model อ่านทั้งสองอย่างพร้อมกัน prompt ของผู้ใช้ยังปลดการพักด้วย
@@ -157,14 +194,14 @@ scenario:
               - lane: server
                 beat:
                   title: พัก เพราะปลุกครบ 12 ครั้ง
-                  text: นับจาก prompt ล่าสุดของคุณ session ถูกปลุกไปแล้ว 12 ครั้งในหนึ่งชั่วโมง งานย้ายไปกลุ่ม Needs you
+                  text: นับจาก prompt ล่าสุดของคุณ session ถูกปลุกไปแล้ว 12 ครั้งภายในหนึ่งชั่วโมงที่ผ่านมา งานย้ายไปกลุ่ม Needs you
                   from: engine
                   to: panel
                   sees: ป้าย "Wake-ups paused" และบรรทัด "Paused after 12 wake-ups in an hour"
                   end: รอคุณใน Needs you
                 at: wakes
                 do: >-
-                  นับจาก prompt ล่าสุดของผู้ใช้ session ถูกปลุกไปแล้ว 12 ครั้งในหนึ่งชั่วโมง `wakePauseOf` ตอบ `cap` ประตูตอบ `paused`
+                  นับจาก prompt ล่าสุดของผู้ใช้ session ถูกปลุกไปแล้ว 12 ครั้งภายในหนึ่งชั่วโมงที่ผ่านมา `wakePauseOf` ตอบ `cap` ประตูตอบ `paused`
                 ref: packages/core/src/wake.ts#wakesInWindow
                 emits: [paused]
                 phase: idle
@@ -214,9 +251,16 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าผลของ explore
-        text: model อ่านรายงานแล้วเขียนผลถึงคุณ
+        text: >-
+          model อ่านรายงานแล้วเขียนผลถึงคุณ ในการบันทึกเดียวกับการ์ดของ explore model ตอบว่า "parseVersion is called in
+          src/cli.ts:3 and twice in src/update.ts:3." แล้วจบคำตอบด้วย `end_turn` (การ์ด: event ท้าย stream ที่บอกเหตุที่หยุด)
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/background-wake.jsonl#line=11
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
       lane: model
       do: >-
         model อ่านรายงานของ explore แล้วเล่าผลให้ผู้ใช้ จบด้วย `stop_reason: end_turn`

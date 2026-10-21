@@ -16,8 +16,8 @@ scenario:
       beat:
         title: "Model ขอรัน pnpm test"
         text: >-
-          model อยากรู้ว่าเทสต์ผ่านไหม จึงขอรันคำสั่งด้วย `bash` และจบคำตอบด้วย tool_use run จริงด้านล่างขอรัน `npm test`
-          แบบเดียวกัน
+          model อยากรู้ว่าเทสต์ผ่านไหม จึงขอรันคำสั่งด้วย tool `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+          การ์ดข้างล่างมาจาก run จริงที่ขอรัน `npm test` แบบเดียวกัน ดู `command` ใน `input` ที่ไฮไลต์ไว้
         from: model
         to: engine
         sees:
@@ -71,8 +71,9 @@ scenario:
       beat:
         title: "Geno ตรวจกฎแล้วไม่ต้องถาม"
         text: >-
-          ไม่มีกฎของ workspace ตรงกับคำสั่ง และ `pnpm test` เป็น script ของโปรเจกต์ที่อยู่ในรายการคำสั่งปลอดภัย
-          จึงไม่มีการ์ด ไม่มี classifier และไม่มีบันทึกการอนุญาต
+          ไม่มีกฎของ workspace ตรงกับคำสั่ง และ `pnpm test` เป็น script ของโปรเจกต์ที่อยู่ในรายการคำสั่งปลอดภัย (safe list)
+          จึงไม่มีการ์ดถามคุณในโหมด Ask ไม่มี classifier ซึ่งเป็นการเรียก model อีกครั้งที่โหมด Auto ใช้ตัดสินคำสั่ง
+          และไม่มีบันทึกการอนุญาตติดไปกับผล
         from: engine
         to: engine
       do: >-
@@ -87,13 +88,16 @@ scenario:
       beat:
         title: "pnpm test รันใน sandbox"
         text: >-
-          คำสั่งรันใน workspace ในกลุ่ม process ของตัวเอง นานสุด 120 วินาที sandbox ยังจำกัดการเขียนไว้ใน workspace
-          กับไดเรกทอรีชั่วคราว และปิดเครือข่ายถ้าไม่ได้อนุญาตโดเมนไว้
+          คำสั่งรันใน workspace ในกลุ่ม process ของตัวเอง นานสุด 120 วินาที ภายใน sandbox ซึ่งเป็นกรอบของระบบปฏิบัติการ
+          ที่จำกัดการเขียนไว้ใน workspace กับไดเรกทอรีชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต
+          ค่าเริ่มต้นมี host ของ package registry และ GitHub (`PACKAGE_HOSTS`) ปิดได้ด้วย `gcode.sandbox.packageHosts`
+          ถึงไม่ต้องถามคุณ sandbox ก็ยังกันอยู่
         from: engine
         to: machine
       do: >-
         sandbox ห่อคำสั่ง แล้ว `runShell` รันใน workspace ใน process group ของตัวเอง เวลาสูงสุด 120 วินาที
-        sandbox ยังจำกัดการเขียนไว้ใน workspace และไดเรกทอรีชั่วคราว และปิดเครือข่ายถ้าไม่ได้อนุญาตโดเมนไว้
+        sandbox ยังจำกัดการเขียนไว้ใน workspace และไดเรกทอรีชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต
+        ซึ่งค่าเริ่มต้นมี `PACKAGE_HOSTS` (packages/core/src/agent.ts)
       ref: "packages/engine/src/tools/agent.ts#\"const result = await tools.sandbox.run(command, {\""
 
     - id: exit
@@ -119,8 +123,9 @@ scenario:
                 beat:
                   title: "เทสต์ผ่าน exit code 0"
                   text: >-
-                    ผลคือ output ตามด้วย exit code 0 บรรทัดใน output ที่ปลอมเป็นข้อความของ Geno ถูกเปลี่ยนวงเล็บ hook หลังรัน tool
-                    ได้อ่านผลก่อน call ถัดไป ถ้ามี
+                    ผลคือ output ตามด้วย `[exit code 0]` ถ้า output มีบรรทัดที่ขึ้นต้นด้วย `[Geno` Geno เปลี่ยนวงเล็บของบรรทัดนั้น
+                    เพื่อไม่ให้ output ของคำสั่งแอบอ้างเป็นโน้ตของ Geno ถ้าคุณตั้ง hook ไว้ (คำสั่ง shell ที่ Geno รันเมื่อเกิดเหตุการณ์)
+                    hook หลังรัน tool ได้อ่านผลก่อน call ถัดไป
                   from: machine
                   to: engine
                 do: >-
@@ -141,7 +146,8 @@ scenario:
                 beat:
                   title: "เทสต์ล้ม exit code 1"
                   text: >-
-                    ผลขึ้นต้นด้วย Exit code 1 แล้วตามด้วย output คำสั่งที่ล้มเหลวเป็นผลธรรมดา ไม่ใช่การปฏิเสธ turn จึงไม่หยุด
+                    ผลขึ้นต้นด้วย Exit code 1 แล้วตามด้วย output และมีสถานะ error คำสั่งที่ล้มเหลวเป็นผลธรรมดา
+                    ไม่ใช่การปฏิเสธ turn จึงไม่หยุด
                   from: machine
                   to: engine
                 do: >-
@@ -162,7 +168,7 @@ scenario:
                 beat:
                   title: "เทสต์ค้างจนครบเวลา Geno ฆ่าทิ้ง"
                   text: >-
-                    ครบ 120 วินาที model ขอได้ถึง 600 Geno ฆ่าทั้งกลุ่ม process ผลขึ้นต้นด้วย Killed after 120 seconds ตามด้วย
+                    ครบ 120 วินาที (ค่าตั้งต้น model ขอเพิ่มได้ถึง 600 ด้วย `timeout_seconds`) Geno ฆ่าทั้งกลุ่ม process ผลขึ้นต้นด้วย Killed after 120 seconds ตามด้วย
                     output ที่ได้ก่อนถูกฆ่า
                   from: engine
                   to: machine
@@ -188,35 +194,67 @@ scenario:
       beat:
         title: "ผลกลับมาที่แชต"
         text: >-
-          ขั้นของคำสั่งหยุดหมุน ขึ้นเครื่องหมายตามผล และ output พับอยู่ข้างใต้
+          ขั้นของคำสั่งหยุดหมุน ขึ้นเครื่องหมายตามผล (ถูกเมื่อผ่าน กากบาทเมื่อล้มเหลวหรือเกินเวลา) และ output พับอยู่ข้างใต้
         from: engine
         to: panel
-        sees: { kind: step, label: pnpm test, status: done, output: "# pass 12\n# fail 0\n[exit code 0]" }
 
     - id: next
       lane: loop
       at: step
       beat:
-        title: "Model อ่านผลแล้วทำต่อ"
+        title: "Geno เรียก model อีกครั้ง"
         text: >-
-          Geno เรียก model ต่อ ถ้าคำสั่งล้มเหลว ผลไปถึง model พร้อมป้ายว่าเป็น error model อ่าน output แล้วหาทางแก้ต่อ
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอ `bash` ของ model และผลของคำสั่ง
+          ถ้าคำสั่งล้มเหลว `tool_result` มี `is_error: true` ด้วย การ์ดข้างล่างเป็นคำขอจริงจากการรันเดียวกับการ์ดแรก
+          ดูบล็อก `tool_use` ในข้อความ `assistant` และ `tool_result` ในข้อความ `user` ที่ไฮไลต์ไว้ `content` คือ output ของเทสต์
+          ในการ์ดนี้ไม่มี `is_error` เพราะคำสั่งจบด้วย exit code 0
         from: engine
         to: model
-        end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A01-fix-failing-test/1/requests.jsonl#seq=7
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[1].content[2]', '[2].content[0]']
+          quote: "[exit code 0]"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ผลของคำสั่งที่ล้มเหลวไปถึง model เป็น `tool_result`
-        ที่มี `is_error: true` model อ่าน output แล้วหาทางแก้ต่อ
+        ที่มี `is_error: true`
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model อ่านผลแล้วทำต่อ"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้คำสั่งต่อท้ายด้วย `| tail -30` exit code จึงเป็น 0
+          แต่ output บอกว่าเทสต์ล้ม 4 ตัว model อ่าน output แล้วขอรัน `bash` อีกครั้งเพื่อดูว่าตัวไหนล้ม
+          ดู `command` ใน `input` ที่ไฮไลต์ไว้
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A01-fix-failing-test/1/session.jsonl#seq=7
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: "model ทำต่อ"
+      do: >-
+        model อ่าน `tool_result` ของ `bash` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `bash` อีกตัว
+        และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 คำสั่งใน safe list ไม่ผ่านการตัดสินใดๆ นอกจากกฎของ workspace ไม่มีการ์ดในโหมด Ask และไม่มี classifier ในโหมด Auto
 safe list มีโปรแกรมอ่านอย่างเดียว (`ls`, `cat`, `grep`, `git status`, ...) และคำสั่งตรวจของโปรเจกต์ (`vitest`, `tsc`, `eslint`,
-`pnpm test`, `pnpm lint`, `pnpm build`, `node --version`, `node --check`, `node --test`, ...) คำสั่งอื่นต้องผ่านการขออนุญาต
-ตัวแปรที่ยังไม่ได้แทนค่า เช่น `$?` อยู่ได้เฉพาะในข้อความของ `echo`, `printf`, `test` และ `[` อย่าง `echo "exit: $?"`
-ถ้าตัวแปรเป็นชื่อโปรแกรม ไฟล์ของ redirect หรือ argument อื่น คำสั่งนั้นต้องถาม และ `printf -v` ที่ตั้งค่าตัวแปรก็ต้องถาม
+`pnpm test`, `pnpm lint`, `pnpm build`, `node --version`, `node --check`, `node --test`, ...) คำสั่งอื่นต้องผ่านการขออนุญาตในโหมด Ask
+ส่วนโหมด Auto รันคำสั่งอื่นใน sandbox เองถ้าไม่มีกฎอื่นจับ เช่น `pnpm add zod` และส่งที่กฎจับ เช่น `rm -rf dist` ให้ classifier
+ตัวแปรที่ยังไม่ได้แทนค่า เช่น `$?` อยู่ได้เฉพาะใน argument ของ `echo`, `printf`, `test`, `[`, `true`, `false` และ `for` อย่าง `echo "exit: $?"`
+ถ้าตัวแปรเป็นชื่อโปรแกรม ไฟล์ของ redirect หรือ argument อื่น คำสั่งนั้นไม่นับว่าอยู่ใน safe list และ `printf -v` ที่ตั้งค่าตัวแปรก็ไม่นับ
 ดู [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)
 
 สิ่งที่ควรสังเกต
