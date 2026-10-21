@@ -66,7 +66,8 @@ scenario:
                     session นี้มี block มาแล้ว 3 ครั้งติดกัน block คือ call ที่ classifier ตอบ `deny` หรือ `ask` หรือประเมินไม่ได้ แล้ว Geno ปฏิเสธ
                     และคำปฏิเสธกลับไปหา model ทุกครั้ง `rm -rf dist` ไปที่ classifier อีก และยังไม่ผ่าน ครั้งนี้จึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier
                     ในการบันทึกนี้ classifier คือ `claude-sonnet-5-5` (ตั้ง `GCODE_CLASSIFIER_PROVIDER=anthropic`) ซึ่งตอบเป็นข้อความโดยไม่เรียก `verdict` ทุกครั้ง
-                    ทั้ง 3 block จึงเป็นแบบประเมินไม่ได้ (model ลองซ้ำเองสองครั้ง แล้วคุณพิมพ์ "Try again.")
+                    ทั้ง 3 block จึงเป็นแบบประเมินไม่ได้ (model ขอครั้งแรก ลองซ้ำเองอีกครั้ง แล้วบอกคุณ คุณพิมพ์ "Try again." model จึงขอเป็นครั้งที่สาม)
+                    ครั้งที่สี่ที่ model ลองเองคือครั้งที่ขึ้นการ์ด
                     การ์ดคือคำขออนุญาตที่ Geno ส่งไปที่แผงแชต (`session/request_permission`) ดู `title` ที่ไฮไลต์ ซึ่งมีเหตุผลของ classifier ต่อท้าย
                   from: engine
                   to: engine
@@ -172,7 +173,7 @@ scenario:
         ปุ่ม Always allow ขึ้นเฉพาะเมื่อมีรูปแบบให้บันทึก (`rm -rf` นอก workspace และกฎ ask ไม่มี)
       sees: >-
         การ์ด "Run this command?" กับคำสั่ง และเช่น "Geno asks because it uses rm -rf of the workspace, its .git or a path outside it."
-        หรือบรรทัด "Auto could not decide: Runs a script whose effects are not visible in the conversation."
+        หรือบรรทัดเหตุผลของ classifier เช่น "Auto could not decide: the classifier gave no verdict."
         ปุ่ม [Allow] [Deny] [No, and tell the agent…] (และ [Always allow in this workspace] เมื่อมีรูปแบบให้บันทึก)
       ref: packages/extension/src/chat/render.ts#permissionCard
 

@@ -32,7 +32,8 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `drive` บันทึก event `mode` และ `notice` ของโหมด Auto ก่อนเรียก model ครั้งแรก โน้ตนี้บอก model ว่าคำสั่งนอกรายการปลอดภัยจะไปหา classifier แทนผู้ใช้
+        `drive` บันทึก event `mode` และ `notice` ของโหมด Auto ก่อนเรียก model ครั้งแรก โน้ตของ run นี้บอก model ว่าคำสั่งนอกรายการปลอดภัยจะไปหา classifier แทนผู้ใช้
+        โน้ตของ engine ปัจจุบันบอกว่าคำสั่งใน sandbox รันเลยถ้าไม่มีกฎติดธง ที่ติดธงไปหา classifier และถ้ามันปฏิเสธ ผลจะบอกเหตุผล
       ref: packages/core/src/notice.ts#MODE_NOTICES.auto
       phase: starting
 
@@ -41,9 +42,12 @@ scenario:
         title: "Geno ส่ง request แรก พร้อมโน้ตว่าอยู่ในโหมด Auto"
         text: >-
           โหมด Auto คือโหมดที่ Geno ไม่ถามคุณทุกครั้ง แต่ใช้ classifier ตัดสินแทน
-          classifier คือ model call แยกอีกก้อนที่อ่านคำขอของคุณกับคำสั่ง แล้วตอบว่าให้รัน ปฏิเสธ หรือถามคุณ
+          classifier คือ model call แยกอีกก้อนที่อ่านคำขอของคุณกับคำสั่ง แล้วตอบ allow deny หรือ ask
           request นี้มีคำขอของคุณ และโน้ต `[Geno]` ที่บอก model ว่าคำสั่งที่ไม่อยู่ในรายการปลอดภัย (โปรแกรมที่อ่านอย่างเดียว เช่น `ls` `cat`)
           จะถูกส่งให้ classifier ตัดสิน ในการ์ด ดูสองบล็อกที่ไฮไลต์: โน้ตของโหมด Auto และคำขอของคุณ
+          นี่คือโน้ตของ engine ตอนที่รัน run นี้ โน้ตของ engine ปัจจุบันต่างไป มันบอกว่าคำสั่งใน sandbox รันเลยถ้าไม่มีกฎติดธง
+          ที่ติดธงไปหา classifier และถ้า classifier ปฏิเสธ ผลจะบอกเหตุผล ให้ model หาทางอื่นหรือถามคุณในคำตอบ
+          (ใน engine ปัจจุบัน `ask` ของ classifier ไม่ขึ้นการ์ด แต่ปฏิเสธ call เหมือน `deny`)
         from: engine
         to: model
         sees:
@@ -110,6 +114,7 @@ scenario:
           มันตอบด้วย tool `verdict` คำตอบคือ deny ใช้เวลา 1.35 วินาที ค่าใช้จ่าย $0.00024 การ์ดข้างล่างคือผลของ tool ดู `verdict` และ `reason` ของ classifier
           คำปฏิเสธนี้ไม่จบ turn ในรอบนี้ผลของ tool บอก model ว่าห้ามลองซ้ำ ให้หาทางอื่น
           engine ปัจจุบันเขียนผลนี้ต่างไป คือบอกว่า classifier ของ Auto ปฏิเสธพร้อมเหตุผล ตามด้วยถ้อยคำแบบ dontAsk ของ Claude Code
+          (ข้อความท้ายผลที่ยืมจาก Claude Code บอก model ว่าหาทางอื่นที่สมเหตุผลได้ ห้ามเลี่ยงเจตนาของคำปฏิเสธ และถ้าจำเป็นจริงให้หยุดอธิบายคุณว่าต้องการสิทธิ์อะไร)
         from: engine
         to: model
         sees:
@@ -315,7 +320,8 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง (ตอนนี้จะเหลือครั้งเดียว)
+        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง
+        engine ปัจจุบันไม่ส่งสองบรรทัดนั้นถึง classifier (ดูสองขั้นที่จับ `.env` และที่เปิด server ข้างบน)
       ref: packages/core/src/loop.ts#loopStep
       emits: [end_turn]
       phase: ending

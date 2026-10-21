@@ -89,13 +89,15 @@ scenario:
         title: "pnpm test รันใน sandbox"
         text: >-
           คำสั่งรันใน workspace ในกลุ่ม process ของตัวเอง นานสุด 120 วินาที ภายใน sandbox ซึ่งเป็นกรอบของระบบปฏิบัติการ
-          ที่จำกัดการเขียนไว้ใน workspace กับไดเรกทอรีชั่วคราว และปิดเครือข่ายถ้าไม่ได้อนุญาตโดเมนไว้
+          ที่จำกัดการเขียนไว้ใน workspace กับไดเรกทอรีชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต
+          ค่าเริ่มต้นมี host ของ package registry และ GitHub (`PACKAGE_HOSTS`) ปิดได้ด้วย `gcode.sandbox.packageHosts`
           ถึงไม่ต้องถามคุณ sandbox ก็ยังกันอยู่
         from: engine
         to: machine
       do: >-
         sandbox ห่อคำสั่ง แล้ว `runShell` รันใน workspace ใน process group ของตัวเอง เวลาสูงสุด 120 วินาที
-        sandbox ยังจำกัดการเขียนไว้ใน workspace และไดเรกทอรีชั่วคราว และปิดเครือข่ายถ้าไม่ได้อนุญาตโดเมนไว้
+        sandbox ยังจำกัดการเขียนไว้ใน workspace และไดเรกทอรีชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต
+        ซึ่งค่าเริ่มต้นมี `PACKAGE_HOSTS` (packages/core/src/agent.ts)
       ref: "packages/engine/src/tools/agent.ts#\"const result = await tools.sandbox.run(command, {\""
 
     - id: exit

@@ -78,7 +78,9 @@ scenario:
           นี้แก้แล้วคำสั่งจะรัน (ถ้ามี) และโดเมนที่ workspace อนุญาต
           การ์ดคือข้อความที่ classifier ได้จริง แท็บแรกแสดงแท็ก `<user_request>` กับ `<agent_text>`
           แท็บสองแสดงท้ายของข้อความเดียวกัน คือ `<flagged_by>` (กฎที่ติด) และ `<command>`
-          classifier ไม่เห็นบทสนทนาทั้งหมด และไม่เห็นผลของ tool
+          classifier ไม่เห็นบทสนทนาทั้งหมด และไม่เห็นผลของ tool ถ้า session มีข้อความก่อนหน้านี้
+          ข้อความยังขึ้นต้นด้วยแท็ก `<conversation>` ที่มีข้อความเก่าของคุณไม่เกิน 6 ข้อความ ข้อความของ model ก่อนแต่ละข้อความนั้น และสรุปของ compaction ถ้ามี
+          (การบันทึกนี้เป็นข้อความแรกของ session จึงไม่มีแท็กนี้)
         from: engine
         to: engine
         sees:
@@ -94,6 +96,7 @@ scenario:
       do: >-
         `settle` เห็นคำตัดสิน `classify` จึงเตรียมข้อมูลให้ classifier: ข้อความล่าสุดที่ผู้ใช้พิมพ์ ข้อความล่าสุดของ model
         คำสั่ง กฎที่ติด เนื้อหาไฟล์ที่ session นี้แก้แล้วคำสั่งจะรัน (ถ้ามี) และโดเมนที่ workspace อนุญาต
+        และถ้ามีข้อความก่อนหน้า `conversationOf` ใส่ `<conversation>` ที่มีข้อความเก่าของผู้ใช้ไม่เกิน `CONVERSATION_MESSAGES` (6) ข้อความ และสรุปของ compaction
       ref: packages/engine/src/tools/agent.ts#settle
 
     - id: classify
@@ -102,7 +105,7 @@ scenario:
       beat:
         title: "Classifier ตัดสินคำสั่ง"
         text: >-
-          Geno เรียก model classifier และบังคับให้ตอบผ่าน tool `verdict` เป็นคำตัดสินพร้อมเหตุผล แต่ละครั้งรอได้ 8 วินาที
+          Geno เรียก model classifier ให้ตอบผ่าน tool `verdict` เป็นคำตัดสินพร้อมเหตุผล (บังคับเมื่อ model รองรับ) แต่ละครั้งรอได้ 8 วินาที
           ถ้าหมดเวลาหรือตอบไม่มีคำตัดสิน Geno ลองอีกครั้งเดียว
           ค่าใช้จ่ายนับรวมในงบของ turn ลองเลือกคำตอบของ classifier
         from: engine
@@ -110,7 +113,7 @@ scenario:
         ask: "classifier ตอบอะไร"
       do: >-
         `commandClassifier` เรียก model classifier (ค่าเริ่มต้น `qwen3.8-flash` บน Model Studio)
-        บังคับให้ตอบผ่าน tool `verdict` ภายใน 8 วินาที ถ้าหมดเวลาหรือตอบไม่มีคำตัดสินจะลองอีกครั้ง
+        ให้ตอบผ่าน tool `verdict` ภายใน 8 วินาที (บังคับด้วย `tool_choice` เมื่อ model รองรับ `forcesTool`) ถ้าหมดเวลาหรือตอบไม่มีคำตัดสินจะลองอีกครั้ง
         คำตอบ `ask` หรือ `deny` จริงไม่ลองซ้ำ ค่าใช้จ่ายของการเรียกนี้นับรวมในงบ $0.40 ของ turn
       ref: packages/engine/src/classifier.ts#commandClassifier
       fork:
@@ -158,12 +161,12 @@ scenario:
                     ใต้ขั้นของคำสั่งมีป้ายพร้อมเหตุผลของ classifier ป้ายแสดงเมื่อแชตวาดทุกขั้น
                   from: panel
                   to: you
-                  sees: { kind: step, label: rm -rf dist, status: done, note: Auto-approved · Removes build output that the build regenerates. }
+                  sees: { kind: step, label: rm -rf dist, status: done, note: "Auto-approved · Deletes dist, build output the user asked to remove." }
                 do: >-
                   `autoOf` อ่านบันทึกการอนุญาตใน `APPROVAL_META` แล้วติดป้าย Auto พร้อมเหตุผลไว้ใต้ขั้นของคำสั่ง
                   ป้ายแสดงเมื่อแผงวาดทุกขั้น (ตั้ง detail เป็น full หรือเปิด turn ออก)
                 sees: >-
-                  ป้าย "Auto-approved" ตามด้วยเหตุผลของ classifier เช่น "Removes build output that the build regenerates."
+                  ป้าย "Auto-approved" ตามด้วยเหตุผลของ classifier เช่น "Deletes dist, build output the user asked to remove."
                 ref: packages/extension/src/chat/render.ts#autoNote
               - lane: loop
                 at: step
@@ -358,16 +361,18 @@ scenario:
                 beat:
                   title: "Geno ถามคุณแทน"
                   text: >-
-                    ถ้าปฏิเสธแทน ทุกคำสั่งที่ติดธงจะไม่ได้รันเลย Geno จึงขึ้นการ์ดถามคุณทุกครั้ง และไม่นับเป็น block
+                    ถ้าปฏิเสธแทน ทุกคำสั่งที่ติดธงจะไม่ได้รันเลย Geno จึงขึ้นการ์ดถามคุณทันทีทุกครั้ง ไม่ต้องรอให้ block ครบ และไม่นับเป็น block
+                    การ์ดเป็นแบบเดียวกับโหมด Ask turn รอจนคุณกด Allow หรือ Deny
                   from: engine
                   to: panel
+                  end: "classifier ใช้ไม่ได้ turn รอคุณตอบการ์ด"
                 do: >-
                   `settle` ส่ง `ask` ที่มี `failure: 'unavailable'` ให้ PermissionRequest hook แล้วให้ผู้ใช้ผ่าน `approve`
                   และไม่นับเป็น block
                 ref: packages/engine/src/tools/agent.ts#settle
                 emits: [ask-user]
                 phase: waiting-user
-                goto: perm.auto-classifier-asks-user
+                end: { turn: waits, reason: ask-user }
 ---
 
 คำว่า classifier, safe list และ sandbox ดูความหมายได้ที่ [คำศัพท์](/start/glossary/)
