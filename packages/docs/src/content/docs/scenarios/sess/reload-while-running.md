@@ -24,7 +24,9 @@ scenario:
     - id: dispose
       beat:
         title: ส่วนขยายตัดการเชื่อมต่อ แต่ engine อยู่ต่อ
-        text: engine เป็น process แยกที่อยู่ต่อแม้หน้าต่างปิด
+        text: >-
+          ส่วนของ Geno ใน VS Code ปิดตัวไปพร้อมหน้าต่าง และตัดการเชื่อมต่อ socket กับ engine แต่ไม่ปิด engine
+          engine คือ process แยกที่เดิน turn และอยู่ต่อแม้หน้าต่างปิด
         from: panel
         to: engine
       lane: editor
@@ -37,20 +39,25 @@ scenario:
     - id: keeps
       beat:
         title: turn ทำงานต่อโดยไม่มีคนดู
-        text: ไม่มีใครแสดง session นี้ engine จึงทิ้งอัปเดตสด แต่ log เก็บทุกอย่าง และ engine เก็บ event ของ turn นี้ไว้เล่นซ้ำ
+        text: >-
+          อัปเดตสดคือข้อความที่ engine ส่งให้หน้าต่างวาดทันที เช่นคำที่ model เพิ่งเขียน ตอนนี้ไม่มีหน้าต่างไหนแสดง session นี้
+          engine จึงทิ้งอัปเดตเหล่านั้น แต่ session log บันทึกทุกอย่าง และ engine จำ event ทั้งหมดของแชตจนถึงตอนนี้ (ของเก่าใน log และของ turn นี้) กับข้อความที่ model
+          เขียนค้างไว้ในหน่วยความจำ เพื่อส่งซ้ำให้หน้าต่างที่มาเปิดทีหลัง
         from: engine
         to: engine
       lane: server
       at: updates
       do: >-
         engine เห็นว่าการเชื่อมต่อปิด ไม่มี editor แสดง session นี้แล้ว `Viewers.notify` จึงทิ้งอัปเดตไป
-        แต่ turn ทำงานต่อ log เก็บทุก event และ `live` เก็บ event ของ turn นี้กับข้อความที่ stream มาแล้วแต่ยังไม่ลง log
+        แต่ turn ทำงานต่อ log เก็บทุก event และ `live` เก็บ event ทั้งหมดของ session (log ที่อ่านตอนเริ่ม turn และ event ที่ turn นี้บันทึกเพิ่ม) กับข้อความที่ stream มาแล้วแต่ยังไม่ลง log
       ref: packages/engine/src/viewers.ts#Viewers.notify
 
     - id: activate
       beat:
         title: หน้าต่างใหม่ต่อ engine ตัวเดิม
-        text: ส่วนขยายตัวใหม่เห็นว่าหน้าต่างนี้เคยแสดง session ไว้ จึงต่อ engine ทันที การตั้งค่าเหมือนเดิม จึงได้ engine ตัวเดิม
+        text: >-
+          ส่วนขยายตัวใหม่เห็นว่าหน้าต่างนี้เคยแสดง session ไว้ จึงต่อ engine ทันทีโดยไม่รอคุณ ที่อยู่ socket ของ engine
+          คำนวณจากการตั้งค่า การตั้งค่าเหมือนเดิม จึงเจอ engine ตัวเดิมที่ turn ยังทำงานอยู่
         from: panel
         to: engine
       lane: editor
@@ -64,7 +71,7 @@ scenario:
     - id: load
       beat:
         title: แชตขอโหลด session ที่จำไว้
-        text: แชตขอ engine เล่น session นี้ซ้ำ
+        text: VS Code จำ id ของ session ที่หน้าต่างนี้แสดงไว้ จึงขอ engine โหลด session นั้น
         from: panel
         to: engine
       lane: editor
@@ -76,13 +83,16 @@ scenario:
     - id: replay
       beat:
         title: Geno เล่นซ้ำ turn ที่กำลังทำงาน
-        text: engine ส่ง event ของ turn ข้อความที่ stream ค้างไว้ การรอ และงานเบื้องหลัง อัปเดตสดรอจนเล่นซ้ำจบ แชตจึงเห็นตามลำดับ
+        text: >-
+          engine ส่งสิ่งที่ turn ทำไปแล้วให้แผงวาดใหม่ คือ event ทั้งหมดของแชตจนถึงตอนนี้ ข้อความที่ model เขียนค้างไว้ การรอเครือข่ายหรือ rate limit
+          ถ้ามี และคำสั่งเบื้องหลัง อัปเดตสดที่เกิดระหว่างนี้รอจนส่งซ้ำจบ แชตจึงเห็นทุกอย่างครั้งเดียวและตามลำดับ
+          คำตอบบอกด้วยว่า turn ยังทำงาน
         from: engine
         to: panel
       lane: server
       at: sessions
       do: >-
-        `session/load` เล่นซ้ำ event ของ turn ที่กำลังทำงานจาก `live` ตามด้วยข้อความที่ stream ค้างไว้ การรอ และงานเบื้องหลัง
+        `session/load` เล่นซ้ำ event ทั้งหมดของ session จาก `live` ตามด้วยข้อความที่ stream ค้างไว้ การรอ และงานเบื้องหลัง
         โดยกักอัปเดตสดไว้ข้างหลังการเล่นซ้ำ editor จึงเห็นแต่ละอัปเดตครั้งเดียวและตามลำดับ
         คำตอบมี `RUNNING_META` บอกว่า turn ยังทำงาน
       ref: "packages/engine/src/serve.ts#\"const replayed = viewers.show(id, self(), true);\""
@@ -91,7 +101,7 @@ scenario:
     - id: adopt
       beat:
         title: แผงรับช่วง turn
-        text: แผงเห็นว่า turn ยังทำงาน มันรับ turn เป็นของตัว ปุ่ม Stop ใช้ได้ ข้อความครึ่งแรกกลับมาแล้วข้อความใหม่ต่อท้าย
+        text: แผงเห็นว่า turn ยังทำงาน มันรับดูแล turn นั้นเหมือนเป็นคนเริ่มเอง ปุ่ม Stop ใช้ได้ ข้อความครึ่งแรกกลับมาแล้วข้อความใหม่ต่อท้าย
         from: panel
         to: you
         sees: บทสนทนาเดิม หัวข้อ "working" ข้อความครึ่งแรกของคำตอบตามด้วยส่วนที่ stream ต่อ และปุ่ม Stop แทนปุ่ม Send
@@ -115,7 +125,9 @@ scenario:
     - id: ends
       beat:
         title: turn จบ Geno บอกผ่าน Tasks
-        text: คำขอเดิมที่เริ่ม turn อยู่กับการเชื่อมต่อที่ปิดไปแล้ว engine จึงบอกการจบผ่านงานในแผง Tasks
+        text: >-
+          ปกติ turn จบเมื่อคำขอ `session/prompt` ที่เริ่ม turn ได้คำตอบ แต่คำขอนั้นอยู่กับการเชื่อมต่อที่ปิดไปแล้ว
+          engine จึงบอกการจบผ่านแผง Tasks (รายการ turn ของทุกแชต) VS Code เห็นงานของแชตนี้จบ แล้วบอกแผง
         from: engine
         to: panel
       lane: server
@@ -145,13 +157,13 @@ scenario:
         sees:
           kind: composer
           state: idle
-          header: worked for 1m 4s
+          header: worked for ...
         end: Turn จบ
       lane: panel
       at: rail
       do: >-
         turn ปิดเหมือน turn ที่ส่งจากหน้าต่างนี้ หัวข้อบอกเวลา และท้าย turn มี usage
-      sees: หัวข้อ "worked for 1m 4s" ปุ่ม Send กลับมา และแถวสรุป model token และค่าใช้จ่าย
+      sees: หัวข้อ "worked for" ตามด้วยเวลาที่ใช้ ปุ่ม Send กลับมา และแถวสรุป model token และค่าใช้จ่าย
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: done, reason: end_turn }
 ---
@@ -163,7 +175,7 @@ engine กับหน้าต่างเป็นคนละ process หน�
 | --- | --- | --- |
 | อัปเดตสด | ถูกทิ้ง | เล่นซ้ำจาก `live` |
 | ข้อความที่ stream ค้าง | อยู่ใน `live.text` | ส่งเป็นข้อความเดียว |
-| การ์ดขออนุญาตที่รอ | รอ editor ตัวใหม่ | ถามซ้ำในหน้าต่างใหม่ |
+| การ์ดขออนุญาต (การ์ดที่ถามว่าให้ tool ทำงานไหม) ที่รอ | รอ editor ตัวใหม่ | ถามซ้ำในหน้าต่างใหม่ |
 | การจบของ turn | ไม่มีใครรับคำตอบ | มาทางงานในแผง Tasks |
 
 สิ่งที่ควรสังเกต

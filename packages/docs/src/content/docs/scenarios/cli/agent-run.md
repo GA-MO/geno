@@ -14,7 +14,9 @@ scenario:
     - id: run
       beat:
         title: คุณรัน `gcode agent`
-        text: คุณขอให้ทิ้ง commit ล่าสุดทั้งหมด ค่าเริ่มต้นคือโหมด Ask เพิ่ม `--mode auto` หรือ `--non-interactive` ได้
+        text: >-
+          คุณขอให้ทิ้ง commit ล่าสุดทั้งหมด ค่าเริ่มต้นคือโหมด Ask เพิ่ม `--mode auto` ได้
+          หรือเพิ่ม `--non-interactive` สำหรับสคริปต์ที่ไม่มีใครตอบคำถาม สิ่งที่ปกติต้องถามจะถูกตัดสินทันที
         from: you
         to: panel
       lane: user
@@ -25,9 +27,18 @@ scenario:
     - id: setup
       beat:
         title: Geno เตรียม session ใน process นี้
-        text: ไม่มี engine แยก และไม่มี VS Code ไฟล์อ่านเขียนจากดิสก์ตรง Geno ตั้งขีดจำกัด 40 ครั้งและ $0.40 เลือกวิธีถามคุณบนเทอร์มินัล แล้วส่ง prompt ให้ model
+        text: >-
+          ไม่มี engine แยก และไม่มี VS Code ไฟล์อ่านเขียนจากดิสก์ตรง Geno ตั้งขีดจำกัดให้เรียก model ได้ไม่เกิน 40 ครั้ง และใช้เงินไม่เกิน $0.40 เลือกวิธีถามคุณบนเทอร์มินัล
+          แล้วส่ง prompt ให้ model ข้อความของคุณอยู่ท้ายข้อความแรกของคำขอ ต่อจากข้อมูลที่ Geno แนบ
+          การ์ดข้างล่างเป็นคำขอแรกจริงจาก `gcode agent` อีกรันที่ขอให้ลบ `build/` ด้วย `rm -rf`
+          บล็อกที่ไฮไลต์คือ prompt ของคุณ บล็อกก่อนหน้าคือข้อมูลที่ Geno แนบ
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A08-ask-risky-denied/1/requests.jsonl#seq=5
+          select: messages[0]
+          highlight: ['content[4]']
       lane: loop
       at: agent
       do: >-
@@ -51,10 +62,18 @@ scenario:
     - id: wants
       beat:
         title: Model ขอรัน `git reset --hard HEAD~1`
-        text: ข้อความของ model ออก stdout ทีละส่วน ทุก call ที่เริ่มพิมพ์บรรทัดของขั้น
+        text: >-
+          ข้อความของ model ออก stdout ทีละส่วน ทุก call ที่เริ่มพิมพ์บรรทัดของขั้น เช่น `> bash git reset --hard HEAD~1`
+          การ์ดข้างล่างเป็นคำตอบจริงจากรันเดียวกับการ์ดก่อน ซึ่ง model ขอรัน `rm -rf build && npm test` แทน
+          ดู `input` ที่ไฮไลต์
         from: model
         to: engine
-        sees: "> bash git reset --hard HEAD~1"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A08-ask-risky-denied/1/session.jsonl#seq=8
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input']
       lane: model
       do: >-
         model stream ข้อความสั้นๆ แล้วขอเรียก `bash` ด้วย `git reset --hard HEAD~1` จบด้วย `stop_reason: tool_use`
@@ -72,7 +91,10 @@ scenario:
     - id: judge
       beat:
         title: Geno จับคำสั่งด้วยกฎ git reset --hard
-        text: โหมด Ask ต้องถาม โหมด Auto ให้ classifier ตัดสิน และ non-interactive ปฏิเสธ
+        text: >-
+          คำสั่งนี้ทิ้ง commit และงานที่ยังไม่ commit ได้ กฎในตัวของ Geno จึงจับมัน โหมด Ask ต้องถาม โหมด Auto ให้ classifier
+          (การเรียก model แยกที่ตอบว่า allow ask หรือ deny) ตัดสิน และ non-interactive ปฏิเสธ
+          ทางเลือกข้างล่างเดินเฉพาะโหมด Ask (ค่าเริ่มต้น) กับ non-interactive ส่วนโหมด Auto ดูท้ายหน้า
         from: engine
         to: engine
         ask: ใครตอบ
@@ -120,7 +142,9 @@ scenario:
               - lane: tool
                 beat:
                   title: คำสั่งรันใน sandbox
-                  text: ไฟล์ใน workspace กลับไปเป็นของ commit ก่อนหน้า
+                  text: >-
+                    sandbox (กรอบของระบบปฏิบัติการที่ให้คำสั่งเขียนได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว) ยังครอบคำสั่งอยู่
+                    ไฟล์ใน workspace กลับไปเป็นของ commit ก่อนหน้า
                   from: engine
                   to: machine
                 at: shell
@@ -131,9 +155,17 @@ scenario:
               - lane: model
                 beat:
                   title: Model บอกว่าทิ้ง commit แล้ว
-                  text: model อ่านผลแล้วตอบ turn จบ
+                  text: >-
+                    model อ่านผลแล้วตอบ turn จบ การ์ดข้างล่างเป็นคำตอบจริงจาก `gcode agent` อีกรัน ที่ model อ่านผลของคำสั่ง git
+                    ที่รันแล้ว ตอบสรุป และจบด้วย `stop_reason: end_turn` ดู `text` ที่ไฮไลต์ซึ่งเป็นคำตอบที่พิมพ์ออก stdout
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A24-git-commit-safety/1/session.jsonl#seq=20
+                    select: content
+                    collapse: ['[0].thinking']
+                    highlight: ['[1].text']
                 do: >-
                   model อ่านผลแล้วตอบว่าทิ้ง commit แล้ว จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -209,9 +241,12 @@ scenario:
               - lane: policy
                 beat:
                   title: กฎปฏิเสธทันที
-                  text: ในโหมด non-interactive hook PermissionRequest ได้ตอบก่อน ไม่มี hook Geno จึงปฏิเสธ การปฏิเสธนี้ไม่จบ turn ผลบอก model ว่าไม่มีใครตอบได้ที่นี่
+                  text: >-
+                    ในโหมด non-interactive hook `PermissionRequest` (คำสั่ง shell ที่คุณตั้งให้ตอบคำถามสิทธิ์แทนได้) มีสิทธิ์ตอบก่อน
+                    แต่ไม่มี hook ตั้งไว้ Geno จึงปฏิเสธ การปฏิเสธนี้ไม่จบ turn Geno เขียนผลไว้ใน log
+                    ผลนี้บอก model ว่าไม่มีใครตอบได้ที่นี่ และถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                 at: settle
                 do: >-
                   ในโหมด non-interactive กฎนี้ปฏิเสธเลย `settle` ให้ PermissionRequest hook ตอบแทนได้ก่อน ไม่มี hook
@@ -229,9 +264,25 @@ scenario:
               - lane: model
                 beat:
                   title: Model อธิบายว่าต้องให้คุณอนุญาต
-                  text: model บอกคำสั่งที่คุณรันเองได้ แล้วจบ turn
+                  text: >-
+                    model บอกคำสั่งที่คุณรันเองได้ แล้วจบ turn การ์ดข้างล่างเป็นคำตอบจริงจาก `gcode agent` อีกรันที่ถูกปฏิเสธเพราะไม่มีใครตอบได้
+                    ในรันนั้นคือ path นอก workspace model อธิบายว่าทำต่อไม่ได้ (แท็บแรก) และคุณต้องทำอะไร (แท็บสอง) แล้วจบด้วย `stop_reason: end_turn`
+                    สองแท็บคือ `text` ที่ไฮไลต์อันเดียวกัน แต่แสดงคนละช่วง
                   from: model
                   to: engine
+                  sees:
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A32-outside-explicit/1/session.jsonl#seq=15
+                      select: content
+                      collapse: ['[0].thinking']
+                      highlight: ['[1].text']
+                      quote: I can't complete the comparison
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A32-outside-explicit/1/session.jsonl#seq=15
+                      select: content
+                      collapse: ['[0].thinking']
+                      highlight: ['[1].text']
+                      quote: Add the parent directory
                 do: >-
                   model อธิบายว่าต้องให้ผู้ใช้อนุญาต และบอกคำสั่งที่ผู้ใช้รันเองได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -255,7 +306,9 @@ scenario:
     - id: rejected
       beat:
         title: คำสั่งไม่ได้รัน
-        text: Geno ถือว่าคุณปฏิเสธ ผลบอก model ให้หยุดรอคุณ การ์ดเป็นผลจริงจาก `gcode agent` ที่ไม่มีเทอร์มินัลให้ตอบ ซึ่งปฏิเสธ `rm -rf build` แบบเดียวกัน
+        text: >-
+          Geno ถือว่าคุณปฏิเสธ ผลบอก model ให้หยุดรอคุณ การ์ดเป็นผลจริงจาก `gcode agent` ที่ไม่มีเทอร์มินัลให้ตอบ
+          ซึ่งปฏิเสธ `rm -rf build` แบบเดียวกัน ดู `status` ที่เป็น `rejected` และ `output` ที่บอก model ให้หยุดรอ
         from: engine
         to: model
         sees:
@@ -305,7 +358,7 @@ scenario:
 | exit code | เมื่อไร |
 | --- | --- |
 | 0 | รอบจบด้วย `end_turn` รวมถึงตอนที่ผู้ใช้ตอบไม่ หรือการปฏิเสธใน non-interactive |
-| 1 | error ของผู้ให้บริการ การปฏิเสธของ model หรือ hook บล็อก |
+| 1 | error ของผู้ให้บริการ model ไม่ยอมตอบ (`stop_reason: refusal`) หรือ hook บล็อก |
 | 2 | ใช้แฟล็กผิด |
 | 3 | ถึงขีดจำกัด `--max-turns` หรือ `--max-cost` |
 | 130 | ผู้ใช้กด Ctrl-C |

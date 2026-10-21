@@ -15,9 +15,19 @@ scenario:
     - id: asks
       beat:
         title: Model ขอแก้ cell `c3` ของ notebook
-        text: model ไม่แก้ JSON ของ `.ipynb` ตรงๆ มันใช้ tool `notebook_edit` บอก id ของ cell และโค้ดใหม่ มันรู้ id จากตอนอ่าน notebook
+        text: >-
+          model ไม่แก้ JSON ของ `.ipynb` ตรงๆ มันใช้ tool `notebook_edit` บอก id ของ cell และโค้ดใหม่ มันรู้ id จากตอนอ่าน notebook
+          การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในการบันทึกนั้น model อ่าน notebook
+          แล้วโหลด `notebook_edit` ด้วย `tool_search` ก่อน เพราะเป็น tool ที่เลื่อนไว้ (Geno ส่งแค่ชื่อในคำอธิบายของ `tool_search`)
+          การ์ดคือคำตอบของ model ตามที่ Geno ใส่กลับในคำขอถัดไป ดู `input` ที่ไฮไลต์ มี `notebook_path` `cell_id` และ `new_source`
+          ไม่มี `edit_mode` จึงเป็น `replace`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/edit-notebook.jsonl#line=8
+          select: messages[-2]
+          highlight: ['content[1].input']
       lane: model
       do: >-
         model ขอ `notebook_edit` แบบ `replace` (ค่าเริ่มต้นของ `edit_mode`) และจบคำตอบด้วย `stop_reason: tool_use`
@@ -85,7 +95,7 @@ scenario:
     - id: write
       beat:
         title: VS Code เขียน notebook แล้วแชตแสดง diff
-        text: Geno ส่งไฟล์ทั้งไฟล์ให้ VS Code เขียน VS Code ตรวจอีกครั้งว่าไฟล์บนดิสก์ยังเป็นฉบับที่ model เห็น แล้วส่งการเปลี่ยนแปลงให้แผงแชตแสดง
+        text: Geno ส่งไฟล์ทั้งไฟล์พร้อม hash ของฉบับที่ model เห็นให้ VS Code เขียน VS Code เทียบ hash นั้นกับไฟล์บนดิสก์อีกครั้งว่ายังเป็นฉบับเดียวกัน แล้วส่งการเปลี่ยนแปลงให้แผงแชตแสดง
         from: engine
         to: panel
       lane: server
@@ -106,10 +116,10 @@ scenario:
 
     - id: result
       beat:
-        title: Geno บอก model ว่าแทน cell แล้ว
-        text: ผลบอกว่า cell นี้อยู่ลำดับไหนในไฟล์ output ถูกล้าง และไม่ต้องอ่านไฟล์ซ้ำ Geno จำ notebook ฉบับใหม่ไว้สำหรับการแก้ครั้งถัดไป
+        title: Geno เตรียมผลว่าแทน cell แล้ว
+        text: Geno เขียนข้อความผลไว้ใน session log ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร ผลบอกว่า cell นี้อยู่ลำดับไหนในไฟล์ output ถูกล้าง และไม่ต้องอ่านไฟล์ซ้ำ Geno จำ notebook ฉบับใหม่ไว้สำหรับการแก้ครั้งถัดไป
         from: engine
-        to: model
+        to: engine
       lane: tool
       at: executor
       do: >-
@@ -122,10 +132,17 @@ scenario:
     - id: next
       beat:
         title: Geno เรียก model อีกครั้ง
-        text: model แก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
+        text: >-
+          Geno ส่งผลของ `notebook_edit` กลับไปให้ model ในคำขอใหม่ model จึงรู้ว่าแก้ cell แล้ว และแก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
+          การ์ดข้างล่างคือ `tool_result` จากการบันทึกเดียวกัน ดู `content` ที่ไฮไลต์ บอกว่า cell `c3` อยู่ลำดับ 4 จาก 9 และ output ถูกล้างแล้ว
         from: engine
         to: model
         end: Model แก้ cell ต่อได้ทันที
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/edit-notebook.jsonl#line=8
+          select: messages[-1]
+          highlight: ['content[0].content']
       lane: loop
       at: step
       do: >-
@@ -135,6 +152,9 @@ scenario:
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
+
+หน้านี้เล่าว่า model แก้ cell ของ Jupyter notebook อย่างไร ไฟล์ `.ipynb` เป็น JSON ก้อนใหญ่ที่มี source และ output ของทุก cell
+ถ้า model แก้ด้วย `edit` ธรรมดา มันต้องคัดลอก JSON ที่ escape แล้วให้ตรงทุกตัวอักษร และทำ JSON พังได้ง่าย Geno จึงมี tool แยก
 
 `notebook_edit` ทำงานกับ cell ไม่ใช่กับข้อความ ทำให้ model ไม่ต้องคัดลอก JSON ของ notebook มาเป็น `old_str`
 
@@ -146,6 +166,6 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **กฎเดียวกับ `edit`** ต้องอ่านก่อน ไฟล์ต้องไม่เปลี่ยนหลังอ่าน ต้องอยู่ใน workspace และกฎ `Edit(...)` ครอบ `notebook_edit` ด้วย
+- **กฎเดียวกับ `edit`** ต้องอ่านก่อน ไฟล์ต้องไม่เปลี่ยนหลังอ่าน ต้องอยู่ใน workspace และ[กฎ permission](/start/glossary/) แบบ `Edit(...)` ครอบ `notebook_edit` ด้วย
 - **cell ที่ไม่มี id** ได้ชื่อ `cell-0`, `cell-1` ตามตำแหน่ง การเพิ่มหรือลบ cell จึงเปลี่ยนชื่อของ cell ที่ตามหลัง ผลบอก model เรื่องนี้
 - **output ของ cell code หายไป** การแก้ cell code ล้าง output เดิม เพราะ output นั้นไม่ใช่ผลของโค้ดใหม่แล้ว

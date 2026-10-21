@@ -4,8 +4,8 @@ description: คำสั่งที่ปกติต้องขึ้นก�
 scenario:
   surface: vscode
   given:
-    - workspace ที่เชื่อถือแล้ว มี PermissionRequest hook ที่ matcher เป็น `Bash` ใน `.claude/settings.json` ซึ่งรันสคริปต์ `approver.sh`
-    - ไม่มี PreToolUse hook เปิด Geno ในโหมด Ask มี turn ทำงานอยู่
+    - workspace ที่เชื่อถือแล้ว มี PermissionRequest hook ที่ matcher เป็น `Bash` ใน `.claude/settings.json` (hook ใช้ชื่อ tool แบบ Claude Code จึงเรียก `bash` ของ Geno ว่า `Bash`) ซึ่งรันสคริปต์ `approver.sh`
+    - ไม่มี PreToolUse hook (hook ที่รันก่อนทุก call) เปิด Geno ในโหมด Ask มี turn ทำงานอยู่
     - คำสั่ง `pnpm add zod` ไม่ตรงกับกฎของ workspace และไม่อยู่ใน safe list
   trigger: >-
     model ขอรัน `bash` ด้วยคำสั่ง `pnpm add zod`
@@ -15,9 +15,15 @@ scenario:
     - id: wants
       beat:
         title: Model ขอรัน `pnpm add zod`
-        text: model ตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่งนี้บนเครื่องของคุณก่อน
+        text: model ยังไม่ตอบจบ มันขอใช้ tool `bash` (tool ที่รันคำสั่ง shell) เพื่อรันคำสั่งนี้บนเครื่องของคุณก่อน การ์ดข้างล่างเป็นคำขอจริงจากการรันในโหมด Ask (โหมดที่ Geno ถามคุณก่อนรันคำสั่งเสี่ยง) ที่ model ขอรัน `rm -rf build` ซึ่งต้องถามคุณก่อนเหมือนกัน ดูบล็อก `tool_use` ที่ `name` คือ `bash` และ `input.command` คือคำสั่ง
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B01-ask-allow/1/session-6107e07a-1ae7-45a7-80c5-9349b64dbbf9.jsonl#seq=10
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -39,7 +45,7 @@ scenario:
     - id: judge
       beat:
         title: Geno ตรวจคำสั่งกับกฎของคุณ
-        text: คำสั่งนี้ไม่ตรงกับกฎของ workspace และไม่อยู่ในรายการคำสั่งปลอดภัย ในโหมด Ask แปลว่าต้องถามก่อนรัน
+        text: คำสั่งนี้ไม่ตรงกับกฎ permission ของ workspace (รายการที่บอกว่าคำสั่งไหนอนุญาต ถาม หรือปฏิเสธ) และไม่อยู่ในรายการคำสั่งปลอดภัยที่รันได้เลย ในโหมด Ask แปลว่าต้องถามก่อนรัน
         from: engine
         to: engine
       lane: policy
@@ -53,14 +59,14 @@ scenario:
     - id: may-answer
       beat:
         title: Geno ให้ hook ตอบก่อนขึ้นการ์ด
-        text: hook PermissionRequest ตอบได้เฉพาะคำถามที่จะขึ้นการ์ดให้คุณ คำสั่งที่กฎ deny หรือโหมด Plan ปฏิเสธอยู่แล้วไม่ถึง hook
+        text: hook คือคำสั่ง shell ที่คุณตั้งไว้ใน settings ให้ Geno รันเมื่อเกิดเหตุการณ์หนึ่ง hook PermissionRequest รันตอนที่ Geno กำลังจะขึ้นการ์ดถามคุณ และตอบแทนคุณได้ คำสั่งที่กฎ deny หรือโหมด Plan ปฏิเสธอยู่แล้วไม่ถึง hook และคำสั่งที่ขอรันนอก sandbox ก็ไม่ถึง hook เพราะมีแต่คุณ (หรือ classifier ในโหมด Auto) ที่อนุญาตได้
         from: engine
         to: engine
       lane: policy
       at: settle
       do: >-
         `settle` ไม่ปฏิเสธเองและไม่ใช่โหมด Auto ก่อนขึ้นการ์ด `hooked` ถาม PermissionRequest hook ของ call นี้
-        `hookMayAnswer` ยอมให้ hook ตอบเฉพาะคำถามที่จะขึ้นการ์ด การปฏิเสธที่ใครตอบก็ไม่เปลี่ยน เช่นกฎ deny หรือโหมด Plan ไม่ถึง hook
+        `hookMayAnswer` ยอมให้ hook ตอบเฉพาะคำถามที่จะขึ้นการ์ด การปฏิเสธที่ใครตอบก็ไม่เปลี่ยน เช่นกฎ deny หรือโหมด Plan ไม่ถึง hook คำถามของคำสั่งที่จะรันนอก sandbox (`rule: 'unsandboxed'`) ก็ไม่ถึง hook แม้จะขึ้นการ์ด
       ref: packages/core/src/hooks.ts#hookMayAnswer
 
     - id: hook
@@ -164,10 +170,23 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านเหตุผลของ hook
-                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ Geno เรียก model อีกครั้ง model อ่านข้อความของ hook แล้วหาทางอื่น เช่นใช้ npm
+                  text: >-
+                    การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ Geno เรียก model อีกครั้ง model อ่านข้อความของ hook แล้วหาทางอื่น เช่นใช้ npm
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน
+                    แท็บแรกคือข้อความ user สุดท้ายของคำขอนั้น บล็อก `tool_result` บอกว่า hook ตอบแทนคุณและปฏิเสธ พร้อมข้อความ "use npm in this repo" และบอกห้ามลองซ้ำ
+                    แท็บสองคือ event หนึ่งใน stream ของคำตอบ model ไม่ลองซ้ำ ข้อความก่อนหน้า event นี้บอกคุณว่าถูกปฏิเสธเพราะอะไร ส่วน event นี้คือท่อนที่ขอให้คุณอนุญาต `npm install zod` แทน
                   from: model
                   to: engine
                   end: Model หาทางอื่น
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-permission-request.jsonl#line=4
+                      select: messages[2]
+                      highlight: ['content[0].content']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/hook-permission-request.jsonl#line=5
+                      select: '[3]'
+                      highlight: [data.delta.text]
                 at: step
                 do: >-
                   `ToolDenied` ไม่ใช่การปฏิเสธของผู้ใช้ `loopStep` จึงตัดสิน `call-model` model อ่านข้อความของ hook แล้วหาทางอื่น
@@ -260,7 +279,7 @@ scenario:
     - id: run
       beat:
         title: คำสั่งรันใน sandbox
-        text: การอนุญาตของ hook ไม่ยกเว้น sandbox ผลของคำสั่งพาบันทึกว่า hook เป็นคนอนุญาตไปด้วย
+        text: sandbox คือกรอบของระบบปฏิบัติการที่ให้คำสั่งเขียนไฟล์ได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว และต่อเครือข่ายได้แค่ host ที่อนุญาต การอนุญาตของ hook ไม่ยกเว้น sandbox ผลของคำสั่งพาบันทึกว่า hook เป็นคนอนุญาตไปด้วย
         from: engine
         to: machine
       lane: tool
@@ -275,23 +294,54 @@ scenario:
 
     - id: next
       beat:
-        title: Model อ่านผลของคำสั่ง
-        text: Geno ส่งผลกลับให้ model เพื่อตัดสินว่าจะทำอะไรต่อ
-        from: model
-        to: engine
-        end: Model อ่านผลแล้วทำต่อ
+        title: Geno เรียก model อีกครั้ง
+        text: >-
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือผลของคำสั่ง ผลไม่ได้บอกว่าใครอนุญาต
+          คำขอจึงหน้าตาเหมือนตอนที่คุณกด Allow เอง การ์ดข้างล่างเป็นคำขอจริงจากการรันที่คุณกด Allow ให้ `rm -rf build`
+          ดูบล็อก `tool_result` ที่ `tool_use_id` ตรงกับ `id` ในการ์ดแรก และ `content` คือ output ของคำสั่ง ไม่มี field ไหนบอกว่าใครอนุญาต
+        from: engine
+        to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B-panel/1/wire.jsonl.gz#line=17
+          select: messages[-1].content
+          highlight: ['[0]']
       lane: loop
       at: step
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านผลของคำสั่ง
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` บันทึกว่า hook เป็นคนอนุญาตไปกับ update ของแผงเท่านั้น
+        ไม่อยู่ในคำขอถึง model
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      beat:
+        title: Model ตอบหลังเห็นผล
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model เห็นว่าลบแล้ว จึงขอรัน `bash` อีกครั้งเพื่อยืนยันกับ git
+          ในการ์ด บล็อก `tool_use` ใหม่มี `input.command` เป็น `git status --short; ls` และ `id` ใหม่
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B01-ask-allow/1/session-6107e07a-1ae7-45a7-80c5-9349b64dbbf9.jsonl#seq=13
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: Model อ่านผลแล้วทำต่อ
+      lane: model
+      do: >-
+        model อ่าน `tool_result` ของคำสั่งแล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+        turn วนต่อไปจนกว่า model จะตอบโดยไม่ขอ tool
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
-PermissionRequest ยืนอยู่ตรงที่การ์ดจะขึ้น ไม่ใช่ก่อนทุก call อย่าง PreToolUse
+[hook](/start/glossary/) PermissionRequest ยืนอยู่ตรงที่[การ์ด permission](/start/glossary/)จะขึ้น ไม่ใช่ก่อนทุก call อย่าง [PreToolUse](/scenarios/hook/pretooluse-deny/)
 คำสั่งที่ safe list ผ่านอยู่แล้วจึงไม่ไปถึง hook นี้ และคำสั่งที่ถูกปฏิเสธอยู่แล้วก็ไม่ไปถึงเช่นกัน
+ข้อยกเว้นคือคำสั่งที่ขอรันนอก [sandbox](/start/glossary/) แม้การ์ดจะขึ้น hook ก็ไม่ถูกถาม เพราะมีแต่ผู้ใช้ หรือ classifier ในโหมด Auto ที่อนุญาตได้
 
 | hook ตอบ | คำสั่ง | turn |
 | --- | --- | --- |
@@ -303,7 +353,7 @@ PermissionRequest ยืนอยู่ตรงที่การ์ดจะ�
 
 สิ่งที่ควรสังเกต
 
-- **ในโหมด Auto hook ถูกถามหลัง classifier** ถ้า classifier อนุญาตหรือบล็อกเอง hook ไม่ถูกถาม hook ตอบได้เฉพาะเมื่อ Auto จะส่งคำถามไปหาผู้ใช้
-- **ใน run ที่ไม่มีใครตอบ** (`gcode agent --non-interactive`) hook ตอบแทนได้เฉพาะคำถามที่ถูกปฏิเสธเพราะไม่มีใครตอบ
+- **ในโหมด Auto hook ถูกถามหลัง [classifier](/start/glossary/)** ถ้า classifier อนุญาตหรือบล็อกเอง hook ไม่ถูกถาม hook ตอบได้เฉพาะเมื่อ Auto จะส่งคำถามไปหาผู้ใช้ ยกเว้นคำสั่งที่ขอรันนอก sandbox ซึ่ง classifier ตัดสิน และถ้าส่งต่อถึงผู้ใช้ก็ยังไม่ถาม hook
+- **ใน run ที่ไม่มีใครตอบ** ([non-interactive](/start/glossary/) เช่น `gcode agent --non-interactive`) hook ตอบแทนได้เฉพาะคำถามที่ถูกปฏิเสธเพราะไม่มีใครตอบ
 - **การอนุญาตของ hook ไม่บันทึกกฎ** `permission_suggestions` บอก hook ว่าการ์ดเสนอกฎอะไร แต่ Geno ไม่บันทึกกฎตามคำตอบของ hook
 - **แผงแชตไม่บอกว่า hook อนุญาต** ขั้นของคำสั่งดูเหมือนคำสั่งที่รันโดยไม่ต้องถาม บันทึก `decidedBy: hook` อยู่ใน log

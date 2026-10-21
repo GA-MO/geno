@@ -16,8 +16,9 @@ scenario:
       beat:
         title: "คุณอยากส่งข้อความเข้า turn ที่ทำงาน"
         text: >-
-          turn กำลังทำงานและมี subagent ชื่อ explore ทำงานอยู่ คุณอยากส่งข้อความโดยไม่รอให้ turn จบ
-          ลองเลือกว่าข้อความไปที่ไหน
+          turn กำลังทำงานและมี subagent ชื่อ explore ทำงานอยู่ subagent คือ session ลูกที่ model สร้างให้ทำงานย่อย
+          มีบทสนทนาของตัวเอง และจบด้วยการส่งรายงานกลับ คุณอยากส่งข้อความโดยไม่รอให้ turn จบ ข้อความแบบนี้เรียกว่า steer
+          คือข้อความล้วนที่แทรกเข้า turn ก่อน Geno เรียก model ครั้งถัดไป ลองเลือกว่าข้อความไปที่ไหน
         from: you
         to: panel
         ask: "ข้อความไปที่ไหน"
@@ -34,8 +35,8 @@ scenario:
                 beat:
                   title: "ปุ่ม Send now จางลง"
                   text: >-
-                    ร่างของคุณมี `@src/app.ts` ไฟล์แนบและ mention ไปกับ turn ถัดไปเท่านั้น ปุ่ม Send now ยังอยู่แต่ใช้ไม่ได้
-                    และบอกเหตุผลเมื่อชี้
+                    ร่างของคุณมี `@src/app.ts` ไฟล์แนบและ mention ไปกับ turn ถัดไปเท่านั้น เพราะ Geno บันทึกมันพร้อม prompt
+                    ตอนเริ่ม turn steer จึงพามันไปไม่ได้ ปุ่ม Send now ยังอยู่แต่ใช้ไม่ได้ และบอกเหตุผลเมื่อชี้
                   from: panel
                   to: you
                   sees: "ปุ่ม Send now จางลง ชี้แล้วขึ้น \"Attachments and @ mentions go with the next turn, so this one waits in the queue\""
@@ -95,9 +96,16 @@ scenario:
                 beat:
                   title: "Subagent จบก่อนข้อความถึง"
                   text: >-
-                    explore เขียนรายงานแล้วจบรอบของมันก่อนข้อความจะถึงจุดที่แทรกได้ inbox ของมันปิดแล้ว
+                    explore เขียนรายงานแล้วจบรอบของมันก่อนข้อความจะถึงจุดที่แทรกได้ inbox ของมัน (ที่พักข้อความที่รอเข้า turn)
+                    ปิดแล้ว การ์ดข้างล่างเป็นคำตอบสุดท้ายจริงของ explore จากการรันอื่น มันเรียก tool `report`
+                    ดู `input.message` คือรายงานที่ส่งกลับไปให้แชตหลักที่สร้างมัน หลัง `report` explore ไม่เรียก model อีก
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/child-68ca7508-6075-4917-bc25-2e6e4dfd793e.jsonl#seq=11
+                    select: content
+                    highlight: ['[0].input']
                 alongside: true
                 do: >-
                   ลูกเรียก `report` แล้วจบรอบของมันก่อนข้อความจะถึงจุดปลอดภัย inbox ของลูกปิด
@@ -146,11 +154,12 @@ steer คือข้อความล้วนที่เข้าไปใ�
 | --- | --- | --- |
 | แผงแชต | `sendNowOf`: ร่างมีไฟล์แนบหรือ `@` mention | กลายเป็นข้อความ Queued ส่งเมื่อ turn จบแบบ done |
 | engine | `steerRunning`: ข้อความถึงลูกที่จบแล้ว | ปฏิเสธ "the subagent already finished" |
+| engine | `steerRunning`: ข้อความถึง subagent ที่รันบน agent ภายนอก (Cursor หรือ Claude Code) ซึ่งรับข้อความกลาง turn ไม่ได้ | ปฏิเสธทันที "explore runs on Cursor, which cannot take a message mid-turn, so it was not delivered" (ชื่อและ agent ตามจริง) แผงขึ้นข้อความนี้เป็นบรรทัดสีแดง |
 | engine | `steerRunning`: มีบล็อกที่ไม่ใช่ข้อความ หรือข้อความว่าง | ปฏิเสธ "a steer is text only; ..." หรือ "the steer has no text" |
 
 สิ่งที่ควรสังเกต
 
-- **แผงของ Geno ไม่เคยส่งบล็อกที่ไม่ใช่ข้อความ** การกันของ engine เรื่อง "text only" มีไว้สำหรับ client ACP ตัวอื่น
+- **แผงของ Geno ไม่เคยส่งบล็อกที่ไม่ใช่ข้อความ** การกันของ engine เรื่อง "text only" มีไว้สำหรับ client [ACP](/start/glossary/) ตัวอื่น คือ editor อื่นที่คุยกับ engine ด้วยโปรโตคอลเดียวกัน
   ไฟล์แนบและ mention ต้องไปกับ turn ใหม่ เพราะ `logPrompt` บันทึกมันพร้อม prompt ตอนเปิด turn เท่านั้น
 - **steer ถึงแชตที่ถูกปฏิเสธกลับเข้าคิว** ถ้า engine ปฏิเสธ steer ถึงแชตขณะ turn ยังทำงาน `followupSteered` คืนข้อความเป็น Queued
   ถ้า turn จบแล้ว ข้อความกลับไปที่ช่องพิมพ์

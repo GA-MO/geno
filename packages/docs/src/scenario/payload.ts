@@ -25,7 +25,7 @@ export type Provenance = 'recorded' | 'rebuilt' | 'logged' | 'scripted';
 /**
  * What a card shows, read off the record and never written by the page: a whole request, a stream or one of its
  * events, the request's messages, tools or system prompt, one message, the content blocks of one (tool results, the
- * model's answer, or other request content), or one session log event.
+ * model's answer, or other request content), one session log event, or an HTTP error the provider answered with.
  */
 export type Unit =
   | 'request'
@@ -41,7 +41,8 @@ export type Unit =
   | 'tool'
   | 'system'
   | 'log-event'
-  | 'editor-request';
+  | 'editor-request'
+  | 'error-response';
 
 /** One content block of the message a card shows, in order: its chip in the summary row. */
 export interface BlockChip {
@@ -116,13 +117,14 @@ const valueAt = (root: unknown, keys: readonly Key[]): unknown => keys.reduce<un
 const pathText = (keys: readonly Key[]): string => keys.map((key, i) => (typeof key === 'number' ? `[${key}]` : i === 0 ? key : `.${key}`)).join('');
 
 /** A whole thing a card may show, by where it sits in its record. */
-type Spot = 'request' | 'response' | 'stream' | 'stream-event' | 'messages' | 'message' | 'content' | 'block' | 'tools' | 'tool' | 'system' | 'event' | 'editor-request';
+type Spot = 'request' | 'response' | 'stream' | 'stream-event' | 'messages' | 'message' | 'content' | 'block' | 'tools' | 'tool' | 'system' | 'event' | 'editor-request' | 'error-response';
 
 function rootSpot(record: unknown, logged: boolean): Spot | undefined {
   if (isStream(record)) return 'stream';
   if (!isObject(record)) return undefined;
   if (logged && typeof record['kind'] === 'string') return 'event';
   if (typeof record['acp'] === 'string' && isObject(record['params'])) return 'editor-request';
+  if (typeof record['status'] === 'number' && 'body' in record) return 'error-response';
   if (Array.isArray(record['messages'])) return 'request';
   if (record['type'] === 'message') return 'response';
   return undefined;
@@ -188,6 +190,7 @@ const SPOT_UNITS: Readonly<Record<Exclude<Spot, 'message' | 'content' | 'block' 
   tool: 'tool',
   system: 'system',
   'editor-request': 'editor-request',
+  'error-response': 'error-response',
 };
 
 /** The blocks a card shows, when it shows a message, its content, or one block. */
@@ -222,6 +225,7 @@ const LABELS: Readonly<Record<Unit, string>> = {
   system: 'System prompt',
   'log-event': 'บันทึกใน session log',
   'editor-request': 'คำขอที่ Geno ส่งให้ editor (ACP)',
+  'error-response': 'คำตอบ error ของ provider (HTTP status, header และ body)',
 };
 
 /** What each kind of session log event records, in one line; a kind with no line here gets a generic one. */
@@ -365,13 +369,14 @@ export function responseOf(body: string): unknown {
 /**
  * A run file's lines as records. A request line (`requests.jsonl`, `wire.jsonl`) becomes its body with `$prefix` and
  * `$same` expanded the way docs/results/real-usecases/runs/README.md says; a `wire.jsonl` response line becomes its
- * body through `responseOf`; any other line stays as it is.
+ * body through `responseOf`, or, when its status is not 200, the status, the headers if the line kept them, and that
+ * body; any other line stays as it is.
  */
 export function readRecords(lines: readonly unknown[]): Records {
   const last = new Map<string, Record<string, unknown>>();
   const byLine: unknown[] = [];
   const bySeq = new Map<number, unknown>();
-  for (const entry of lines as { seq?: unknown; url?: string; request?: Record<string, unknown>; response?: unknown }[]) {
+  for (const entry of lines as { seq?: unknown; url?: string; request?: Record<string, unknown>; status?: unknown; headers?: unknown; response?: unknown }[]) {
     let record: unknown = entry;
     const request = entry.request;
     if (request?.['messages'] !== undefined) {
@@ -385,7 +390,10 @@ export function readRecords(lines: readonly unknown[]): Records {
       last.set(kind, expanded);
       record = expanded;
     } else if (typeof entry.response === 'string') {
-      record = responseOf(entry.response);
+      record =
+        typeof entry.status === 'number' && entry.status !== 200
+          ? { status: entry.status, ...(entry.headers === undefined ? {} : { headers: entry.headers }), body: responseOf(entry.response) }
+          : responseOf(entry.response);
     }
     byLine.push(record);
     if (typeof entry.seq === 'number') bySeq.set(entry.seq, record);
@@ -464,7 +472,7 @@ export function runFiles(repoRoot: string): RunFiles {
       const picked = follow(record, parsePath(mock.select ?? ''));
       if (!picked.ok) return { ok: false, reason: `select ${mock.select}: ${picked.reason}` };
       const spotted = spotOf(record, picked.keys, provenance === 'logged');
-      if (spotted === undefined) return { ok: false, reason: `${mock.source} is not a request, a response, a stream, a session log event or an editor request, so no card can say what it is` };
+      if (spotted === undefined) return { ok: false, reason: `${mock.source} is not a request, a response, a stream, a session log event, an editor request or an HTTP error, so no card can say what it is` };
       const outer = picked.keys.slice(0, spotted.depth);
       const inner = picked.keys.slice(spotted.depth);
       const selected = valueAt(record, outer);

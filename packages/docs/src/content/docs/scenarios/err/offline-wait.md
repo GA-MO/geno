@@ -15,9 +15,17 @@ scenario:
       beat:
         title: "Geno ส่งคำขอให้ model"
         text: >-
-          turn กำลังทำงาน Geno ส่งคำขอให้ model ตามปกติ
+          turn กำลังทำงาน Geno ส่งคำขอให้ model ตามปกติ การ์ดข้างล่างคือ `messages` ของคำขอจริงไปยัง Anthropic
+          จากการรันอื่นที่ไม่มี error ดูสองก้อนที่ไฮไลต์ท้ายสุด: `tool_use` คือคำขอ `read` ของ model รอบก่อน และ `tool_result`
+          คือผลที่ Geno ส่งกลับ ถ้าการเรียกนี้ไปไม่ถึง Geno จะส่งบทสนทนาเดิมนี้อีกครั้งเมื่อการรอจบ
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A20-thai-question/sonnet-1/wire.jsonl#line=5
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[0]', '[4].content[0]']
 
     - id: kind
       lane: loop
@@ -46,7 +54,7 @@ scenario:
                     การเชื่อมต่อไปหาผู้ให้บริการล้ม ไม่มีสถานะ HTTP กลับมา Geno จึงถือว่าออฟไลน์ และวางแผนรอ 5
                     วินาทีแล้วตรวจเครือข่าย เวลารอเพิ่มเป็นสองเท่าจนถึง 60 วินาที และเลิกเมื่อครบ 30 นาที
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   การเชื่อมต่อไปหาผู้ให้บริการล้มก่อนได้ byte แรก เช่น `ECONNREFUSED` หรือหา DNS ไม่เจอ
                   ไม่มีสถานะ HTTP กลับมา
@@ -66,10 +74,23 @@ scenario:
                 beat:
                   title: "ผู้ให้บริการตอบ 429"
                   text: >-
-                    คุณชน rate limit ผู้ให้บริการบางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตมาด้วย Geno รอถึงเวลานั้น ถ้าไม่รู้เวลา รอ 15
-                    วินาทีแล้วเพิ่มขึ้น การรอสั้นๆ พักการเรียกของทุก session ใน engine นี้ด้วย
+                    คุณชน rate limit คือเพดานจำนวนคำขอหรือ token ต่อช่วงเวลาที่ผู้ให้บริการตั้งไว้ ผู้ให้บริการบางรายบอกเวลาที่ขีดจำกัด
+                    จะรีเซ็ตมาด้วย Geno รอถึงเวลานั้น ถ้าไม่รู้เวลา รอ 15 วินาทีแล้วเพิ่มขึ้น การรอสั้นๆ พักการเรียกของทุก session
+                    ใน engine นี้ด้วย
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บน `claude-sonnet-5-5` ผ่าน API ของ Anthropic
+                    model จำลองตอบคำขอที่สองด้วย HTTP 429 ในรูปแบบ error ของ Anthropic และการบันทึกเลือกส่ง header ชุดนี้ ดูจุดที่ไฮไลต์: `status` คือ 429
+                    `body.error.type` คือ `rate_limit_error` และ header `retry-after` คือ 3 แปลว่าให้ลองใหม่ในอีก 3 วินาที
+                    Geno อ่าน `retry-after-ms` ก่อน แล้วจึง `retry-after` ทั้งสองมาก่อน header ของ bucket อย่าง `anthropic-ratelimit-requests-reset`
+                    ในการบันทึกนี้ไม่มี `retry-after-ms` จึงใช้ `retry-after` header `anthropic-ratelimit-requests-remaining` ที่เป็น 0 บอกว่าโควตาคำขอของนาทีนี้หมดแล้ว
+                    ถ้า 429 ไม่บอกเวลารีเซ็ตเลย Geno ใช้การรอแบบไม่รู้เวลาที่กล่าวไว้ข้างบน
+                    ในการบันทึกนี้ Geno รอ 3 วินาทีตาม `retry-after` บวกสุ่มไม่เกิน 3 วินาที
+                    แล้วส่งบทสนทนาเดิมซ้ำ และได้คำตอบ
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/err-rate-limited-waits.jsonl#line=5
+                    highlight: [status, body.error.type, headers.retry-after, headers.anthropic-ratelimit-requests-remaining]
                 do: >-
                   ผู้ให้บริการตอบ 429 บางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตไว้ใน header เช่น `retry-after`
                   หรือ `anthropic-ratelimit-requests-reset`
@@ -79,7 +100,7 @@ scenario:
                 do: >-
                   `classifyFailure` ได้ `limited` และ `resetAtOf` อ่านเวลารีเซ็ตจาก header หรือ body
                   `planWait` ให้รอถึงเวลารีเซ็ตบวกสุ่มไม่เกิน 3 วินาที ถ้าไม่รู้เวลา ให้รอ 15 วินาที เพิ่มขึ้นจนถึง 5 นาที
-                  และเลิกเมื่อครบ 15 นาที ถ้าการรอสั้นกว่า 20 วินาที `slots.pause` หยุดการเรียกที่ยังไม่เริ่มของทุก session
+                  และเลิกเมื่อครบ 15 นาที ถ้าการรอไม่เกิน 20 วินาที `slots.pause` หยุดการเรียกที่ยังไม่เริ่มของทุก session
                   ใน engine นี้ด้วย
                 ref: packages/core/src/model-error.ts#resetAtOf
                 emits: [limited]
@@ -90,8 +111,8 @@ scenario:
       beat:
         title: "Geno บันทึกว่ากำลังรอ"
         text: >-
-          Geno บันทึกการรอลงบันทึกของ session ถ้า engine ตายระหว่างนี้ ตัวใหม่จะเห็นแล้วรอต่อ งานในแผง Tasks เปลี่ยนเป็น
-          waiting และแชตได้รับแจ้ง
+          Geno บันทึกการรอลงบันทึกของ session ถ้า engine ตายระหว่างนี้ ตัวใหม่จะเห็นแล้วรอต่อ งานในแผง Tasks
+          (แผงที่แสดงงานที่กำลังรันของทุกแชต) เปลี่ยนเป็น waiting และแชตได้รับแจ้ง
         from: engine
         to: panel
       do: >-
@@ -134,7 +155,8 @@ scenario:
         title: "แชตบอกว่ากำลังรอ พร้อมปุ่ม Retry now"
         text: >-
           หัวข้อของ turn เปลี่ยนจาก working เป็นการรอ แถวเหนือช่องพิมพ์บอกว่ารอถึงเมื่อไร และมีปุ่มให้ลองทันที turn
-          ยังไม่ล้ม
+          ยังไม่ล้ม การ์ดเป็นทางออฟไลน์ ทาง 429 หัวข้อเป็น `waiting for the rate limit` และแถวบอก `Limited until <เวลา>`
+          หรือ `Limited, retrying in …`
         from: panel
         to: you
         sees:
@@ -168,7 +190,7 @@ scenario:
         title: "Geno นอนรอถึงเวลาลองครั้งถัดไป"
         text: >-
           เมื่อออฟไลน์ Geno ตื่นแล้วตรวจ host ก่อน ถ้ายังไม่ตอบก็รอรอบใหม่นานขึ้น เมื่อถูกจำกัด Geno ตื่นแล้วเรียกเลย
-          ถ้าเวลารีเซ็ตไกลกว่า 15 นาที Geno ไม่ปลุกเอง และรอคุณ
+          ถ้าเวลารีเซ็ตไกลกว่า 15 นาที Geno ไม่ปลุกเอง และรอคุณ กฎนี้ต่างจากการเลิกรอ 15 นาทีเมื่อไม่รู้เวลารีเซ็ต
         from: engine
         to: engine
         ask: "อะไรมาก่อน"
@@ -186,13 +208,13 @@ scenario:
               - lane: loop
                 at: gateway
                 beat:
-                  title: "เครือข่ายกลับมา"
+                  title: "เครือข่ายกลับมา หรือถึงเวลารีเซ็ต"
                   text: >-
-                    Geno ตื่นตามเวลา เมื่อออฟไลน์ host ตอบแล้ว เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก การเรียกจึงออกไปได้
+                    Geno ตื่นตามเวลา เมื่อออฟไลน์ host ตอบแล้ว เมื่อถูกจำกัด ถึงเวลารีเซ็ตที่ผู้ให้บริการบอก หรือครบเวลารอของ Geno เองเมื่อไม่รู้เวลารีเซ็ต การเรียกจึงออกไปได้
                   from: engine
                   to: engine
                 do: >-
-                  `nap` ตื่นตามเวลา เมื่อออฟไลน์ `wire.probe` ตรวจ host แล้วพบว่าตอบ เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก
+                  `nap` ตื่นตามเวลา เมื่อออฟไลน์ `wire.probe` ตรวจ host แล้วพบว่าตอบ เมื่อถูกจำกัด ถึงเวลารีเซ็ตที่ผู้ให้บริการบอก หรือครบเวลา backoff ที่ `planWait` คำนวณเมื่อไม่รู้เวลารีเซ็ต
                   การเรียกจึงออกไปได้
                 ref: packages/engine/src/waits.ts#nap
 
@@ -204,7 +226,7 @@ scenario:
                 beat:
                   title: "คุณกด Retry now"
                   text: >-
-                    คุณไม่อยากรอ VS Code ขอ engine ให้ปลุก turn นี้ Geno เรียกทันทีโดยไม่ตรวจ host ถ้ายังออฟไลน์ การรอเดิมทำต่อ
+                    คุณไม่อยากรอ VS Code ขอ engine ให้ปลุก turn นี้ Geno เรียกทันทีโดยไม่ตรวจ host ถ้ายังออฟไลน์หรือยังถูกจำกัด การรอเดิมทำต่อ
                     และเวลาเลิกยังนับจากตอนเริ่มรอครั้งแรก
                   from: you
                   to: panel
@@ -239,7 +261,8 @@ scenario:
                 beat:
                   title: "คุณกด Stop ระหว่างรอ"
                   text: >-
-                    คุณเลิกรอ แผงตอบการ์ดที่เปิดอยู่ว่ายกเลิก แล้วสั่ง Geno หยุด turn
+                    คุณเลิกรอ ถ้ามีการ์ดขอสิทธิ์ค้างอยู่ แผงตอบการ์ดนั้นว่ายกเลิก แล้วสั่ง Geno หยุด turn การ์ดเป็นทางออฟไลน์
+                    ทาง 429 หัวข้อเป็น `waiting for the rate limit`
                   from: you
                   to: panel
                   sees: { kind: composer, state: working, header: waiting for the network }
@@ -322,7 +345,8 @@ scenario:
                   title: "แชตขึ้นแถบ error แล้ว turn ล้มเหลว"
                   text: >-
                     Geno บันทึก error แชตขึ้นแถบสีแดงพร้อมเหตุผล และ turn จบแบบ failed prompt
-                    ที่ยังไม่ได้คำตอบไปกับข้อความถัดไปที่คุณส่ง
+                    ที่ยังไม่ได้คำตอบไปกับข้อความถัดไปที่คุณส่ง การ์ดเป็นทางออฟไลน์ ทาง 429 ข้อความคือ
+                    `the provider kept refusing the call for 15 minutes without saying when its limit resets; send again later`
                   from: engine
                   to: panel
                   end: "หมดเวลารอ turn ล้มเหลว"

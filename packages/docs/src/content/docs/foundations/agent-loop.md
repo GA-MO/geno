@@ -16,8 +16,9 @@ scenario:
       beat:
         title: "คุณขอให้ทำ parseDuration จนเทสต์ผ่าน"
         text: >-
-          คุณรัน `gcode agent` พร้อมคำสั่งหนึ่งประโยค loop ทั้งหมดรันใน process นี้ ไม่มีแผงแชต
-          ข้อความของ model ออกทางเทอร์มินัล
+          คุณรัน `gcode agent` คำสั่งของ Geno ที่รัน agent ในเทอร์มินัล พร้อมคำสั่งงานหนึ่งประโยค
+          loop ทั้งหมดรันใน process นี้ ไม่มีแผงแชต ข้อความของ model ออกทางเทอร์มินัล
+          ไม่มีใครตอบการ์ดขออนุญาต และการทดสอบนี้ตั้งงบของ turn ไว้ 40 ครั้งของการเรียก model และ $0.20 (ค่าเริ่มต้นของ `gcode agent` คือ $0.40)
         from: you
         to: panel
       do: ผู้ใช้รัน `gcode agent` พร้อมคำสั่ง
@@ -27,7 +28,7 @@ scenario:
       lane: loop
       at: agent
       do: >-
-        คำสั่ง `agent` อ่านแฟล็ก เปิด session ใหม่ ตั้งขีดจำกัด 40 ครั้งและ $0.40 และเปิดการรัน check หลัง `edit` เป็นค่าเริ่มต้น
+        คำสั่ง `agent` อ่านแฟล็ก เปิด session ใหม่ ตั้งขีดจำกัดจากแฟล็ก (ค่าเริ่มต้น 40 ครั้งและ $0.40 การทดสอบนี้ส่ง `--max-cost 0.2`) และเปิดการรัน check หลัง `edit` เป็นค่าเริ่มต้น
       ref: packages/engine/src/agent.ts#agent
       phase: starting
 
@@ -115,6 +116,7 @@ scenario:
         sees:
           kind: payload
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=8
+          quote: "export function parseDuration(text: string): number"
           select: content[-1]
           highlight: [input.path, input.new_str]
       do: >-
@@ -128,15 +130,23 @@ scenario:
       beat:
         title: "Geno แก้ไฟล์แล้วรันเทสต์ทั้งชุดเอง"
         text: >-
-          `edit` สำเร็จ แล้ว Geno รันคำสั่ง check ของโปรเจกต์ต่อทันทีโดยไม่มีใครขอ เทสต์ทั้งชุดพัง
-          เพราะ `slug.test.ts` ที่พังอยู่ก่อน ผลของ check ต่อท้ายผลของ `edit` ให้ model อ่าน
+          `edit` สำเร็จ แล้ว Geno รันคำสั่ง check ของโปรเจกต์ (คำสั่งตรวจที่ตั้งไว้ ที่นี่คือ `node --test`) ต่อทันทีโดยไม่มีใครขอ เทสต์ทั้งชุดพัง
+          เพราะ `slug.test.ts` ที่พังอยู่ก่อน ผลของ check ต่อท้ายผลของ `edit` ให้ model อ่าน แท็บแรกคือต้นของผลนี้:
+          บรรทัดที่บอกว่าแก้ไฟล์แล้ว ตามด้วยบรรทัดว่า check `node --test` failed แท็บสองคือเทสต์ของ slug ที่พัง ได้ `'hello---world'`
+          แทน `'hello-world'`
         from: engine
         to: machine
         sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=11
-          select: messages[-1].content[0]
-          highlight: [content]
+          - kind: payload
+            source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=11
+            select: messages[-1].content[0]
+            highlight: [content]
+            quote: "Edited src/duration.ts."
+          - kind: payload
+            source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=11
+            select: messages[-1].content[0]
+            highlight: [content]
+            quote: "+ 'hello---world'"
       do: >-
         `editExecutor` เขียนไฟล์ แล้ว `afterEdit` รัน check ของโปรเจกต์ (`node --test`) และต่อผลท้ายผลของ `edit`
       ref: packages/engine/src/tools/agent.ts#editExecutor
@@ -154,9 +164,16 @@ scenario:
         title: "ผลที่มีเทสต์พังกลับไปหา model"
         text: >-
           loop ไม่ได้ตัดสินว่าเทสต์พังแปลว่าอะไร มันแค่ส่งผลกลับและเรียก model อีกครั้ง
-          การตีความเป็นหน้าที่ของ model
+          การตีความเป็นหน้าที่ของ model การ์ดข้างล่างคือ request ที่สาม ข้อความเก่าพับไว้
+          ดูสองข้อความท้าย: คำขอ `edit` ของ model และผลที่ตอบคำขอนั้น
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=11
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[2].name', '[4].content[0].tool_use_id']
 
     - id: wants-test
       lane: model
@@ -183,13 +200,15 @@ scenario:
       beat:
         title: "Geno ตรวจคำสั่งแล้วรันใน sandbox"
         text: >-
-          ก่อนรัน `bash` Geno ตรวจคำสั่งกับกฎ ไม่มีกฎไหนจับคำสั่งนี้ จึงรันใน sandbox ที่เขียนได้แค่ใน workspace
+          ก่อนรัน `bash` Geno ตรวจคำสั่งกับกฎสิทธิ์ ไม่มีกฎไหนจับคำสั่งนี้ จึงรันเลยโดยไม่ต้องถาม
+          คำสั่งรันใน sandbox กรอบของระบบปฏิบัติการที่ให้เขียนไฟล์ได้แค่ในโฟลเดอร์งาน (workspace) กับโฟลเดอร์ชั่วคราว
           ทั้งสามเทสต์ของ duration ผ่าน
         from: engine
         to: machine
         sees:
           kind: payload
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=12
+          quote: "# pass 3"
           highlight: [status, output]
           collapse: [timing]
       do: >-
@@ -209,9 +228,16 @@ scenario:
         title: "Geno เรียก model เป็นครั้งที่สี่"
         text: >-
           ผลเทสต์ที่ผ่านกลับไปใน request ที่สี่ ซึ่งยังมีทุกอย่างตั้งแต่ request แรก
-          ส่วนต้นอ่านจาก cache ได้ 11,085 token
+          ส่วนต้นที่ซ้ำกับ request ก่อน 11,085 token ผู้ให้บริการอ่านจาก prompt cache ซึ่งคิดเงินถูกกว่าการอ่านใหม่
+          การ์ดข้างล่างคือข้อความสุดท้ายของ request นี้ ผลเทสต์มี `# pass 3` และ `exit=0`
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=14
+          quote: "# pass 3"
+          select: messages[-1].content
+          highlight: ['[0].content']
 
     - id: answer
       lane: model
@@ -225,6 +251,7 @@ scenario:
         sees:
           kind: payload
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=14
+          quote: "All 3 tests in test/duration.test.ts pass."
           select: content[-1]
           highlight: [text]
       do: >-
@@ -290,7 +317,7 @@ flowchart TD
 
 ## อะไรทำให้ loop หยุด
 
-loop หยุดเมื่อ `loopStep` คืน `done` เหตุผลมีไม่กี่แบบ: model ตอบจบ (`end_turn`) ครบ 40 ครั้งหรือเกินงบ $0.40
+loop หยุดเมื่อ `loopStep` คืน `done` เหตุผลมีไม่กี่แบบ: model ตอบจบ (`end_turn`) ครบ 40 ครั้งหรือเกินงบ (ค่าเริ่มต้น $0.40)
 คุณกด Stop คุณปฏิเสธการ์ด หรือ error ที่ retry ไม่ได้ ดูทุกแบบในบท [Model หยุดแบบไหนบ้าง](/scenarios/#ch-3)
 
 ## ต่อในบทนี้

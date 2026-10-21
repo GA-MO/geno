@@ -24,7 +24,9 @@ scenario:
     - id: leave
       beat:
         title: แชตปล่อย turn เดิมไว้
-        text: การ์ดที่เปิดค้างถูกตอบว่าไม่ได้แสดงแล้ว engine จะถามใหม่ engine เลิกส่งอัปเดตมาที่หน้าต่างนี้ แต่ turn ทำงานต่อ
+        text: >-
+          ถ้ามีการ์ดที่รอคุณตอบ เช่นการ์ด permission ที่ถามว่าให้รันคำสั่งไหม VS Code ตอบ engine ว่าการ์ดนั้นไม่ได้แสดงแล้ว
+          ไม่ใช่ปฏิเสธ engine จึงจะถามใหม่ทีหลัง จากนั้น VS Code ขอ engine เลิกส่งอัปเดตของแชตนี้มาที่หน้าต่างนี้ แต่ turn ทำงานต่อ
         from: panel
         to: engine
       lane: editor
@@ -40,20 +42,24 @@ scenario:
       at: sessions
       do: >-
         engine เอาหน้าต่างนี้ออกจากผู้ดู session นั้น turn ทำงานต่อ อัปเดตสดไม่ถูกส่งมาที่หน้าต่างนี้อีก
-        session เดิมไม่ถูกปิด เพราะ turn ยังใช้ MCP server ของมันอยู่
+        session เดิมไม่ถูกปิด เพราะ `session/close` จะหยุด turn ที่ทำงานอยู่ และปิด MCP server ที่ turn ยังใช้
       ref: "packages/engine/src/serve.ts#\".onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {\""
 
     - id: fresh
       beat:
-        title: แผงแสดงแชตใหม่
-        text: engine สร้าง session ใหม่ แผงว่างและปุ่ม Send กลับมา แผง Tasks ยังแสดงแชตเดิมว่าทำงานอยู่
+        title: แผงแสดงแชตถัดไป
+        text: >-
+          ถ้าคุณกด New Chat engine สร้าง session ใหม่ แผงว่างและปุ่ม Send กลับมา ถ้าคุณเปิดแชตอื่นจาก History
+          engine โหลดแชตนั้นแล้วแผงแสดงบทสนทนาของมันแทน ทั้งสองทาง แผง Tasks (รายการ turn ของทุกแชตที่ทำงาน รอคุณ หรือจบแล้ว)
+          ยังแสดงแชตเดิมว่าทำงานอยู่
         from: engine
         to: panel
-        sees: หน้าเริ่มต้นของแชตใหม่ ปุ่ม Send และในแผง Tasks แถว "Fix date parsing" ยังทำงานอยู่
+        sees: หน้าเริ่มต้นของแชตใหม่ (หรือบทสนทนาของแชตที่เปิดจาก History) และในแผง Tasks แถว "Fix date parsing" ยังทำงานอยู่
       lane: editor
       at: chat
       do: >-
         `fresh` ส่งคำขอ ACP `session/new` สำหรับแชตใหม่ แล้วให้แผงแสดง session ใหม่
+        (ถ้าเปิดจาก History `moveTo` เรียก `load` ซึ่งส่ง `session/load` แทน แล้วแผงแสดงบทสนทนาของแชตนั้น)
       ref: packages/extension/src/chat/chat.ts#Chat.fresh
 
     - id: empty
@@ -69,7 +75,9 @@ scenario:
     - id: away
       beat:
         title: turn เดิมทำงานต่อเบื้องหลัง
-        text: loop ไม่รู้ว่าไม่มีใครดูอยู่ log ยังบันทึกทุกอย่าง
+        text: >-
+          agent loop ของแชตเดิม (วงที่เรียก model รัน tool แล้ววนต่อ) ทำงานต่อโดยไม่รู้ว่าไม่มีใครดูอยู่
+          session log ยังบันทึกทุกอย่าง ต่อจากนี้ขึ้นกับว่า turn ไปถึงอะไรก่อน
         from: engine
         to: engine
         ask: ไปถึงอะไรก่อน
@@ -87,7 +95,7 @@ scenario:
               - lane: policy
                 beat:
                   title: turn ต้องขอ permission
-                  text: คำสั่งถัดไปไม่อยู่ในรายการปลอดภัย Geno ต้องถามคุณ
+                  text: model ขอรันคำสั่งที่ไม่อยู่ในรายการปลอดภัย โหมด Ask จึงต้องถามคุณก่อนรัน
                   from: engine
                   to: engine
                 at: settle
@@ -98,7 +106,7 @@ scenario:
               - lane: server
                 beat:
                   title: Geno รอจนมีคนดู
-                  text: ไม่มีหน้าต่างไหนแสดง session นี้ Geno จึงรอ งานใน Tasks เปลี่ยนเป็นรอคุณ
+                  text: ไม่มีหน้าต่างไหนแสดง session นี้ จึงไม่มีที่ให้วาดการ์ด Geno รอจนกว่าจะมีหน้าต่างเปิดแชตนี้ แถวในแผง Tasks เปลี่ยนเป็นรอคุณ
                   from: engine
                   to: panel
                   sees:
@@ -131,7 +139,7 @@ scenario:
               - lane: user
                 beat:
                   title: คุณกด Open
-                  text: แชตเดิมเปิดขึ้น engine เล่นซ้ำ turn ที่กำลังทำงาน แผงรับช่วง turn แล้ว Geno ส่งคำถามมาอีกครั้ง
+                  text: แชตเดิมเปิดขึ้น engine ส่งสิ่งที่ turn ทำไปแล้วให้แผงวาดใหม่ แผงรับดูแล turn ต่อ แล้ว Geno ส่งคำถาม permission มาที่หน้าต่างนี้อีกครั้ง
                   from: you
                   to: panel
                 do: ผู้ใช้คลิก Open
@@ -161,7 +169,7 @@ scenario:
               - lane: server
                 beat:
                   title: turn จบเอง
-                  text: งานใน Tasks เปลี่ยนเป็นเสร็จ แชตปล่อย turn นั้นไปแล้ว จึงไม่วาดอะไร
+                  text: แถวในแผง Tasks เปลี่ยนเป็นเสร็จ แชตที่แสดงอยู่ไม่ใช่แชตนั้น จึงไม่วาดอะไรเพิ่ม
                   from: engine
                   to: panel
                 at: tasks
@@ -193,17 +201,17 @@ scenario:
                 end: { turn: done, reason: end_turn }
 ---
 
-แชตในแผงเป็นแค่หน้าต่างที่มองเข้าไปใน session ของ engine การเปลี่ยนแชตจึงไม่หยุดอะไร
+แชตในแผงเป็นแค่หน้าต่างที่มองเข้าไปใน session ของ engine (process แยกที่เดิน turn ดู [ส่วนประกอบของ Geno](/foundations/parts-of-geno/)) การเปลี่ยนแชตจึงไม่หยุดอะไร
 turn ที่ทำงานอยู่ย้ายไปอยู่ในแผง Tasks และเรียกผู้ใช้กลับเมื่อต้องการ
 
-| เมื่อ | แผงที่แสดงแชตอื่นทำอะไร |
+| เมื่อ | VS Code ทำอะไร |
 | --- | --- |
-| turn ต้องการคำตอบ | แจ้งเตือน "needs your permission" หรือ "needs your answer" และแจ้ง OS ถ้าหน้าต่างไม่มีโฟกัส |
-| turn ล้มเหลว | แจ้งเตือน "failed" และแจ้ง OS ถ้าหน้าต่างไม่มีโฟกัส |
+| turn ต้องการคำตอบ | แจ้งเตือน "needs your permission" หรือ "needs your answer" และแจ้ง OS ถ้าหน้าต่างไม่มีโฟกัส (เฉพาะ macOS) |
+| turn ล้มเหลว | แจ้งเตือน "failed" และแจ้ง OS ถ้าหน้าต่างไม่มีโฟกัส (เฉพาะ macOS) |
 | turn จบ | แจ้งเตือน "finished" ใน VS Code เท่านั้น |
 
 สิ่งที่ควรสังเกต
 
-- **session เดิมไม่ถูกปิด** `moveTo` ส่ง `session/close` ให้แชตที่ออกเฉพาะเมื่อไม่มี turn ทำงาน แชตที่ทำงานอยู่จึงยังมี MCP server
+- **session เดิมไม่ถูกปิด** `moveTo` ส่ง `session/close` ให้แชตที่ออกเฉพาะเมื่อไม่มี turn ทำงาน เพราะ `session/close` หยุด turn ของ session นั้นด้วย แชตที่ทำงานอยู่จึงทำงานต่อและยังมี [MCP server](/start/glossary/) (โปรแกรมภายนอกที่เสนอ tool ให้ session)
 - **การ์ดไม่หาย** การ์ดที่เปิดอยู่ตอนออกถูกตอบว่าไม่ได้แสดง ไม่ใช่ปฏิเสธ engine ถามใหม่เมื่อมีหน้าต่างเปิดแชตนั้นอีกครั้ง
 - **ไม่ต้องกลับไปที่หน้าต่างเดิม** หน้าต่างอื่นของโฟลเดอร์เดียวกันที่เปิดแชตนั้นก็รับช่วง turn และตอบการ์ดได้

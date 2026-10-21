@@ -1,6 +1,6 @@
 ---
 title: "Model เปลี่ยนชื่อทั้ง monorepo โดยวางแผนด้วย todo"
-description: การรันจริง A07 งานสามขั้นที่ใช้ model 16 ครั้งใน turn เดียว model เดาชื่อไฟล์ผิด เขียน todo แก้สี่ไฟล์ในคำตอบเดียว รันเทสต์ แล้วตรวจซ้ำเกินจำเป็น
+description: การรันจริง A07 งานสามขั้นที่ใช้ model 16 ครั้งใน turn เดียว model เดาชื่อไฟล์ผิด เขียน todo แก้สี่ไฟล์ในคำตอบเดียว รันเทสต์ แล้วตรวจซ้ำเกินจำเป็น หน้านี้แสดงว่างานยาวก็คือ agent loop เดิมที่วนหลายรอบ และ tool todo ช่วยให้เห็นแผน แต่ไม่ได้บังคับลำดับงาน
 scenario:
   surface: cli
   given:
@@ -37,6 +37,7 @@ scenario:
           select: tools[8]
           highlight: [name, description]
           collapse: [input_schema]
+          quote: when the work takes three or more steps
 
     - id: survey
       lane: model
@@ -46,6 +47,7 @@ scenario:
           model ไม่ได้เรียก `todo` เป็น call แรก มันขอ `list` กับ `grep` แล้วขอ `read` หกไฟล์ในคำตอบเดียว
           สองไฟล์ใน `web` เดาชื่อจาก `core` ผิด ไฟล์จริงชื่อ `profile.js` `read` ส่ง error กลับ
           model จึง `list` โฟลเดอร์ `web` แล้วอ่านใหม่ การสำรวจใช้ไปสี่รอบ
+          การ์ดคือ error ของ `read` ตัวหนึ่ง (`packages/web/test/user.test.js` ที่ไม่มีอยู่จริง)
         from: model
         to: engine
         sees:
@@ -186,7 +188,8 @@ scenario:
       beat:
         title: "Model รันเทสต์เองเมื่อไม่มี `check`"
         text: >-
-          model ขอ `grep` ซ้ำ (ไม่เหลือ `getUser`) กับ `check` แต่ workspace นี้ไม่ได้ตั้งคำสั่ง check ไว้
+          model ขอ `grep` ซ้ำ (ไม่เหลือ `getUser`) กับ `check` ซึ่งเป็น tool ที่รันคำสั่งตรวจ (เทสต์ lint หรือ type check) ที่ผู้ใช้ตั้งไว้ใน settings
+          (คนละอย่างกับ check ของชุดทดสอบท้ายหน้า) แต่ workspace นี้ไม่ได้ตั้งคำสั่ง check ไว้
           ผลของ `check` บอกให้ใช้ `bash` แทน รอบถัดมา model จึงรัน `node --test` เทสต์ผ่านทั้งสี่ตัว
         from: model
         to: engine
@@ -223,7 +226,7 @@ scenario:
       at: shell
       do: >-
         `node --test` อยู่ในรายการปลอดภัย ไม่มีกฎไหนติดธง จึงรันใน sandbox โดยไม่ต้องถาม
-        (ใน engine ของรอบนี้ `node` ยังไม่อยู่ในรายการ กฎ `unlisted` ของ run แบบ non-interactive จึงเป็นตัวปล่อยให้รัน)
+        (ใน engine ของรอบนี้ `node` ยังไม่อยู่ในรายการ ซึ่งเพิ่มทีหลังใน commit 11ac833f กฎ `unlisted` ของ run แบบ non-interactive จึงเป็นตัวปล่อยให้รัน)
         เทสต์ผ่าน 4 จาก 4
       ref: packages/core/src/approval.ts#safeNode
       emits: [tool-result]
@@ -316,7 +319,9 @@ scenario:
         title: "Model ตรวจซ้ำทั้งที่งานเสร็จแล้ว"
         text: >-
           รายการครบแล้ว แต่ model ยัง `grep` และรันเทสต์ซ้ำ แล้วสงสัยผล `grep` ของตัวเอง จึงใช้ `grep -rn` ใน `bash` อีกสองครั้ง
-          ครั้งแรกได้ exit 1 เพราะ `grep -v` ไม่เหลืออะไร ครั้งที่สอง Geno ต่อโน้ตท้ายผลว่าครั้งหน้าให้ใช้ tool `grep`
+          ครั้งแรกได้ exit 1 เพราะ `grep -v` ไม่เหลืออะไร ครั้งที่สอง engine ของ run นี้ต่อโน้ตท้ายผลว่าครั้งหน้าให้ใช้ tool `grep`
+          การ์ดคือผลของ `bash` ครั้งที่สอง ดูโน้ต `[Geno] Next time` ท้าย `output`
+          engine ปัจจุบันไม่มีโน้ตนี้แล้ว (ลบใน commit f04bcdca) และ `grep` ใน `bash` รันเหมือนคำสั่งทั่วไป (commit ad17fb5e)
         from: model
         to: engine
         sees:
@@ -370,7 +375,9 @@ scenario:
       at: shell
       do: >-
         คำสั่งนี้แค่ค้นเนื้อไฟล์ ตอนอัด run นี้ Geno ต่อโน้ต "[Geno] Next time, search file contents with the grep tool, not grep -r or rg."
-        ท้ายผล ตอนนี้ `fileStepRefusal` ปฏิเสธบรรทัดแบบนี้ก่อนรัน และบอกให้เรียก `grep` แทน
+        ท้ายผล commit f04bcdca ลบโน้ตนี้ และให้ `fileStepRefusal` ปฏิเสธบรรทัดแบบนี้ก่อนรันแทน แต่ commit ad17fb5e จำกัดให้ปฏิเสธเฉพาะการอ่านไฟล์
+        (`cat` `head` `tail` `less` `more` `sed -n`) และการเขียนข้อความตายตัวลงไฟล์ ใน engine ปัจจุบัน `fileStepRefusal` คืน `undefined`
+        ให้บรรทัดนี้ มันจึงรันผ่าน approval เหมือนคำสั่งทั่วไปและไม่มีโน้ตต่อท้าย
       ref: packages/core/src/shell-intent.ts#fileStepRefusal
       emits: [tool-result]
 
@@ -381,16 +388,23 @@ scenario:
       beat:
         title: "Model สรุปงานและจบ turn"
         text: >-
-          call ที่ 16 เป็นข้อความอย่างเดียว บอกว่าเปลี่ยนชื่อที่ไหน เทสต์ผ่าน และเพิ่มบรรทัด CHANGELOG แล้ว
-          request สุดท้ายอ่านจาก cache ได้ 11,127 token ทั้ง turn ใช้ $0.024
+          call ที่ 16 เป็นข้อความอย่างเดียว บอกว่าเปลี่ยนชื่อที่ไหน (แท็บแรก) เทสต์ผ่าน และเพิ่มบรรทัด CHANGELOG แล้ว (แท็บสอง)
+          ส่วนต้นของ request สุดท้าย 11,127 token (หน่วยนับข้อความของ model) อ่านจาก prompt cache
+          คือส่วนที่ผู้ให้บริการจำไว้จาก request ก่อนหน้า จึงคิดเงินถูกกว่า ทั้ง turn ใช้ $0.024
         from: model
         to: engine
         end: จบ turn
         sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=61
-          select: content[-1]
-          highlight: [text]
+          - kind: payload
+            source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=61
+            select: content[-1]
+            highlight: [text]
+            quote: "**Renamed**"
+          - kind: payload
+            source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=61
+            select: content[-1]
+            highlight: [text]
+            quote: passes all 4 tests
       do: >-
         model ตอบเป็นข้อความอย่างเดียว จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -409,11 +423,18 @@ scenario:
 
 ## ผลของรอบนี้
 
+**อ่านผลอย่างไร** หน้าในหมวดนี้มาจาก campaign การรันจริง คือชุดทดสอบที่รัน `gcode agent` กับ model จริง (qwen3.8-flash) ใน repo ตัวอย่างทีละ case
+แต่ละ case (เช่น A08) รันได้หลายรอบ รอบชื่อ `1` คือรอบแรก ส่วนรอบชื่อ `fix-…` รันหลังแก้ engine ไปชุดหนึ่ง
+ทุกรอบตรวจด้วย check สองชุด: check ของ case เอง กับ check กลางที่ใช้กับทุก case เช่น `dedicated-file-tools`
+ซึ่งตอนอัด run เหล่านี้นับเป็นข้อเสียเมื่อ model ใช้ `bash` ทำงานที่ tool ไฟล์ (`read` `list` `grep` `glob`) ทำได้
+ตั้งแต่ commit ad17fb5e check นี้นับเฉพาะ `bash` ที่อ่านไฟล์แบบ `cat` `head` `tail` ส่วน `ls` `grep` `find` ใน `bash` ไม่นับแล้ว ผลของแต่ละรอบอยู่ใน `result.json`
+ส่วน ISSUES.md และ FIXES.md คือบันทึกปัญหาที่ campaign พบและการแก้ แต่ละข้อมีรหัสอย่าง G-01
+
 check ของ case ผ่านทุกข้อ: model ใช้ todo และจบด้วยทุกข้อ done (`keeps-todo`) เทสต์ทุก package ผ่าน (`tests-pass`)
 ไม่เหลือ `getUser` ใน `packages` (`rename-complete`) และ CHANGELOG มี `fetchUser` (`changelog`)
-ทั้ง run นับว่าไม่ผ่าน เพราะ check กลาง `dedicated-file-tools` จับ `grep -rn` สองครั้งท้าย run ที่ควรเป็น tool `grep` (`result.json` ของรอบ fix-s1-1)
+ทั้ง run นับว่าไม่ผ่าน เพราะ check กลาง `dedicated-file-tools` จับ `grep -rn` สองครั้งท้าย run ที่ควรเป็น tool `grep` ตาม check ตอนนั้น (`result.json` ของรอบ fix-s1-1)
 
-รอบนี้เป็นรอบเดียวใน 10 รอบของ A07 ที่ model เรียก `todo` อีกเก้ารอบเปลี่ยนชื่อได้ครบและเทสต์ผ่านเหมือนกัน แต่ไม่มีรายการ
+รอบนี้เป็นรอบเดียวใน 10 รอบของ A07 บน qwen3.8-flash ที่ model เรียก `todo` (A07 มีอีกรอบหนึ่งบน Claude Sonnet ชื่อ `sonnet-1` ซึ่งก็เรียก `todo`) อีกเก้ารอบเปลี่ยนชื่อได้ครบและเทสต์ผ่านเหมือนกัน แต่ไม่มีรายการ
 (`keeps-todo` ใน `result.json` ของแต่ละรอบ) FIXES.md บันทึก P-11 ว่าการเขียนคำอธิบายของ `todo` ใหม่ยังไม่แก้
 และมองว่าเป็นข้อจำกัดของ model ที่งานขนาดนี้
 
@@ -423,11 +444,12 @@ check ของ case ผ่านทุกข้อ: model ใช้ todo แล
   [Agent loop](/foundations/agent-loop/) ที่วนนานขึ้น `todo` เป็นแค่ tool ตัวหนึ่ง มันไม่บังคับลำดับงาน
   มันเก็บรายการไว้ใน log ให้ทั้ง model และคุณเห็น
 - **คำอธิบายของ tool แนะนำได้ บังคับไม่ได้** คำอธิบายของ `todo` บอกให้เรียกเป็น call แรก model เรียกใน call ที่ห้า
-  ส่วนที่ Geno ทำเองได้คือเตือน: `todoReminder` ส่งรายการที่ค้างกลับไปเมื่อ model ไม่แตะมันครบ 10 รอบ ใน run นี้ไม่ถึงเกณฑ์นั้น
+  ส่วนที่ Geno ทำเองได้คือเตือน: `todoReminder` ส่งรายการที่ค้างกลับไปเมื่อ model ไม่แตะมันครบ 10 รอบ (เพิ่มหลัง run นี้ใน commit 413cd2e3) ถึงมีแล้ว run นี้ก็ไม่ถึงเกณฑ์นั้น
 - **ผลที่ผิดพลาดก็คือผลของ tool** `read` ไฟล์ที่ไม่มี และ `bash` ที่ exit 1 ไม่ทำให้ turn จบ model อ่าน error แล้วเลือกทางใหม่เอง
   ดู [ผลของ tool ส่งกลับอย่างไร](/foundations/tool-results/)
-- **โน้ตท้ายผลสอนได้ช้าไปหนึ่งคำสั่ง** ตอนอัด run นี้ โน้ต `[Geno] Next time, …` มาถึงหลังคำสั่งรันไปแล้ว
-  ตอนนี้ `fileStepRefusal` ไม่รันบรรทัดที่มีขั้นซึ่ง `read` `list` `glob` หรือ `grep` ทำได้ และบอกว่าแต่ละขั้นเป็นงานของ tool ไหน
+- **โน้ตท้ายผลของ run นี้สอนได้ช้าไปหนึ่งคำสั่ง** ตอนอัด run นี้ โน้ต `[Geno] Next time, …` มาถึงหลังคำสั่งรันไปแล้ว
+  Geno ปัจจุบันเลิกต่อโน้ตนี้ (commit f04bcdca) และไม่ห้าม `grep` `ls` `find` ใน `bash` แล้ว เพราะคำสั่งพวกนี้ไม่ได้อ่านเนื้อไฟล์ที่ Geno ติดตาม (commit ad17fb5e)
+  ที่ยังห้ามคือการอ่านไฟล์แบบ `cat` ใน `bash` `fileStepRefusal` ไม่รันบรรทัดนั้นเลย และตอบว่าเป็นงานของ `read`
 
 อ่านต่อ:
 

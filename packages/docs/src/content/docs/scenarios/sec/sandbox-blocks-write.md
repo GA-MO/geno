@@ -32,6 +32,7 @@ scenario:
       beat:
         title: "Geno ห่อคำสั่งด้วย sandbox"
         text: >-
+          sandbox คือกรอบของระบบปฏิบัติการที่ครอบ process ของคำสั่ง แล้วกันสิ่งที่มันแตะได้ ภายใน sandbox
           คำสั่งเขียนได้เฉพาะใน workspace กับโฟลเดอร์ชั่วคราว อ่านที่เก็บกุญแจใน home อย่าง `~/.ssh` ไม่ได้
           และออกเน็ตได้เฉพาะเครื่องตัวเอง โฮสต์แพ็กเกจ และโฮสต์ที่คุณเพิ่มไว้ ซึ่งตอนนี้ไม่มี
         from: engine
@@ -116,8 +117,9 @@ scenario:
       beat:
         title: "คำสั่งล้มด้วย exit code"
         text: >-
-          ผลขึ้นต้นด้วย Exit code 1 ตามด้วยสิ่งที่คำสั่งพิมพ์ บันทึกว่าคุณอนุญาตยังติดไปกับผล ไม่มีอะไรบอกแยกว่า sandbox
-          เป็นคนกัน ใน run จริงด้านล่าง classifier อนุญาต `ps aux` แล้ว sandbox กันไว้แบบนี้
+          ผลขึ้นต้นด้วย `Exit code` ตามด้วยเลขที่ไม่ใช่ 0 (ในการ์ดคือ 1) แล้วจึงเป็นสิ่งที่คำสั่งพิมพ์ บันทึกว่าคุณอนุญาตยังติดไปกับผล ไม่มีอะไรบอกแยกว่า sandbox
+          เป็นคนกัน การ์ดข้างล่างคือ `tool_result` จริงจากการรันในโหมด Auto ที่ classifier (model อีกตัวที่ตัดสินคำสั่งแทนคุณ)
+          อนุญาต `ps aux` แล้ว แต่ sandbox เปิด `ps` ไม่ได้เลย เพราะบน macOS `/bin/ps` รันด้วยสิทธิ์ root (setuid) และโปรแกรมใน sandbox เริ่มโปรแกรมแบบนี้ไม่ได้ ดู `content`: `Exit code 1` ตามด้วย `Operation not permitted` และ `is_error: true`
         from: machine
         to: engine
         sees:
@@ -127,7 +129,7 @@ scenario:
           highlight:
             - content
       do: >-
-        `bash` ประกอบผล: บรรทัดแรก `Exit code 1` ตามด้วยสิ่งที่คำสั่งพิมพ์ แล้วปิดด้วย `[exit code 1]`
+        `bash` ประกอบผล: บรรทัดแรก `Exit code <เลข>` ตามด้วยสิ่งที่คำสั่งพิมพ์ แล้วปิดด้วย `[exit code <เลข>]`
         สถานะของผลเป็น `error` บันทึกว่าผู้ใช้อนุญาตไว้ยังติดไปกับผล ไม่มี event พิเศษที่บอกว่า sandbox เป็นคนกัน
       ref: packages/core/src/tools.ts#commandFailureLine
       emits: [Exit code, error]
@@ -136,7 +138,7 @@ scenario:
       beat:
         title: "แชตขึ้นขั้นที่ล้มเหลว"
         text: >-
-          ขั้นของคำสั่งหยุดหมุนและขึ้นว่าล้มเหลว output พับอยู่ข้างใต้
+          ขั้นของคำสั่งหยุดหมุนและขึ้นว่าล้มเหลว output พับอยู่ข้างใต้ การ์ดแสดงทาง npm เป็นตัวอย่าง
         from: engine
         to: panel
         sees: { kind: step, label: npm install -g typescript, status: failed }
@@ -145,20 +147,52 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: "Model เลือกทางอื่น"
+        title: "Geno เรียก model อีกครั้งพร้อม error"
         text: >-
-          Geno เรียก model ต่อ model อ่าน error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace
-          หรือบอกคุณว่าต้องรันคำสั่งนี้เอง
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ การ์ดข้างล่างคือสองข้อความท้ายของคำขอจริงจากการรันเดียวกับการ์ดก่อนหน้า
+          การ์ดแรกคือคำตอบก่อนหน้าของ model ดู `tool_use` ที่ไฮไลต์ ซึ่งขอ `bash` รัน `ps aux` (ความคิดของ model พับไว้)
+          การ์ดที่สองคือผลที่ส่งกลับ ดู `tool_result` ที่ไฮไลต์ซึ่งล้มด้วย exit code model จึงรู้ว่าคำสั่งไม่สำเร็จ
         from: engine
         to: model
-        end: "sandbox กัน turn ทำต่อ"
+        sees:
+          - kind: payload
+            source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=22
+            select: messages[-2]
+            collapse: ['content[0]']
+            highlight: ['content[1]']
+          - kind: payload
+            source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=22
+            select: messages[-1]
+            highlight: ['content[0]']
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model อ่านข้อความ error แล้วเลือกทางอื่น
-        เช่นติดตั้งเป็น dev dependency ใน workspace แทน หรือบอกผู้ใช้ว่าต้องรันคำสั่งนี้เอง
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` แล้ว Geno ส่งคำขอที่มีผลที่ล้มเหลวอยู่ท้ายสุด
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model เลือกทางอื่น"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น model อ่าน error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace (ทาง npm)
+          หรือบอกคุณว่าต้องรันคำสั่งนี้เองแล้วจบ turn ในการรันจริงนี้ ความคิดของ model (ก้อน `thinking` ที่พับไว้ในการ์ด) สรุปว่าหา server ไม่เจอเพราะ `ps` ถูกกัน
+          การ์ดข้างล่างคือคำตอบนั้น ดู `input` ที่ไฮไลต์ คือคำสั่ง `bash` ใหม่ที่รัน `node` เพื่อพิมพ์ environment ที่ process เห็นเอง
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=22
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: "sandbox กัน turn ทำต่อ"
+      do: >-
+        model อ่านข้อความ error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace แทน หรือบอกผู้ใช้ว่าต้องรันคำสั่งนี้เอง
+        ในการรันนี้ model ขอ `bash` สองคำสั่งใหม่ และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 การอนุญาตกับ sandbox เป็นคนละชั้นกัน การอนุญาต (กฎ การ์ด classifier ของ Auto) ตัดสินว่า**ให้รันไหม**
@@ -169,7 +203,7 @@ scenario:
 
 | คำสั่งพยายาม | sandbox | ปรับได้ที่ |
 | --- | --- | --- |
-| เขียนนอก workspace และโฟลเดอร์ชั่วคราว | ปฏิเสธ | ไม่มี (lane ได้ที่เขียนเพิ่มเฉพาะส่วนของ git ที่ใช้ร่วมกัน) |
+| เขียนนอก workspace และโฟลเดอร์ชั่วคราว | ปฏิเสธ | ไม่มี ([lane](/start/glossary/) ได้ที่เขียนเพิ่มเฉพาะส่วนของ git ที่ใช้ร่วมกัน) |
 | อ่านที่เก็บกุญแจใน home | ปฏิเสธ | กฎ deny path เพิ่มที่ห้ามอ่านได้ ลดไม่ได้ |
 | ต่อโฮสต์แพ็กเกจ (npm, Yarn, PyPI, GitHub) | อนุญาต | ปิดได้ที่ `gcode.sandbox.packageHosts` |
 | ต่อโฮสต์ภายนอกอื่น | ปฏิเสธ | `gcode.sandbox.allowedDomains` (เช่น `crates.io`) |

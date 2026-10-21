@@ -1,6 +1,6 @@
 ---
 title: "bash ปฏิเสธคำสั่งก่อนรัน แล้วบอกทางที่ถูก"
-description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้า หรือคำสั่งที่ออกนอก lane แต่ตอบ model ว่าควรใช้ tool ไหนแทน
+description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้าหรือด้วย & หรือคำสั่งที่ออกนอก lane แต่ตอบ model ว่าควรใช้ tool ไหนแทน
 scenario:
   surface: vscode
   given:
@@ -17,8 +17,16 @@ scenario:
         title: "Model ขอรันคำสั่งด้วย bash"
         text: >-
           model ขอรันคำสั่งที่จะค้างจนหมดเวลา หรือคำสั่งที่ออกไปนอก lane ของ session
+          (lane คือโฟลเดอร์ git worktree แยกที่ session บางตัวทำงานอยู่)
+          การ์ดข้างล่างเป็นคำตอบจริงจากการรันหนึ่ง ดู `command` ใน `input` ที่ไฮไลต์ไว้
+          model ขอเปิด `npm run dev` ไว้ด้วย `&` แล้วรอให้ server ตอบในคำสั่งเดียว
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/sonnet-1/session.jsonl#seq=9
+          select: content
+          highlight: ['[1].input']
       do: >-
         model ขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -39,8 +47,9 @@ scenario:
       beat:
         title: "bash ตรวจคำสั่งก่อนถามกฎสิทธิ์"
         text: >-
-          ก่อนถามกฎสิทธิ์และก่อนรันอะไร `bash` ตรวจคำสั่งเอง สองข้อแรกตรวจเฉพาะคำสั่งที่รอผล
-          และเฉพาะเมื่อมีงานเบื้องหลังให้ใช้แทน ลองเลือกว่าคำสั่งติดข้อไหน
+          ก่อนถามกฎสิทธิ์และก่อนรันอะไร `bash` ตรวจคำสั่งเอง สองข้อแรกตรวจเฉพาะคำสั่งที่รอผล คือคำสั่งที่ Geno รอจนจบก่อนตอบ model
+          และเฉพาะเมื่อมีงานเบื้องหลังให้ใช้แทน งานเบื้องหลังคือคำสั่งที่รันต่อไปโดย turn ไม่รอ (`run_in_background: true`)
+          ลองเลือกว่าคำสั่งติดข้อไหน
         from: engine
         to: engine
         ask: "ติดข้อไหน"
@@ -61,10 +70,17 @@ scenario:
                 beat:
                   title: "คำสั่งขึ้นต้นด้วย sleep นาน"
                   text: >-
-                    `sleep 30 && curl -s localhost:3000/health` รอ 2 วินาทีขึ้นไปแล้วมีคำสั่งตามหลัง bash บอกให้ใช้ monitor
-                    รอเงื่อนไข หรือรันแบบเบื้องหลังแล้วจบ turn และห้ามต่อ sleep สั้นๆ หลบ
+                    `sleep 30 && curl -s localhost:3000/health` รอ 2 วินาทีขึ้นไปแล้วมีคำสั่งตามหลัง bash บอกให้ใช้ `monitor`
+                    (tool ที่เฝ้า output แล้วปลุก session เมื่อเจอบรรทัดที่ต้องการ) รอเงื่อนไข หรือรันแบบเบื้องหลังแล้วจบ turn
+                    และห้ามต่อ sleep สั้นๆ หลบ ข้อความนี้เป็นผลของ call ถึง model ตอนเรียกครั้งถัดไป
+                    การ์ดข้างล่างเป็นผลจริงจากการรันที่ model ต่อ `sleep 5` หน้า `curl` ดู `status` ที่เป็น `error`
+                    และ `output` ที่ขึ้นต้นด้วย "Blocked" แล้วบอกทางที่ถูก
                   from: engine
-                  to: model
+                  to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A12-background-server/fix-a2/session.jsonl#seq=11
+                    highlight: [status, output]
                 do: >-
                   `leadingSleep` จับ `sleep 30 && curl -s localhost:3000/health` ได้ การรอ 2 วินาทีขึ้นไปที่มีคำสั่งตามหลังถูกปฏิเสธ
                   `sleepRefusal` บอกให้ใช้ `monitor` รอเงื่อนไข หรือรันคำสั่งด้วย `run_in_background: true` แล้วจบ turn
@@ -72,21 +88,34 @@ scenario:
                 ref: packages/core/src/tools.ts#sleepRefusal
                 emits: [Blocked]
           - id: server
-            label: เปิด dev server ไว้ข้างหน้า
+            label: เปิด dev server ไว้ข้างหน้าหรือด้วย &
             then: result
             steps:
               - lane: tool
                 at: executor
                 beat:
-                  title: "คำสั่งเปิด dev server ไว้ข้างหน้า"
+                  title: "คำสั่งเปิด dev server ไว้ข้างหน้าหรือด้วย &"
                   text: >-
-                    bash อ่าน script ใน `package.json` แล้วเห็นว่า `npm run dev` เปิด server ซึ่งจะค้างจนหมดเวลา
-                    มันบอกคำสั่งที่ควรรันเบื้องหลัง วิธีรอบรรทัด ready และวิธีหยุด
+                    bash อ่าน script ใน `package.json` แล้วเห็นว่า `npm run dev` เปิด server ถ้ารันไว้ข้างหน้า call จะค้างจนหมดเวลา ถ้าต่อท้ายด้วย `&` server จะค้างอยู่หลัง call และ session จบ คำสั่งในการ์ดมี `&` ผลจึงบอกเหตุผลข้อหลัง
+                    มันบอกคำสั่งที่ควรรันเบื้องหลัง วิธีรอให้ server พร้อม และวิธีหยุด ข้อความนี้เป็นผลของ call
+                    ถึง model ตอนเรียกครั้งถัดไป วิธีรอขึ้นกับว่ามีอะไรปลุก session ได้ไหม ในแผงแชตของ VS Code ซึ่งปลุกได้
+                    ผลบอกให้รอด้วย `monitor` ที่ดักบรรทัด ready ของ server แล้วจบ turn
+                    การ์ดข้างล่างเป็นผลจริงของคำขอในการ์ดแรก แต่การรันนั้นสั่งจาก command line โดยไม่มีคนดู
+                    ซึ่ง `monitor` ปลุก session ไม่ได้ ผลในการ์ดจึงบอกให้รอด้วยคำสั่ง `bash` ธรรมดาหนึ่งคำสั่งที่ Geno รอจนจบ
+                    ซึ่งวน `curl` จนกว่า server จะตอบ `npm run dev` ที่มี `&` ก็ถูกจับแบบเดียวกัน
+                    ดู `status` ที่เป็น `error` และ `output` ที่บอกให้เริ่ม server แยกต่างหาก โดยเรียก `bash` ใหม่ด้วย `"run_in_background": true`
+                    การ์ดของขั้นถัดๆ ไปบนหน้านี้มาจากการรันเดียวกันนี้
                   from: engine
-                  to: model
+                  to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A12-background-server/sonnet-1/session.jsonl#seq=10
+                    quote: "Start it on its own instead: call bash with {\"command\": \"npm run dev\", \"run_in_background\": true}"
+                    highlight: [status, output]
                 do: >-
-                  `serverStartOf` อ่าน script ของ `package.json` แล้วเห็นว่า `npm run dev` เปิด server ซึ่งจะค้างจนหมดเวลา
-                  `serverRefusal` บอกคำสั่งที่ควรส่งด้วย `run_in_background: true` วิธีรอบรรทัด ready ด้วย `monitor`
+                  `serverStartOf` อ่าน script ของ `package.json` แล้วเห็นว่า `npm run dev` เปิด server `serverRefusal` บอกเหตุผลตาม `background` (ค้างจนหมดเวลา หรือค้างอยู่หลัง call)
+                  `serverRefusal` บอกคำสั่งที่ควรส่งด้วย `run_in_background: true` วิธีรอ (บรรทัด ready ด้วย `monitor`
+                  เมื่อ `tools.wakes` มี ไม่อย่างนั้นวน `until curl -sf ...` ข้างหน้าด้วย `timeout_seconds`)
                   วิธีหยุดด้วย `task_stop` และ `preview_start` ถ้ามีไฟล์ launch config
                 ref: packages/core/src/shell-intent.ts#serverRefusal
                 emits: [Blocked]
@@ -100,9 +129,9 @@ scenario:
                   title: "คำสั่งออกไปนอก lane"
                   text: >-
                     session นี้ทำงานใน lane ซึ่งเป็น git worktree แยก `cd ../main && git status` ออกไปนอก lane
-                    จึงถูกปฏิเสธก่อนถึงกฎของ workspace
+                    จึงถูกปฏิเสธก่อนถึงกฎของ workspace ข้อความปฏิเสธเป็นผลของ call ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   session นี้ทำงานใน lane (git worktree แยก) `approveCommand` ให้ `laneCommandDenial` อ่านคำสั่ง
                   `cd ../main && git status` เปลี่ยนไปโฟลเดอร์นอก lane จึงถูกปฏิเสธก่อนถึงกฎของ workspace
@@ -115,10 +144,10 @@ scenario:
       beat:
         title: "bash ไม่รัน แต่ตอบว่าควรทำอะไรแทน"
         text: >-
-          ไม่มีอะไรรัน ไม่มีการ์ด ผลของ call เป็น error ที่มีวิธีที่ถูก ขั้นในแชตขึ้นว่าล้มเหลว
+          ไม่มีอะไรรัน ไม่มีการ์ดถามคุณ ผลของ call เป็น error ที่มีวิธีที่ถูก ขั้นในแชตขึ้นเครื่องหมายล้มเหลว
         from: engine
         to: panel
-        sees: { kind: step, label: npm run dev, status: failed }
+        sees: { kind: step, label: bash, status: failed }
       do: >-
         executor โยน `ToolError` `runExecutor` แปลงเป็นผลสถานะ `error` ด้วยข้อความของมัน ไม่มีอะไรรัน ไม่มีการ์ด
         และไม่มีบันทึกการอนุญาต
@@ -132,9 +161,17 @@ scenario:
       beat:
         title: "Geno เรียก model ต่อพร้อมคำแนะนำ"
         text: >-
-          turn ไม่หยุด Geno เรียก model ต่อ model ได้ผลที่บอกว่าเป็น error พร้อมวิธีที่ถูก
+          turn ไม่หยุด Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือผลที่บอกว่าเป็น error
+          พร้อมวิธีที่ถูก ทุกทางมาถึงขั้นนี้แบบเดียวกัน การ์ดข้างล่างเป็นข้อความสุดท้ายของคำขอจริงจากการรันเดียวกับการ์ดแรก
+          (ทาง dev server) ดู `is_error: true` ซึ่งบอก model ว่า call นี้ล้มเหลว และ `content` ที่มีวิธีที่ถูก
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/sonnet-1/wire.jsonl#line=7
+          quote: "Start it on its own instead: call bash with {\"command\": \"npm run dev\", \"run_in_background\": true}"
+          select: messages[6].content
+          highlight: ['[0].is_error', '[0].content']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` turn ไม่หยุด model ได้ `tool_result` ที่มี `is_error: true`
         พร้อมวิธีที่ถูก
@@ -147,12 +184,20 @@ scenario:
     - id: retry
       lane: model
       beat:
-        title: "Model เรียกใหม่ตามคำแนะนำ"
+        title: "Model ทำตามคำแนะนำ"
         text: >-
-          model รัน `npm run dev` แบบเบื้องหลังแทน และได้ชื่องานกลับมาทันที
+          model ตอบหลังได้คำขอนี้เท่านั้น และทำตามวิธีที่ผลบอก ทาง `sleep` ผลบอกให้ใช้ `monitor` หรือรันแบบเบื้องหลังแล้วจบ turn
+          ทาง lane ผลบอกให้ทำงานใน lane เท่านั้นและไม่ลองคำสั่งนั้นซ้ำ model มักทำงานต่อใน lane ในทาง dev server มันขอรัน `npm run dev` แบบเบื้องหลังแทน
+          ซึ่งจะได้ชื่องานกลับมาทันที
+          การ์ดข้างล่างเป็นคำตอบจริงต่อคำขอในการ์ดก่อนหน้า ดู `input` ที่ไม่มี `&` แล้ว และมี `run_in_background: true`
         from: model
         to: engine
-        end: "model เรียกแบบที่ถูก"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/sonnet-1/session.jsonl#seq=12
+          select: content
+          highlight: ['[0].input']
+        end: "model ทำตามคำแนะนำ"
       do: >-
         model เรียกตามคำแนะนำ เช่น `bash` ด้วย `npm run dev` และ `run_in_background: true` ซึ่งได้ job id กลับมาทันที
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

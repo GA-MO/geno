@@ -7,7 +7,7 @@ scenario:
     - turn ของแชตนี้กำลังทำงาน และ `bash` กำลังรัน `pnpm test` ในชุดของตัวเอง
     - ช่องพิมพ์ไม่มีข้อความรอในคิว และข้อความที่จะส่งไม่มีไฟล์แนบหรือ `@` mention
   trigger: >-
-    ผู้ใช้พิมพ์ "อย่าแก้ไฟล์ test นะ" แล้วคลิกปุ่ม Send now (ลูกศรขึ้นข้างปุ่ม Stop) หรือกด Cmd-Enter
+    ผู้ใช้พิมพ์ "อย่าแก้ไฟล์ test นะ" แล้วคลิกปุ่ม Send now (ลูกศรขึ้นข้างปุ่ม Stop) หรือกด Cmd-Enter (บน Windows และ Linux คือ Ctrl-Enter)
   covers: [ctl.steer-delivered]
   related: [ctl.queued-followup, ctl.stop-while-tools-run, turn.with-tools]
   steps:
@@ -16,7 +16,8 @@ scenario:
       beat:
         title: "คุณพิมพ์แล้วกด Send now"
         text: >-
-          `pnpm test` กำลังรันอยู่ คุณพิมพ์ "อย่าแก้ไฟล์ test นะ" แล้วคลิกลูกศรขึ้นข้างปุ่ม Stop หรือกด Cmd-Enter
+          `pnpm test` กำลังรันอยู่ คุณอยากบอก model ตอนนี้เลยโดยไม่รอให้ turn จบ คุณพิมพ์ "อย่าแก้ไฟล์ test นะ"
+          แล้วคลิกลูกศรขึ้นข้างปุ่ม Stop หรือกด Cmd-Enter (Ctrl-Enter บน Windows และ Linux)
         from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความแล้วกด Send now ขณะที่คำสั่งยังรันอยู่
@@ -45,7 +46,8 @@ scenario:
       beat:
         title: "VS Code ส่งข้อความเป็น steer"
         text: >-
-          turn ยังทำงานอยู่ VS Code จึงส่งข้อความพร้อมป้ายว่าเป็น steer ไม่ใช่ prompt ใหม่
+          turn ยังทำงานอยู่ ส่วนของ Geno ใน VS Code จึงส่งข้อความพร้อมป้ายว่าเป็น steer ไม่ใช่ prompt ใหม่
+          steer คือข้อความที่แทรกเข้า turn ที่กำลังทำงาน แทนที่จะเริ่ม turn ใหม่
         from: panel
         to: engine
       do: >-
@@ -61,6 +63,7 @@ scenario:
         title: "Geno เก็บข้อความไว้ใน inbox ของ turn"
         text: >-
           engine ไม่เริ่ม turn ใหม่ มันตรวจว่าเป็นข้อความล้วนและไม่ว่าง แล้วใส่ไว้ใน inbox ของ turn ที่ทำงานอยู่
+          inbox คือที่พักข้อความที่รอให้ loop มารับไปบันทึก
         from: engine
         to: engine
       do: >-
@@ -88,7 +91,7 @@ scenario:
           คำสั่งจบ Geno บันทึกผลแล้วส่งไปที่แชต ขั้นนั้นหยุดหมุน
         from: engine
         to: panel
-        sees: { kind: step, label: pnpm test, status: done, output: Tests  12 passed (12) }
+        sees: { kind: step, label: pnpm test, status: done, output: "Tests  N passed (N)" }
 
     - id: decide
       lane: loop
@@ -97,6 +100,7 @@ scenario:
         title: "ถึงจุดปลอดภัยก่อนเรียก model"
         text: >-
           ผลของ tool กลับมาครบ ขั้นต่อไปคือเรียก model ตรงนี้คือจุดเดียวที่ข้อความแทรกเข้า turn ได้
+          เพราะ model ไม่ได้ฟังอะไรระหว่างเขียน มันเห็นข้อความใหม่ได้เฉพาะใน request ถัดไป
         from: engine
         to: engine
       do: >-
@@ -174,24 +178,53 @@ scenario:
       beat:
         title: "Geno ส่งผลและข้อความของคุณให้ model"
         text: >-
-          คำขอรอบนี้มีผลของ `pnpm test` ตามด้วยข้อความของคุณ ที่ Geno ห่อไว้ว่าเป็นข้อความที่คุณส่งมาระหว่างทำงาน
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือผลของ `pnpm test` ในบล็อก `tool_result` (บล็อกที่ส่งผลของ tool กลับให้ model) ตามด้วยข้อความของคุณ
+          ที่ Geno ห่อไว้ว่าเป็นข้อความที่คุณส่งมาระหว่างทำงาน การ์ดข้างล่างเป็นคำขอที่ engine สร้างจริงในการรันอื่นที่บันทึกไว้ (model ในการรันนั้นตอบตามบทที่เขียนไว้) ที่ผู้ใช้พิมพ์แทรกเข้าไปใน
+          subagent ชื่อ explore (session ลูกที่ model สร้างให้ค้นโค้ด) ข้อความถึง model แบบเดียวกัน
+          ในการ์ด ดูข้อความสุดท้ายของ `messages` บล็อกแรกคือ `tool_result` ของการค้นด้วย `grep`
+          บล็อกที่สองคือข้อความของผู้ใช้ "Skip src/update.ts." ที่ขึ้นต้นด้วยโน้ต `[Geno] The user sent a new message while you were working`
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=6
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[2].content[0]', '[2].content[1]']
 
     - id: reads
       lane: model
       beat:
         title: "Model ปรับงานตามที่คุณบอก"
         text: >-
-          model อ่านข้อความของคุณแล้วปรับงานใน turn เดิม ไม่ต้องรอ turn ใหม่
+          model ตอบหลังได้คำขอนี้เท่านั้น มันอ่านข้อความของคุณแล้วปรับงานใน turn เดิม ไม่ต้องรอ turn ใหม่
+          ในการรันที่บันทึกไว้ (model ตอบตามบทที่เขียนไว้ ไม่ใช่ model จริง) explore ข้าม `src/update.ts` ตามที่ผู้ใช้บอก แล้วส่งรายงานด้วย tool `report`
+          การ์ดสามใบเป็น event จาก stream ของคำตอบนั้น (model ส่งคำตอบมาเป็นชิ้นๆ ทีละ event) ใบแรกบอกว่า model เริ่มเรียก tool ชื่อ `report`
+          ใบที่สองคือชิ้นท้ายของ input ที่มันเขียนว่า "I skipped src/update.ts, as you asked."
+          ใบที่สามคือ `stop_reason: tool_use` ซึ่งแปลว่า model รอผลของ tool และ turn ยังไม่จบ
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=7
+            select: '[1]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=7
+            select: '[3]'
+            highlight: [data.delta.partial_json]
+          - kind: payload
+            source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=7
+            select: '[5]'
+            highlight: [data.delta.stop_reason]
         end: "turn ทำต่อตามที่คุณบอก"
       do: >-
         คำขอนี้มีผลของ `pnpm test` ตามด้วยข้อความของผู้ใช้ห่อด้วย `userSteerText`
         ("The user sent a new message while you were working: ...") model ปรับงานตามนั้นใน turn เดิม
-      ref: packages/core/src/fence.ts#userSteerText
-      end: { turn: continues, reason: call-model }
+        ในการรันที่บันทึกไว้ model จำลองตอบตามบทด้วยคำขอ `report` และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 steer คือข้อความที่ผู้ใช้ส่งเข้า turn ที่กำลังทำงาน แทนที่จะรอให้ turn จบแบบข้อความ Queued
@@ -199,7 +232,7 @@ steer คือข้อความที่ผู้ใช้ส่งเข�
 
 | loop กำลังทำอะไรตอนข้อความมาถึง | ผล |
 | --- | --- |
-| รัน tool หรือตอบ call ที่รันไม่ได้ | ถือไว้จนถึงการเรียก model ครั้งถัดไป |
+| รัน tool หรือเขียนคำตอบให้ call ที่ไม่ได้รัน (เช่นถูกปฏิเสธ) | ถือไว้จนถึงการเรียก model ครั้งถัดไป |
 | จะเรียก model | ส่งเข้า log ทันทีที่ `deliver()` |
 | turn จบแล้ว | กลายเป็น turn ถัดไป |
 

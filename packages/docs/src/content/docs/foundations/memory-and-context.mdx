@@ -54,8 +54,8 @@ Geno วาง `cache_control` สองจุดในทุก request (`build
 - ครั้งที่สองอ่านจาก cache 8,828 token คือทั้ง request แรก และเขียนใหม่แค่ 264 token คือคำตอบกับผลของ tool ที่ต่อท้าย
 - token ที่ไม่ผ่าน cache เลยมีแค่ 6 ทั้งสองครั้ง
 
-นี่คือเหตุผลที่ system prompt ต้องคงที่ และข้อมูลที่เปลี่ยนตาม session ต้องอยู่ในข้อความแรกแทน ([หน้าที่ 4](/foundations/how-the-model-knows/))
-cache ของ qwen บน Model Studio อยู่ 5 นาที ของ Claude อยู่ 1 ชั่วโมง (`cacheTtl`)
+นี่คือเหตุผลที่ system prompt ต้องคงที่ และข้อมูลที่เปลี่ยนตาม session ต้องอยู่ในข้อความแรกแทน ([Model รู้ได้อย่างไรว่าต้องทำอะไร](/foundations/how-the-model-knows/))
+cache ของ qwen บน Model Studio อยู่ 5 นาที ของ Claude อยู่ 1 ชั่วโมง ยกเว้น Claude ผ่าน OpenRouter ที่อยู่ 5 นาที (`cacheTtl`)
 และเพราะการเปลี่ยน effort ระหว่างการเรียกทำให้ cache ของ Model Studio หลุด Geno จึงใช้ effort เดียวทั้ง turn เป็นค่าเริ่มต้น (`packages/core/src/effort.ts`)
 
 ## memory: ความจำข้าม session
@@ -82,7 +82,7 @@ Geno ย่อก่อนเรียก model ครั้งถัดไป (
 1. **เรียก model อีกครั้งเพื่อสรุป** request นี้ไม่มี `tools` และมี system prompt ของมันเอง
    "You write the working notes a coding agent continues from after the older part of its session is removed. …"
 2. **เก็บส่วนท้ายไว้ตามเดิม** turn ล่าสุดยังอยู่ครบ ส่วนที่เก่ากว่าถูกแทนด้วยสรุป
-3. **วางสรุปเป็นข้อความแรก** ใน `<compacted_context>` ที่มี `<user_messages>` (ข้อความของผู้ใช้คำต่อคำ) และ `<summary>`
+3. **วางสรุปเป็นข้อความแรก** ใน `<compacted_context>` ที่มี `<user_messages>` (ข้อความล่าสุดของผู้ใช้คำต่อคำ ไม่เกิน 40,000 ตัวอักษรรวมกัน) และ `<summary>`
    พร้อม todo ไฟล์ที่เปิดอยู่ และคำแนะนำว่าให้ใช้ tool `recall` ถ้าต้องการรายละเอียดเป๊ะๆ ที่สรุปตัดไป (`compactedText` ใน `packages/core/src/compact.ts`)
 
 ### ตัวอย่างจริง: A31 รอบที่ 2
@@ -98,7 +98,7 @@ session log (`runs/A31-compaction-forced/2/session.jsonl.gz`) มี compaction 
 - หลัง compaction สองครั้ง ไม่มีไฟล์ใต้ `legacy/` ถูกแก้ (การตรวจ `legacy-untouched` ใน `result.json` ผ่าน)
   ทั้งรอบถูกนับว่าไม่ผ่านเพราะการตรวจอื่น (`dedicated-file-tools`) ไม่เกี่ยวกับ compaction
 
-สรุปเป็นคำของ model จึงตกหล่นรายละเอียดได้ ข้อความที่ผู้ใช้พิมพ์จึงถูกเก็บคำต่อคำแยกจากสรุปเสมอ
+สรุปเป็นคำของ model จึงตกหล่นรายละเอียดได้ ข้อความที่ผู้ใช้พิมพ์จึงถูกเก็บคำต่อคำแยกจากสรุป แต่มีงบ: Geno เก็บข้อความล่าสุดที่รวมกันไม่เกิน 40,000 ตัวอักษร ข้อความที่ยาวเกิน 8,000 ตัวอักษรถูกตัดท้าย ข้อความที่เก่ากว่านั้นไปอยู่ในสรุป และหัวของ `<user_messages>` บอกว่ามีกี่ข้อความที่ไปอยู่ในสรุป (`withinBudget` ใน `packages/core/src/compaction.ts`)
 
 ## อ่านต่อ
 

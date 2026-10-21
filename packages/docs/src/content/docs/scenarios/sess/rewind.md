@@ -14,7 +14,10 @@ scenario:
     - id: menu
       beat:
         title: คุณเปิดเมนูบนข้อความของ turn ที่สอง
-        text: เมนูขึ้นเฉพาะตอนที่ไม่มี turn ทำงาน แต่ละรายการมีคำอธิบายสั้นๆ Restore both ทำทั้งสองทาง ยืนยันแบบ Restore files แล้วคืนไฟล์ก่อนตัดบทสนทนา
+        text: >-
+          เมนูขึ้นเฉพาะตอนที่ไม่มี turn ทำงาน และเฉพาะแชตที่ loop ของ Geno เองรัน ไม่ใช่ agent ภายนอก Restore files คืนไฟล์ให้เหมือนก่อนข้อความนี้ Restore conversation ตัดบทสนทนา
+          ตั้งแต่ข้อความนี้ Fork from here สร้างแชตใหม่ที่ลอกบทสนทนามาถึงข้อความนี้รวมคำตอบของมัน ส่วน Restore both ทำสองอย่างแรก
+          โดยยืนยันแบบ Restore files แล้วคืนไฟล์ก่อนตัดบทสนทนา ทางด้านล่างแยกเฉพาะ Restore files กับ Restore conversation
         from: you
         to: panel
         sees: เมนู Restore files, Restore conversation, Restore both และ Fork from here
@@ -42,7 +45,7 @@ scenario:
               - lane: editor
                 beat:
                   title: แชตถามว่าจะเขียนทับไฟล์ไหน
-                  text: การย้อนไฟล์ต้องยืนยันก่อน แชตถาม engine ก่อนทำอะไร
+                  text: การย้อนไฟล์เขียนทับงานบนดิสก์จึงต้องยืนยันก่อน VS Code ถาม engine ก่อนว่าจะเขียนทับไฟล์ไหน
                   from: panel
                   to: engine
                 at: chat
@@ -53,7 +56,10 @@ scenario:
               - lane: server
                 beat:
                   title: Geno เทียบกับ checkpoint
-                  text: Geno เทียบ workspace กับ checkpoint ก่อนการเรียก model ครั้งแรกของ turn นั้น และหาไฟล์ที่ไม่มีใน checkpoint ใด ซึ่งจะหายถ้าย้อน
+                  text: >-
+                    checkpoint คือภาพถ่ายไฟล์ใน workspace ที่ Geno ถ่ายก่อนเรียก model ทุกครั้ง และเก็บใน git repo ซ่อนนอกโฟลเดอร์ของคุณ
+                    Geno เทียบ workspace ตอนนี้กับ checkpoint ก่อนการเรียก model ครั้งแรกของ turn นั้น และหาการแก้ที่เกิดหลัง checkpoint
+                    ล่าสุด ซึ่งไม่มี checkpoint ไหนเก็บไว้ จึงจะหายถ้าย้อน
                   from: engine
                   to: engine
                 at: sessions
@@ -77,7 +83,7 @@ scenario:
               - lane: user
                 beat:
                   title: คุณกด Restore files
-                  text: แชตส่งคำขอย้อนไฟล์พร้อมลำดับของข้อความ
+                  text: VS Code ส่งคำขอย้อนไฟล์พร้อมเลขลำดับของข้อความใน log
                   from: you
                   to: panel
                 do: ผู้ใช้กด Restore files
@@ -90,7 +96,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno คืนไฟล์จาก checkpoint
-                  text: Geno ปฏิเสธถ้ามี turn ทำงาน แล้วคืนไฟล์ ลบไฟล์ที่สร้างทีหลัง แชตโหลด session ใหม่ให้ hunk ของรีวิวตรงกัน
+                  text: >-
+                    Geno ปฏิเสธถ้ามี turn ทำงาน แล้วคืนไฟล์จาก checkpoint ลบไฟล์ที่สร้างทีหลัง และบันทึก event `restored` ลง log
+                    VS Code โหลด session ใหม่ เพื่อให้ hunk ในรีวิว (ก้อนบรรทัดที่แก้ซึ่งคุณกด Keep หรือ Undo ได้) ตรงกับไฟล์ตอนนี้
                   from: engine
                   to: machine
                 at: sessions
@@ -107,7 +115,7 @@ scenario:
               - lane: panel
                 beat:
                   title: บรรทัดบอกไฟล์ที่คืน
-                  text: บทสนทนายังอยู่ครบ คำขอถัดไปของ model มีประกาศว่าคุณย้อน workspace และให้อ่านไฟล์ใหม่ก่อนแก้
+                  text: บทสนทนายังอยู่ครบ model ยังไม่รู้เรื่องนี้ แต่ request ถัดไปที่ส่งให้ model จะมีประกาศว่าคุณย้อน workspace และให้อ่านไฟล์ใหม่ก่อนแก้
                   from: panel
                   to: you
                   sees: 'บรรทัด "Restored 2 files: src/date.ts, src/date.test.ts." ใต้ข้อความ'
@@ -126,7 +134,7 @@ scenario:
               - lane: editor
                 beat:
                   title: แชตขอย้อนบทสนทนาทันที
-                  text: การย้อนบทสนทนาไม่ต้องยืนยัน
+                  text: การย้อนบทสนทนาไม่ต้องยืนยัน เพราะ log ไม่ลบอะไรทิ้ง VS Code ส่งคำขอไปที่ engine ทันที
                   from: panel
                   to: engine
                 at: chat
@@ -137,7 +145,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno หยุดงานของ turn ที่ถูกตัด
-                  text: งานเบื้องหลังและการปลุกที่ turn นั้นเริ่มไว้ถูกหยุด เพราะไม่มี turn ให้รายงานแล้ว
+                  text: >-
+                    Geno ปฏิเสธถ้ามี turn ทำงาน แล้วหยุดคำสั่งเบื้องหลังและการปลุก (สิ่งที่จะเริ่ม turn ใหม่เองภายหลัง)
+                    ที่ turn ที่ถูกตัดเริ่มไว้ เพราะไม่มี turn ให้รายงานแล้ว
                   from: engine
                   to: engine
                 at: sessions
@@ -147,7 +157,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno บันทึกจุดตัดลง log
-                  text: log ไม่ลบอะไรทิ้ง ผู้อ่าน log เห็นมุมมองที่ตัดแล้ว Geno คืนข้อความที่คุณพิมพ์ไว้ในข้อความนั้น
+                  text: >-
+                    Geno บันทึก event `cut` ที่ข้อความนั้นต่อท้าย log ไม่ลบบรรทัดไหน ทุกส่วนที่อ่าน log รวมถึงการสร้าง request ให้ model
+                    ข้ามตั้งแต่ข้อความนั้นไป Geno คืนข้อความที่คุณพิมพ์ไว้ในข้อความนั้นให้ VS Code
                   from: engine
                   to: engine
                 at: sessions
@@ -164,7 +176,7 @@ scenario:
               - lane: panel
                 beat:
                   title: ข้อความเดิมกลับไปที่ช่องพิมพ์
-                  text: turn ตั้งแต่ข้อความนั้นหายจากแผง คำสั่งแบบ slash กลับมาเป็น `/ชื่อ อาร์กิวเมนต์`
+                  text: turn ตั้งแต่ข้อความนั้นหายจากแผง ข้อความเดิมอยู่ในช่องพิมพ์ให้แก้แล้วส่งใหม่ ถ้าเป็นคำสั่ง `/` จะกลับมาเป็น `/ชื่อ อาร์กิวเมนต์` ไม่ใช่ข้อความที่ขยายแล้ว
                   from: panel
                   to: you
                   sees: บทสนทนาเหลือแค่ turn แรก และช่องพิมพ์มีข้อความของ turn ที่สอง
@@ -182,7 +194,7 @@ scenario:
               - lane: editor
                 beat:
                   title: แชตขอ fork จากข้อความนี้
-                  text: ใต้ข้อความขึ้น "Forking…" แชตส่งลำดับของข้อความไปที่ engine
+                  text: ใต้ข้อความขึ้น "Forking…" VS Code ขอ engine fork session นี้ที่เลขลำดับของข้อความ
                   from: panel
                   to: engine
                 at: chat
@@ -193,7 +205,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno เขียน log ใหม่
-                  text: Geno ปฏิเสธถ้ามี turn รัน หรือเป็น session ของ agent ภายนอกหรือของ subagent log ใหม่ชี้กลับมาที่แชตเดิม และแชตเดิมไม่ถูกแตะ
+                  text: >-
+                    Geno ปฏิเสธถ้ามี turn รัน ถ้าแชตรันด้วย agent ภายนอกแทน loop ของ Geno หรือถ้าเป็น subagent (session ลูกที่ model สร้างให้ทำงานย่อย)
+                    ไม่อย่างนั้นมันเขียน log ใหม่ที่ชี้กลับมาที่แชตเดิม แล้วลอกบทสนทนาจนจบคำตอบของข้อความนั้น แชตเดิมไม่ถูกแตะ
                   from: engine
                   to: engine
                 at: sessions
@@ -229,14 +243,14 @@ scenario:
                 end: { turn: none }
 ---
 
-Rewind ใช้สองอย่างที่ engine เก็บไว้อยู่แล้ว: checkpoint ของ workspace ที่ถ่ายก่อนการเรียก model ทุกครั้ง
-และ log ของ session ที่ไม่เคยลบอะไร การย้อนบทสนทนาจึงเป็นการเพิ่ม event `cut` ไม่ใช่การลบบรรทัด
+Rewind ใช้สองอย่างที่ engine เก็บไว้อยู่แล้ว: [checkpoint](/start/glossary/) ของ workspace ที่ถ่ายก่อนการเรียก model ทุกครั้ง
+และ [session log](/start/glossary/) ที่ไม่เคยลบอะไร การย้อนบทสนทนาจึงเป็นการเพิ่ม event `cut` ไม่ใช่การลบบรรทัด
 
 | เลือก | ไฟล์ | บทสนทนา | ข้อความเดิม |
 | --- | --- | --- | --- |
 | Restore files | คืนจาก checkpoint | อยู่ครบ | ไม่เปลี่ยน |
 | Restore conversation | ไม่แตะ | ตัดตั้งแต่ข้อความนั้น | กลับไปที่ช่องพิมพ์ |
-| Restore both | คืนจาก checkpoint | ตัดตั้งแต่ข้อความนั้น | กลับไปที่ช่องพิมพ์ |
+| Restore both | คืนจาก checkpoint (ไม่มีบรรทัดบอกไฟล์ที่คืน) | ตัดตั้งแต่ข้อความนั้น | กลับไปที่ช่องพิมพ์ |
 | Fork from here | ไม่แตะ | แชตใหม่ที่ลอกถึงคำตอบของข้อความนั้น แชตเดิมอยู่ครบ | ไม่เปลี่ยน |
 
 สิ่งที่ควรสังเกต
@@ -244,6 +258,7 @@ Rewind ใช้สองอย่างที่ engine เก็บไว้�
 - **checkpoint ของ turn คือก่อนการเรียก model ครั้งแรก** engine ถ่าย checkpoint ก่อนการเรียก model ทุกครั้ง การย้อนไฟล์ใช้อันแรกของ turn
   turn ที่ไม่เคยถึง model เช่นถูกหยุดก่อน จึงไม่มี checkpoint ให้ย้อน
 - **ไฟล์ก่อน บทสนทนาทีหลัง** Restore both บันทึก `restored` ก่อน `cut` ประกาศเรื่องไฟล์จึงถูกตัดไปพร้อมกับ turn ที่มันพูดถึง
+  model จึงไม่ได้รับประกาศนี้ ซึ่งไม่จำเป็นเพราะ turn ที่แก้ไฟล์ถูกตัดไปด้วย
 - **การแก้ของผู้ใช้หลัง checkpoint ล่าสุดหายได้** กล่องยืนยันบอกไฟล์เหล่านั้นก่อน และให้แป้นพิมพ์เริ่มที่ Cancel
 - **Fork ลอกคำตอบด้วย** รายการในเมนูบอกว่า "A new chat with the conversation up to this message" แต่ `forkEvents` ลอกจนจบ turn ของข้อความนั้น
   แชตใหม่จึงมีคำตอบของข้อความที่เลือกด้วย ไม่ได้หยุดก่อนข้อความ

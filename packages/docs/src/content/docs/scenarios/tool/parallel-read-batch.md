@@ -18,7 +18,8 @@ scenario:
         title: "Model ขออ่านสามไฟล์และค้นสองครั้ง"
         text: >-
           ในคำตอบเดียว model ขออ่าน `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วค้นหา `parseDate`
-          และหาไฟล์เทสต์ทั้งหมด run จริงด้านล่างขออ่านสามไฟล์ในคำตอบเดียวแบบเดียวกัน
+          และหาไฟล์เทสต์ทั้งหมด การ์ดข้างล่างมาจาก run จริงที่ขออ่านสามไฟล์ในคำตอบเดียวแบบเดียวกัน
+          ดูบล็อก `tool_use` ของ `read` สามบล็อก แต่ละบล็อกมี `id` ของตัวเอง
         from: model
         to: engine
         sees:
@@ -57,8 +58,8 @@ scenario:
       beat:
         title: "Geno จัดทั้งห้าไว้ชุดเดียว"
         text: >-
-          การอ่านไฟล์ที่ไม่ใช่ไฟล์ลับใน workspace และการค้นหา ไม่แก้อะไรและไม่ต้องถามใคร
-          ทั้งห้าจึงรันพร้อมกันได้ในชุดเดียว ชุดหนึ่งรับได้ถึง 8 call
+          Geno แบ่ง call เป็นชุด call ในชุดเดียวกันรันพร้อมกัน การอ่านไฟล์ใน workspace ที่ไม่ใช่ไฟล์ลับ (เช่น `.env` หรือ key)
+          และการค้นหา ไม่แก้อะไรและไม่ต้องถามใคร ทั้งห้าจึงรันพร้อมกันได้ในชุดเดียว ชุดหนึ่งรับได้ถึง 8 call
         from: engine
         to: engine
       do: >-
@@ -96,8 +97,8 @@ scenario:
       beat:
         title: "การค้นหาใช้สำเนาของ buffer ที่ยังไม่บันทึก"
         text: >-
-          การค้นหารันบนดิสก์ใน engine แต่ก่อนค้นมันขอ buffer ที่ยังไม่บันทึกจาก VS Code แล้วค้นบนสำเนาเหล่านั้นแทน
-          ผลจึงตรงกับที่คุณเห็นใน editor
+          การค้นหารันบนดิสก์ใน engine แต่ก่อนค้นมันขอ buffer ที่ยังไม่บันทึกจาก VS Code (buffer คือข้อความในแท็บที่เปิดอยู่)
+          แล้วค้นบนสำเนาเหล่านั้นแทนไฟล์บนดิสก์ ผลจึงตรงกับที่คุณเห็นใน editor
         from: engine
         to: machine
       runs: 2
@@ -115,6 +116,7 @@ scenario:
         text: >-
           call ที่เสร็จก่อนแจ้งแชตทันที คุณจึงเห็นบางขั้นเสร็จก่อนขั้นอื่น
           การอ่านแต่ละไฟล์จดเนื้อหาที่เห็นไว้เป็นฐานสำหรับการแก้ไฟล์ครั้งต่อไป
+          เพื่อให้ `edit` รู้ว่าไฟล์ถูกแก้จากที่อื่นหลังอ่านหรือไม่
         from: engine
         to: panel
       do: >-
@@ -135,6 +137,7 @@ scenario:
         title: "Geno บันทึกผลตามลำดับที่ขอ"
         text: >-
           เมื่อครบทุก call Geno บันทึกผลตามลำดับที่ model ขอ ไม่ใช่ลำดับที่เสร็จ ผลพับอยู่ใต้แต่ละขั้น
+          การ์ดข้างล่างเป็นผลจริงของการ์ดแรก ดู `tool_use_id` ที่ไฮไลต์ไว้ เรียงตรงกับ `id` ของ `tool_use` ทั้งสามในการ์ดแรก
         from: engine
         to: panel
         sees:
@@ -156,16 +159,55 @@ scenario:
       beat:
         title: "Model ได้ผลทั้งห้าในข้อความเดียว"
         text: >-
-          Geno เรียก model ต่อ ผลทั้งห้าอยู่ในข้อความ user เดียว เรียงตามที่ model ขอ
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอทั้งชุดของ model
+          และผลทั้งหมดในข้อความ user เดียว เรียงตามที่ model ขอ การ์ดข้างล่างเป็นคำขอจริงจากการรันอื่นที่ขอ `read`
+          `list` และ `glob` ในคำตอบเดียวแบบเดียวกัน ดูบล็อก `tool_use` สามบล็อกในข้อความ `assistant`
+          และข้อความ `user` สุดท้ายที่มี `tool_result` สามบล็อกเรียงตามลำดับนั้น
         from: engine
         to: model
-        end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[1].content[2]', '[1].content[3]', '[1].content[4]', '[2]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ผลทั้งห้าในข้อความ user เดียว เรียงตามลำดับที่ขอ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ตอบหลังเห็นผลทั้งหมด"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงเดียวกับการ์ดก่อนหน้า model ได้ข้อมูลพอแล้ว
+          จึงเขียนคำตอบสุดท้ายโดยไม่ขอ tool เพิ่ม ดูบล็อก `text` ที่ไฮไลต์ไว้ คำตอบนี้ไม่มีบล็อก `tool_use` เลย
+          และจบด้วย `stop_reason: end_turn` ซึ่งแปลว่า model ตอบจบแล้ว
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1]']
+      do: >-
+        model อ่าน `tool_result` ทั้งชุดแล้ว stream คำตอบสุดท้าย จบด้วย `stop_reason: end_turn` โดยไม่ขอเรียก tool
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [end_turn]
+
+    - use: answer-streams
+
+    - use: turn-ends
+      beat:
+        title: "Turn จบ"
+        text: >-
+          model ไม่ขออะไรเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
+        from: engine
+        to: panel
+        end: "Turn จบแบบ done"
 ---
 
 การอ่านที่ไม่เปลี่ยนอะไรและไม่ต้องถามใครรันพร้อมกันได้ ส่วนอย่างอื่นรันทีละตัว `nextToolBatch` ตัดชุดตามลำดับที่ model ขอ

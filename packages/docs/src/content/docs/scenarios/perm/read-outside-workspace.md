@@ -17,9 +17,16 @@ scenario:
         title: "Model ขออ่านไฟล์ในโปรเจกต์อื่น"
         text: >-
           model ขอ `read` ไฟล์ `/Users/me/shared-lib/src/date.ts` ซึ่งอยู่นอก workspace และยังไม่เคยอนุญาตใน session นี้
-          แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          แชตขึ้นขั้นใหม่พร้อมจุดหมุน การ์ดข้างล่างเป็นคำตอบจริงของ model จากการรันเดียวกับการ์ดถัดไป
+          ในรอบนั้น model อ่าน `shared-config/tsconfig.base.json` ในโฟลเดอร์ข้างเคียง ไม่ใช่ `date.ts` แต่ขอแบบเดียวกันคือใช้ path แบบเต็ม ดู `path` ใน `input` ที่ไฮไลต์
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A32-outside-explicit/1/session.jsonl#seq=8
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input']
       do: >-
         model ขอ `read` ไฟล์ด้วย path แบบเต็มนอก workspace จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -42,7 +49,8 @@ scenario:
       beat:
         title: "Geno เห็นว่า path อยู่นอก workspace"
         text: >-
-          การอ่านที่อาจออกนอก workspace รันตัวเดียวในชุด Geno หา path จริงแล้วพบว่าไม่อยู่ในโฟลเดอร์ใดที่อ่านได้
+          model ขอหลาย call ในคำตอบเดียวได้ และ Geno รัน call ที่แค่อ่านพร้อมกัน แต่การอ่านที่อาจออกนอก workspace
+          รันตัวเดียว เพราะอาจต้องหยุดถามคุณ Geno หา path จริงแล้วพบว่าไม่อยู่ในโฟลเดอร์ใดที่อ่านได้
           ไม่มีกฎห้ามอ่านตรง จึงต้องถาม
         from: engine
         to: engine
@@ -59,7 +67,8 @@ scenario:
         title: "Geno ใช้กฎเดียวกับ cat ของ path นั้น"
         text: >-
           กฎของ path นอก workspace ในโหมด Ask คือถาม Geno เสนอโฟลเดอร์ `/Users/me/shared-lib/src` ให้อนุญาตตลอด session
-          เพราะ path ไม่ใช่ไฟล์ลับ แล้วส่งคำถามไปที่แชต run จริงด้านล่างไม่มีคนดู กฎเดียวกันจึงปฏิเสธเอง
+          เพราะ path ไม่ใช่ไฟล์ลับ แล้วส่งคำถามไปที่แชต การ์ดเป็นบันทึกจาก run จริงที่ไม่มีคนตอบการ์ด
+          (non-interactive) กฎเดียวกันจึงปฏิเสธเอง ดู `rule` ที่เป็น `path-outside-workspace` และ `reason`
         from: engine
         to: panel
         sees:
@@ -103,7 +112,8 @@ scenario:
       beat:
         title: "คุณเห็นการ์ด “Read outside the workspace?”"
         text: >-
-          การ์ดของการอ่านนอก workspace มีปุ่มอนุญาตทั้งโฟลเดอร์แทนปุ่มบันทึกกฎ ลองเลือกแต่ละทาง
+          การ์ดของการอ่านนอก workspace มีปุ่มอนุญาตทั้งโฟลเดอร์แทนปุ่มบันทึกกฎ ปุ่ม No, and tell the agent… ทำงานเหมือนในโหมด Ask:
+          ไฟล์ไม่ถูกอ่าน model ได้ข้อความของคุณและทำต่อ ลองเลือกแต่ละทาง
         from: panel
         to: you
         ask: "กดปุ่มไหน"
@@ -185,7 +195,7 @@ scenario:
                 beat:
                   title: "คุณกด Deny"
                   text: >-
-                    ไฟล์ไม่ถูกอ่าน turn จบรอคุณเหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อ
+                    ไฟล์ไม่ถูกอ่าน และ turn จบรอคุณ เหมือนกด Deny ให้คำสั่งในโหมด Ask
                   from: you
                   to: panel
                   end: "คุณปฏิเสธ turn จบ"
@@ -213,7 +223,7 @@ scenario:
       beat:
         title: "read อ่านไฟล์ แต่ยังตรวจไฟล์ลับ"
         text: >-
-          read อ่านไฟล์โดยให้ราก filesystem เป็นที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
+          call นี้ `read` อ่านนอก workspace ได้ (ถ้าคุณอนุญาตทั้งโฟลเดอร์ ครั้งต่อไปใต้โฟลเดอร์นั้นก็ไม่ถามอีก) แต่ยังตรวจกฎไฟล์ลับกับ path เต็ม
           ผลกลับมาที่แชตพร้อมบันทึกว่าคุณอนุญาต
         from: engine
         to: machine
@@ -233,8 +243,14 @@ scenario:
         title: "Model อ่านไฟล์แล้วทำต่อ"
         text: >-
           Geno เรียก model ต่อ model ได้เนื้อไฟล์จากโปรเจกต์อื่น
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในรอบนั้นผู้ใช้บอก path `/tmp/shared-lib/src/date.ts` ไว้ในข้อความ และไฟล์อยู่ที่นั่น การ์ดคือข้อความท้ายของคำขอถัดไป ดูเนื้อไฟล์ใน `content`
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/perm-read-outside-workspace.jsonl#line=5
+          select: messages[-1].content
+          highlight: ['[0].content']
         end: "คุณอนุญาต turn ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model`
@@ -250,9 +266,9 @@ Geno อ่านได้โดยไม่ถามเฉพาะใน works
 | โหมด | อ่านนอก workspace |
 | --- | --- |
 | Ask | ถามผู้ใช้ |
-| Auto | classifier ตัดสิน |
+| Auto | [classifier](/scenarios/perm/auto-classifier/) (การเรียก model แยกที่ตัดสินแทนคุณ) ตัดสิน |
 | Plan | ปฏิเสธ |
-| ไม่มีคนดู | ปฏิเสธ |
+| ไม่มีคนดู (ไม่มีใครตอบการ์ด เช่น `gcode agent --non-interactive`) | ปฏิเสธ |
 
 สิ่งที่ควรสังเกต
 

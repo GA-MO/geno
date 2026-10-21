@@ -14,7 +14,10 @@ scenario:
     - id: pane
       beat:
         title: คุณกด Apply บน lane ที่ worker ทิ้งไว้
-        text: แผง Lanes แสดงทุก lane ของโฟลเดอร์ พร้อม diff ผลของ check และค่าใช้จ่าย คุณกด Apply บน `worker-1a2b3c4d`
+        text: >-
+          lane คือสำเนาของ repo ในโฟลเดอร์แยก (git worktree) บน branch ของตัวเอง subagent ชนิด worker (session ลูกที่แก้ไฟล์ได้)
+          แก้ไฟล์ใน lane นี้ไว้โดยไม่แตะโฟลเดอร์หลักของคุณ แผง Lanes แสดงทุก lane ของโฟลเดอร์ พร้อม diff ผลของ check
+          (คำสั่งตรวจของโปรเจกต์) และค่าใช้จ่าย คุณกด Apply บน `worker-1a2b3c4d`
         from: you
         to: panel
         sees: แถว "worker-1a2b3c4d" บอกจำนวนไฟล์และบรรทัดที่เปลี่ยน และปุ่ม [Open] [Apply] [Discard]
@@ -34,7 +37,9 @@ scenario:
     - id: ask
       beat:
         title: แชตเริ่ม turn ของการ apply
-        text: Apply ได้เฉพาะในแชตของ checkout หลัก แชตส่งคำสั่ง apply เป็น prompt
+        text: >-
+          Apply คือการนำการเปลี่ยนของ lane เข้าโฟลเดอร์หลัก (checkout หลัก) จึงทำได้เฉพาะในแชตที่เปิดบนโฟลเดอร์หลัก
+          ไม่ใช่แชตที่อยู่ใน lane แชตส่งคำสั่ง apply เป็น prompt และเริ่ม turn (หนึ่งรอบตั้งแต่ข้อความของคุณจนแชตตอบเสร็จ) ใหม่
         from: panel
         to: engine
         sees:
@@ -60,7 +65,9 @@ scenario:
     - id: turn
       beat:
         title: Geno apply เองโดยไม่เรียก model
-        text: lane ต้องอยู่ใน repository เดียวกับแชต และงานของ lane ต้องจบแล้ว
+        text: >-
+          engine เห็นว่า prompt นี้เป็นคำสั่ง apply จึงทำเองโดยไม่ส่งอะไรให้ model lane ต้องอยู่ใน repository เดียวกับแชต
+          และงานของ lane ต้องจบแล้ว
         from: engine
         to: engine
       lane: server
@@ -74,7 +81,9 @@ scenario:
     - id: merge
       beat:
         title: Geno merge ทีละไฟล์
-        text: Geno merge สามทางระหว่างฐานของ lane ตัว lane และ checkout หลักตอนนี้ รวม buffer ที่ยังไม่บันทึก ไฟล์เดียวที่ชนทำให้ไม่มีอะไรถูกเขียนเลย
+        text: >-
+          Geno merge สามทางทีละไฟล์: เทียบไฟล์ตอนที่ lane แตกออกมา (ฐานของ lane) กับไฟล์ใน lane และไฟล์ในโฟลเดอร์หลักตอนนี้
+          รวมไฟล์ที่เปิดแก้ใน editor แต่ยังไม่ save ไฟล์เดียวที่ชนทำให้ไม่มีอะไรถูกเขียนเลย
         from: engine
         to: engine
         ask: merge ชนไหม
@@ -135,7 +144,8 @@ scenario:
     - id: checkpoint
       beat:
         title: Geno เก็บ checkpoint ก่อนเขียน
-        text: Undo All ย้อนการ apply ทั้งหมดได้จาก checkpoint นี้
+        text: >-
+          ก่อนเขียนไฟล์ Geno เก็บ checkpoint คือภาพถ่ายไฟล์ใน workspace ตอนนี้ ปุ่ม Undo All ย้อนการ apply ทั้งหมดได้จาก checkpoint นี้
         from: engine
         to: engine
       lane: server
@@ -148,7 +158,8 @@ scenario:
     - id: steps
       beat:
         title: แต่ละไฟล์ขึ้นเป็นขั้น edit
-        text: แชตเห็นขั้นต่อไฟล์เหมือน agent แก้ VS Code เขียนแต่ละไฟล์และแสดง diff
+        text: >-
+          Geno เขียนแต่ละไฟล์เป็นขั้น `edit` แชตจึงเห็นขั้นต่อไฟล์เหมือนตอนที่ model ขอแก้ไฟล์ VS Code เขียนแต่ละไฟล์และแสดง diff
         from: engine
         to: panel
         sees:
@@ -193,13 +204,15 @@ scenario:
     - id: ends
       beat:
         title: Turn จบ hunk รอคุณตรวจ
-        text: ไม่มีการเรียก model การ์ดการเปลี่ยนแปลงแสดงทั้งสองไฟล์ และ editor แสดง hunk ที่รอ Keep หรือ Undo lane ยังอยู่จนคุณ Discard
+        text: >-
+          ไม่มีการเรียก model การ์ดการเปลี่ยนแปลงแสดงทั้งสองไฟล์ และ editor แสดง hunk (ก้อนบรรทัดที่เปลี่ยนติดกัน) ที่รอคุณกด Keep
+          หรือ Undo ทีละก้อน lane ยังอยู่จนคุณ Discard
         from: engine
         to: panel
         sees:
           kind: composer
           state: idle
-          header: worked for 1s
+          header: worked for <เวลา>
         end: รอคุณ Keep หรือ Undo
       lane: server
       at: turns
@@ -215,7 +228,7 @@ scenario:
       at: rail
       do: >-
         การ์ดการเปลี่ยนแปลงท้าย turn แสดงไฟล์ทั้งสอง และ editor แสดง hunk ที่รอตรวจ
-      sees: หัวข้อ "worked for 1s" และการ์ด "2 files changed"
+      sees: หัวข้อ "worked for <เวลา>" และการ์ด "2 files changed"
       ref: packages/extension/src/chat/render.ts#changesCard
       end: { turn: done, reason: end_turn }
 ---

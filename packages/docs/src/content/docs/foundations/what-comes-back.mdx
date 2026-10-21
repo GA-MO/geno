@@ -93,9 +93,9 @@ input ตามมาอีกสี่ event (`input_json_delta`) แล้ว�
 | `end_turn` | model ตอบจบแล้ว | จบ turn ถ้าคำตอบว่างเปล่า Geno กระตุ้นหนึ่งครั้งก่อน |
 | `stop_sequence` | เจอคำหยุด | จบ turn แบบเดียวกับ `end_turn` |
 | `max_tokens` | ชนเพดานความยาว | ถ้าตัดกลาง `tool_use` Geno ไม่รัน call นั้น ตอบ model ว่าให้ทำ call ให้เล็กลงแล้วเรียกใหม่ ถ้าชนสองครั้งติดหรือชนกลางข้อความ turn จบแบบล้มเหลว |
-| `pause_turn` | server tool ของผู้ให้บริการขอทำต่อ | เรียก model อีกครั้ง |
+| `pause_turn` | server tool (tool ที่ผู้ให้บริการรันเองฝั่งเขา เช่น ค้นเว็บ) ขอทำต่อ | เรียก model อีกครั้ง |
 | `refusal` | model ปฏิเสธ | gateway แปลงเป็น error `refusal` turn จบ |
-| `model_context_window_exceeded` | request ยาวเกิน window | compaction หนึ่งครั้งแล้วส่งใหม่ |
+| `model_context_window_exceeded` | request ยาวเกิน context window | compaction (ให้ model สรุปส่วนเก่าของบทสนทนา) หนึ่งครั้งแล้วส่งใหม่ |
 
 ในการรันจริงทั้งหมด คำตอบมีแค่ `tool_use` กับ `end_turn` ค่าอื่นมีให้ดูในทัวร์ของบท
 [Model หยุดแบบไหนบ้าง](/scenarios/#ch-3)
@@ -103,7 +103,7 @@ input ตามมาอีกสี่ event (`input_json_delta`) แล้ว�
 ## สอง wire รูปเดียว
 
 ผู้ให้บริการพูดสองภาษา Anthropic Messages กับ OpenAI Chat Completions
-Geno ใช้ Anthropic Messages เป็นรูปแบบภายใน wire ของ Chat Completions (`packages/engine/src/wire-openai.ts`) แปลงชิ้นของ stream
+Geno ใช้ Anthropic Messages เป็นรูปแบบภายใน wire (ส่วนที่คุยกับผู้ให้บริการ) ของ Chat Completions (`packages/engine/src/wire-openai.ts`) แปลงชิ้นของ stream
 เป็น event แบบ Anthropic ด้วย `chatStream` ใน `packages/core/src/openai.ts` และแปลง error เป็น class เดียวกัน
 เช่น `finish_reason: length` กลายเป็น `max_tokens` และ `content_filter` กลายเป็น `refusal`
 ส่วนที่เหลือของ Geno (gateway loop session log และหน้าจอ) จึงไม่รู้ว่าใช้ wire ไหน
@@ -112,7 +112,7 @@ Geno ใช้ Anthropic Messages เป็นรูปแบบภายใน 
 
 model เขียนได้แต่ข้อความ ไม่มีบล็อกรูปภาพ ไม่มีบล็อกเสียง และไม่มีช่องให้สั่งงานตรงๆ
 ทุกอย่างที่ดูเหมือน model "ทำ" ผ่าน `tool_use` และทุกภาพที่คุณเห็นในแชต Geno วาดจากข้อความหรือจากไฟล์
-ดู[หน้าที่ 10](/foundations/images-and-multimodal/)
+ดู[รูปภาพและ multimodal](/foundations/images-and-multimodal/)
 
 ## อ่านต่อ
 

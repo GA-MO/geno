@@ -3,7 +3,34 @@ title: "Tool และ permission"
 description: เส้นทางของ tool call ตั้งแต่ model ขอ ผ่าน hook การจัดชุด กฎ settle และการ์ด จนผลกลับไปหา model
 ---
 
-ทุก tool call เดินผ่านท่อเดียวกัน ทางแยกสำคัญคือ `settle()` ซึ่งเป็นฟังก์ชันเดียวที่ตัดสินทุกการกระทำที่ถูกตั้งธงไว้
+เมื่อ model ตอบกลับมาพร้อมบล็อก `tool_use` (คำขอให้รัน tool ดู [Tool คือสัญญา](/foundations/tools-are-contracts/)) Geno ไม่ได้รันทันที
+ทุก tool call เดินผ่านท่อเดียวกัน ท่อนี้ตัดสินว่า call นั้นรันได้เลย ต้องถามคุณ หรือต้องปฏิเสธ แล้วส่งผลกลับไปเป็น `tool_result` ใน request ถัดไป
+หน้านี้สำคัญเพราะการตัดสินเรื่องความปลอดภัยทั้งหมดของ Geno เกิดในท่อนี้ ไม่ใช่ใน model
+
+## ท่อทีละขั้น
+
+1. **Hook ก่อนรัน** hook คือคำสั่งที่คุณตั้งไว้ใน settings ให้ Geno รันเมื่อถึงจุดหนึ่งของ turn
+   `PreToolUse` hook เห็นทุก call ก่อน และตอบได้ว่าปฏิเสธ ถามคุณ หรือรันเลย
+2. **จัดชุด** call ที่อ่านอย่างเดียวรันพร้อมกันได้ครั้งละ 8 ตัว ส่วน `bash` `edit` และ call ที่อาจต้องถามคุณ รันทีละตัว
+3. **ฟังก์ชันกฎ** ก่อนถึงกฎ `bash` ปฏิเสธบางบรรทัดเองโดยไม่ถามใครและไม่รันอะไรเลย ได้แก่ `sleep` ตั้งแต่ 2 วินาทีขึ้นไปที่ขึ้นต้นบรรทัดแล้วมีคำสั่งอื่นตามหลัง (`sleep 5` เดี่ยวๆ ยังรันได้)
+   การเปิด server ทั้งแบบ foreground และแบบต่อท้ายด้วย `&` (สองข้อนี้เฉพาะ session ที่มี `run_in_background` ซึ่งเป็นตัวเลือกให้รันคำสั่งเบื้องหลัง ให้ใช้แทน)
+   และขั้นที่เป็นงานของ tool ไฟล์ เช่น `cat` `head` `tail` ที่อ่านไฟล์ (งานของ `read`) หรือการเขียนข้อความตายตัวลงไฟล์ (งานของ `edit`)
+   ผลเป็น `tool_result` ที่บอก model ว่าให้ใช้อะไรแทน
+   บรรทัดที่ผ่านมาได้ ฟังก์ชันกฎดูว่าต้อง "ติดธง" ไหม เช่นคำสั่งไม่อยู่ใน safe list (รายการโปรแกรมที่อ่านอย่างเดียว เช่น `ls` `wc` `git status`)
+   มีคำว่า `.env` อ่านไฟล์นอก workspace หรือเรียก tool ของ MCP server (โปรแกรมภายนอกที่ให้ tool เพิ่ม)
+   ถ้าไม่ติดธง tool รันเลย
+4. **`settle()`** คือฟังก์ชันเดียวที่ตัดสิน call ที่ติดธง คำตัดสินขึ้นกับโหมด (ตารางข้างล่าง):
+   ปฏิเสธเลย ส่งให้ classifier หรือขึ้นการ์ดถามคุณ
+   classifier คือ model call แยกอีกก้อนที่อ่านคำขอของคุณกับคำสั่ง แล้วตอบ allow, deny หรือ ask
+   ถ้ามันไม่ตอบใน 8 วินาที หรือตอบมาโดยไม่มีคำตัดสิน Geno ลองอีกหนึ่งครั้ง ถ้ายังไม่ได้นับเป็น ask
+   ส่วน error อื่น (เช่น API key ผิดหรือ server ล่ม) นับเป็น ask ทันทีโดยไม่ลองซ้ำ
+   ก่อนขึ้นการ์ด `PermissionRequest` hook มีโอกาสตอบแทนคุณ ถ้า hook ไม่ตอบ การ์ดจึงขึ้น
+5. **รัน** shell รันใน sandbox (ขอบเขตที่ระบบปฏิบัติการบังคับ: เขียนได้แค่ใน workspace และ temp ออกเน็ตได้แค่โดเมนที่อนุญาต) ไฟล์เขียนผ่าน buffer ของ editor
+6. **หลังรัน** `PostToolUse` hook เห็นผล ผลที่ยาวมากถูกเก็บลงไฟล์ model ได้แค่ส่วนต้น ส่วนท้าย และ path ของไฟล์
+   เมื่อทั้งชุดเสร็จ Geno บันทึกผลลง log ตามลำดับที่ model ขอ ส่งสถานะให้แผงแชต แล้วถึงจุดปลอดภัยก่อนเรียก model ครั้งถัดไป
+   (จุดปลอดภัยคือช่วงที่ข้อความที่คุณพิมพ์แทรกระหว่าง turn ได้เข้าไปใน request)
+
+ภาพข้างล่างคือท่อเดียวกันในชื่อฟังก์ชันจริง
 
 ```mermaid
 flowchart TD
@@ -12,18 +39,20 @@ flowchart TD
   H --> N["nextToolBatch: การอ่านพร้อมกันได้ถึง 8,<br/>bash / edit / call ที่อาจถาม รันทีละตัว"]
   N --> S["watcher.toolStart → tool_call in_progress"]
   S --> X["ชั้นของ executor: roster gate<br/>→ withPermissions → inMode<br/>→ withReach / withPathRules / withWriteRoots"]
-  X --> R{"ฟังก์ชันกฎ<br/>ruledDenial / secretReadDenial /<br/>outsideReadDenial / mcpCallDenial"}
+  X --> BR{"bash ปฏิเสธเองก่อนกฎ?<br/>sleep / server แบบ foreground /<br/>fileStepRefusal"}
+  BR -- "ใช่" --> BRE["tool_result error<br/>บอกว่าให้ใช้อะไรแทน"]
+  BR -- "ไม่ใช่ หรือเป็น tool อื่น" --> R{"ฟังก์ชันกฎ<br/>ruledDenial / secretReadDenial /<br/>outsideReadDenial / mcpCallDenial"}
   R -- "ไม่ติดธง" --> RUN["tool ทำงาน<br/>(shell ใน sandbox, ไฟล์ผ่าน buffer ของ editor)"]
   R -- "ติดธง" --> ST{"settle()"}
   ST -- "deny / non-interactive" --> PRH1["PermissionRequest hook (ถ้าตอบได้)"] --> DEN["ToolDenied (model ทำต่อ)"]
-  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, ล้มเหลว = ask"]
+  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, หมดเวลาหรือไม่มีคำตัดสิน<br/>ลองอีกครั้ง, ล้มเหลว = ask"]
   CL -- allow --> RUN
   CL -- deny --> DEN
   CL -- ask --> PRH2
   ST -- "ask" --> PRH2["PermissionRequest hook"] --> CARD["การ์ดขออนุญาต<br/>session/request_permission"]
   CARD -- "Allow / session / workspace" --> RUN
   CARD -- "No + ข้อความ" --> DEN
-  CARD -- "Reject / ยกเลิก" --> REJ["ToolRejected: batch หยุด,<br/>call ที่เหลือได้ 'user rejected', turn จบ"]
+  CARD -- "Deny / ยกเลิก" --> REJ["ToolRejected: batch หยุด,<br/>call ที่เหลือได้ 'user rejected', turn จบ"]
   RUN --> POST["PostToolUse hooks; ผลยาวเก็บลงไฟล์"]
   POST --> LOGR["หลังทั้งชุด: บันทึกผลตามลำดับที่ model ขอ<br/>→ tool_call_update พร้อม APPROVAL_META"]
   LOGR --> PB["PostToolBatch hook"] --> NEXT["จุดปลอดภัย → เรียก model ครั้งถัดไป"]
@@ -31,21 +60,34 @@ flowchart TD
 
 ## ปฏิเสธกับปฏิเสธพร้อมข้อความต่างกันอย่างไร
 
-`ToolRejected` (ผู้ใช้กด Reject เฉยๆ) จบ turn ทันที ส่วน `ToolDenied` (กฎ, Auto, hook หรือผู้ใช้ปฏิเสธพร้อมข้อความ)
-เป็นผลธรรมดาที่ model อ่านแล้วหาทางอื่นต่อ
+การปฏิเสธมีสองแบบ และให้ผลกับ turn ต่างกัน
+
+- `ToolRejected` เกิดเมื่อคุณปฏิเสธเฉยๆ (กด Deny บนการ์ด หรือตอบ N ในเทอร์มินัล) turn จบทันที call ที่เหลือในชุดได้ผลว่า "user rejected"
+  และ model ไม่ได้ถูกเรียกอีกจนกว่าคุณจะพิมพ์ข้อความถัดไป เหตุผลคือคุณเป็นคนที่ควรพูดต่อ
+- `ToolDenied` เกิดเมื่อกฎ classifier หรือ hook ปฏิเสธ หรือเมื่อคุณปฏิเสธพร้อมพิมพ์ข้อความ
+  มันเป็น `tool_result` ธรรมดาที่บอกเหตุผล model อ่านแล้วหาทางอื่นต่อใน turn เดิม
 
 ## โหมดสิทธิ์
+
+คุณเลือกโหมดที่แผงแชตหรือด้วย `--mode` ใน CLI โหมดกำหนดว่า call ที่ติดธงจะไปทางไหน
 
 | โหมด | คำสั่งนอก safe list | การแก้ไฟล์ |
 | --- | --- | --- |
 | Plan | ปฏิเสธ | ปฏิเสธ (แสดงเป็นล้มเหลว) |
 | Ask (ค่าเริ่มต้น) | แสดงการ์ดถามผู้ใช้ | ไม่ถาม ผู้ใช้ตรวจทีหลัง |
 | Auto | ให้ classifier ตัดสิน ถ้าไม่แน่ใจก็ถามคุณ | ไม่ถาม |
-| non-interactive | รันใน sandbox เพราะไม่มีใครให้ถาม | ไม่ถาม |
+| non-interactive (`gcode agent --non-interactive` สำหรับ script ที่ไม่มีคนคอยตอบ) | รันใน sandbox เพราะไม่มีใครให้ถาม | ไม่ถาม |
 
-คำสั่งอันตราย เช่น `rm -rf` ของ workspace หรือ `.git` ยังถามเสมอแม้ใน Auto และกฎ allow ครอบคลุมไม่ได้
-การอนุญาตไม่ได้ยกเว้น sandbox: shell ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต
-ทางเดียวที่คำสั่งออกนอก sandbox คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วได้รับอนุญาต
-ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่คำสั่งที่แตะที่เก็บ credential หรือ `rm -rf` นอก workspace ยังขึ้นการ์ด hook และกฎ allow ไม่ตอบแทนคุณ และ Plan กับ run ที่ไม่มีใครให้ถามปฏิเสธเสมอ
+ตารางนี้คือกฎของคำสั่งที่แค่ไม่อยู่ใน safe list ข้อยกเว้นมีสี่ข้อ
+
+- **คำสั่งที่มีกฎเฉพาะส่วนใหญ่ไม่รันเองใน non-interactive** เช่นคำสั่งที่แตะไฟล์ความลับอย่าง `.env` `git push` `git reset --hard` `curl` หรือ CLI ของ cloud
+  กฎพวกนี้ถามคุณใน Ask ส่งให้ classifier ใน Auto และปฏิเสธใน run ที่ไม่มีใครให้ถาม
+
+- **คำสั่งที่ย้อนไม่ได้ถามคุณเสมอแม้ใน Auto** เช่น `rm -rf` ของโฟลเดอร์ workspace ทั้งโฟลเดอร์ ของ `.git` หรือของ path นอก workspace
+  กฎ allow ที่คุณบันทึกไว้ก็ครอบคลุมคำสั่งพวกนี้ไม่ได้ (ส่วน `rm -rf` ของโฟลเดอร์ย่อยใน workspace เป็นอีกกฎ ซึ่งใน Auto ส่งให้ classifier และใน non-interactive รันใน sandbox เหมือนคำสั่งนอก safe list)
+- **การอนุญาตไม่ได้ยกเว้น sandbox** คำสั่งที่คุณกด Allow แล้วก็ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต
+- **ทางเดียวที่คำสั่งออกนอก sandbox** คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วได้รับอนุญาต
+  ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่ถ้าคำสั่งแตะที่เก็บ credential ของเครื่อง (เช่น `~/.ssh` `~/.aws`) หรือเป็นคำสั่งที่ต้องถามเสมอ การ์ดก็ยังขึ้น
+  hook และกฎ allow ตอบแทนคุณไม่ได้ ส่วน Plan กับ run ที่ไม่มีใครให้ถามปฏิเสธเสมอ
 
 เดินดูการ์ดและทางแยกทั้งสี่ได้ใน [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)

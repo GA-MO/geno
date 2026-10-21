@@ -14,7 +14,7 @@ scenario:
     - id: tracked
       beat:
         title: VS Code จด hunk ทั้งสองว่ารอตัดสิน
-        text: ในโหมด review แบบ review ตอนที่การแก้ลง buffer ส่วนขยายจดตำแหน่งของแต่ละ hunk ตำแหน่งเลื่อนตามเมื่อคุณพิมพ์ในไฟล์
+        text: hunk คือก้อนบรรทัดที่เปลี่ยนติดกันหนึ่งก้อน turn นี้แก้สองที่จึงมีสอง hunk ในโหมด review แบบ review ตอนที่การแก้ลง buffer (ข้อความของไฟล์ที่ VS Code ถือไว้) ส่วนของ Geno ใน VS Code จดตำแหน่งของแต่ละ hunk ว่ารอตัดสิน ตำแหน่งเลื่อนตามเมื่อคุณพิมพ์ในไฟล์
         from: panel
         to: panel
       lane: editor
@@ -28,7 +28,7 @@ scenario:
     - id: lenses
       beat:
         title: Keep กับ Undo ขึ้นทั้งในไฟล์และในแชต
-        text: CodeLens ขึ้นเหนือแต่ละ hunk ในไฟล์ และการ์ดท้าย turn มีปุ่มของแต่ละ hunk กับปุ่มสำหรับทุก hunk
+        text: CodeLens (ลิงก์เล็กที่ VS Code วางเหนือบรรทัดในโค้ด) ขึ้นเหนือแต่ละ hunk ในไฟล์ และการ์ดท้าย turn ในแชตมีปุ่มของแต่ละ hunk กับปุ่มสำหรับทุก hunk
         from: panel
         to: you
         sees: เหนือแต่ละ hunk ใน `src/date.ts` มีลิงก์ "Keep | Undo" และการ์ด "1 file changed" ที่มีปุ่ม [Undo] [Keep] ต่อ hunk
@@ -97,7 +97,7 @@ scenario:
     - id: log
       beat:
         title: Geno บันทึกการตัดสินลง log
-        text: engine บันทึกการตัดสินลง log ของ session แล้วตอบสถานะของทุก hunk แชตแสดงป้ายแทนปุ่ม CodeLens ของ hunk นั้นหายไป hunk ที่สองยังรออยู่
+        text: ส่วนของ Geno ใน VS Code ส่งการตัดสินให้ engine engine บันทึกลง session log (บันทึกของแชตที่ engine เก็บ) แล้วตอบสถานะของทุก hunk การตัดสินจึงไม่หายเมื่อ reload แชตแสดงป้ายแทนปุ่ม CodeLens ของ hunk นั้นหายไป hunk ที่สองยังรออยู่
         from: engine
         to: panel
         sees: hunk แรกขึ้นป้าย "Kept" หรือ "Undone" ส่วน hunk ที่สองยังมีปุ่ม [Undo] [Keep]
@@ -137,6 +137,9 @@ scenario:
       end: { turn: none }
 ---
 
+หน้านี้เล่าโหมด review แบบ `review` ที่คุณตรวจการแก้ของ Geno ทีละ [hunk](/start/glossary/) แทนการรับหรือย้อนทั้ง turn
+ใช้เมื่อคุณอยากเก็บการแก้บางส่วนและทิ้งบางส่วน
+
 โหมด review ให้ผู้ใช้ตัดสินทีละ hunk แทนการยอมรับทั้ง turn การแก้ของ Geno ลงในไฟล์แล้วตั้งแต่ตอนที่ model แก้
 Keep จึงไม่เขียนอะไร มันแค่บันทึกว่าผู้ใช้เห็นด้วย ส่วน Undo เขียนข้อความเดิมกลับลงไป
 
@@ -149,7 +152,7 @@ Keep จึงไม่เขียนอะไร มันแค่บัน�
 สิ่งที่ควรสังเกต
 
 - **การตัดสินอยู่ใน log** หลัง reload หรือเปิดแชตใหม่ `restore` ขอสถานะจาก engine แล้วหาข้อความของ hunk ที่รออยู่ในไฟล์อีกครั้ง
-  hunk ที่หาไม่พบแล้วถูกแสดงเป็น kept และมีบันทึกใน output channel
+  hunk ที่หาไม่พบแล้วถูกแสดงเป็น kept และมีบันทึกใน output channel (แผง Output ของ VS Code)
 - **Undo ทีละ hunk ไม่ใช้ checkpoint** มันแทนข้อความในช่วงของ hunk ตรงๆ จึงไม่แตะการแก้อื่นของผู้ใช้ในไฟล์เดียวกัน
   ต่างจาก Undo all ของ session ซึ่งย้อนทั้ง workspace ไปที่ checkpoint แรก
 - **การเปลี่ยนโหมด review มีผลกับการแก้ครั้งต่อไป** hunk ที่จดไว้แล้วยังอยู่ และการแก้ที่ลงตอนโหมด auto ไม่ถูกจดย้อนหลัง

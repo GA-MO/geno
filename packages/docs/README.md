@@ -40,7 +40,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @g-code/docs dev --port 4347
 
 ## บันทึก flow ใหม่
 
-ถ้าไม่มีการรันจริงที่แสดงช่วงที่ต้องการ ให้เขียน flow ใน `packages/engine/test/docs-record/flows.ts`
+ถ้าไม่มีการรันจริงที่แสดงช่วงที่ต้องการ ให้เขียน flow ในไฟล์ `packages/engine/test/docs-record/flows-<ชื่อ>.ts` ที่ import จาก `kit.ts` เท่านั้น แล้วเพิ่มไฟล์นั้นในรายการ `FLOWS` ของ `flows.ts`
 flow ใช้ engine จริงกับ model จำลองที่ตอบตาม script แล้วรัน:
 
 ```sh

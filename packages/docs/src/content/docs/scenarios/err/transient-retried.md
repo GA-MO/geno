@@ -15,19 +15,35 @@ scenario:
       beat:
         title: "Geno ส่งคำขอให้ model"
         text: >-
-          turn กำลังทำงาน เครือข่ายใช้ได้ แต่ฝั่งผู้ให้บริการมีปัญหา
+          turn กำลังทำงาน เครือข่ายใช้ได้ แต่ฝั่งผู้ให้บริการมีปัญหา การ์ดข้างล่างคือ `messages` ของคำขอจริงไปยัง Anthropic
+          จากการรันอื่นที่ไม่มี error ดูสองก้อนที่ไฮไลต์ท้ายสุด: `tool_use` คือคำขอ `read` ของ model รอบก่อน และ `tool_result`
+          คือผลที่ Geno ส่งกลับ ทุกครั้งที่ retry Geno ส่งบทสนทนาเดิมนี้ซ้ำ
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A20-thai-question/sonnet-1/wire.jsonl#line=5
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[0]', '[4].content[0]']
 
     - id: fails
       lane: model
       beat:
         title: "ผู้ให้บริการตอบ error แทนคำตอบ"
         text: >-
-          ผู้ให้บริการตอบเป็น error หรือเงียบไปเฉยๆ ตัวเชื่อมของ SDK ไม่ลองใหม่เอง Geno เป็นคนตัดสินว่าจะ retry ไหม
-          ลองเลือกว่าผู้ให้บริการตอบอะไร
+          ผู้ให้บริการตอบเป็น error หรือเงียบไปเฉยๆ SDK ของผู้ให้บริการ (ไลบรารีที่ Geno ใช้ส่ง HTTP) ถูกตั้งให้ไม่ลองใหม่เอง
+          Geno เป็นคนตัดสินว่าจะ retry ไหม ลองเลือกว่าผู้ให้บริการตอบอะไร
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บน `claude-sonnet-5-5` ผ่าน API ของ Anthropic
+          model จำลองตอบคำขอที่สองด้วย HTTP 529 แทน stream คำตอบ ดูสามจุดที่ไฮไลต์: `status` คือ 529 ไม่ใช่ 200
+          `body.error.type` คือ `overloaded_error` แปลว่าเซิร์ฟเวอร์ของผู้ให้บริการรับงานไม่ไหวชั่วคราว ไม่ใช่ความผิดของคำขอ
+          และ header ไม่มี `retry-after` Geno จึงใช้เวลารอของตัวเอง ในการบันทึกเดียวกัน Geno รอ 1 วินาทีแล้วส่งบทสนทนาเดิมซ้ำ และได้คำตอบ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/err-overloaded-retried.jsonl#line=5
+          highlight: [status, body.error.type, headers]
         ask: "ตอบอะไร"
       do: >-
         ผู้ให้บริการไม่ส่งคำตอบ แต่ตอบเป็น error หรือเงียบไปเฉยๆ wire ของ SDK ไม่ลองใหม่เอง (`maxRetries: 0`)
@@ -52,8 +68,8 @@ scenario:
                 beat:
                   title: "529 overloaded เป็นแบบที่ retry ได้"
                   text: >-
-                    ข้อความไม่ได้พูดถึงโควตา rate limit หรือ context และสถานะ 529 ตรงกฎของข้อผิดพลาดชั่วคราว Geno จึง retry ได้
-                    โดยรอ 1 วินาทีก่อนครั้งที่สอง
+                    Geno เทียบ error กับตารางกฎตามลำดับ ข้อความไม่ได้พูดถึงโควตา rate limit หรือคำขอที่ยาวเกิน context window
+                    และสถานะ 529 ตรงกฎของข้อผิดพลาดชั่วคราว Geno จึง retry ได้ โดยรอ 1 วินาทีก่อนครั้งที่สอง
                   from: engine
                   to: engine
                 do: >-
@@ -82,7 +98,7 @@ scenario:
                 emits: [StreamStalled]
 
           - id: quota
-            label: 402 เครดิตหมด หรือ 4xx อื่น
+            label: 402 เครดิตหมด หรือ 4xx อื่นที่ไม่ใช่ 408 และ 429
             steps:
               - lane: loop
                 at: gateway
@@ -117,7 +133,7 @@ scenario:
         title: "Geno บันทึกว่าจะ retry"
         text: >-
           Geno บันทึกว่านี่คือครั้งที่เท่าไร จะรอนานเท่าไร และ error คืออะไร ก่อนเริ่มรอ แล้วแจ้งแชต การ retry
-          ไม่นับเป็นการเรียก model ในขีดจำกัดของ turn
+          ไม่นับเป็นการเรียก model ในงบของ turn ซึ่งเรียกได้ 40 ครั้ง
         from: engine
         to: panel
       do: >-
@@ -150,6 +166,7 @@ scenario:
         title: "แชตขึ้น Retrying พร้อมเหตุผลสั้นๆ"
         text: >-
           ท้าย turn ขึ้นแถวประกาศพร้อมไอคอนหมุนแทนแถว Thinking ข้อความเต็มของผู้ให้บริการอยู่ในรายละเอียด
+          การ์ดเป็นทาง 529 ทาง model เงียบขึ้นว่า `(the model went quiet)`
         from: panel
         to: you
         sees: { kind: notice, text: Retrying in 1s (model overloaded), tone: warning }
@@ -166,9 +183,20 @@ scenario:
       beat:
         title: "Geno รอแล้วเรียกใหม่"
         text: >-
-          Geno รอ 1, 2 และ 4 วินาทีตามครั้ง แล้วเรียกใหม่ ถ้าคุณกด Stop ระหว่างรอ การรอจบทันทีและ turn จบแบบ stopped
+          ข้อผิดพลาดชั่วคราว Geno รอ 1, 2 และ 4 วินาทีตามครั้ง แล้วเรียกใหม่ ถ้า model เงียบ Geno ลองใหม่ได้ครั้งเดียวหลังรอ 1 วินาที
+          ถ้าคุณกด Stop ระหว่างรอ การรอจบทันทีและ turn จบแบบ stopped
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในทาง model เงียบ
+          การบันทึกตั้ง `GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS` ให้รอ byte แรก 2 วินาทีแทน 180 วินาที ผู้ให้บริการรับคำขอแล้วไม่ส่งอะไรกลับ
+          Geno เลิกรอ รอ 1 วินาที แล้วส่งคำขอนี้ การ์ดคือ `messages` ของคำขอที่ส่งใหม่ ซึ่งตรงกับคำขอที่เงียบไปทุกตัวอักษร
+          ดู `tool_result` ที่ไฮไลต์ท้ายสุด: Geno ไม่ได้เพิ่มอะไรให้ model รู้ว่ามีการลองใหม่
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/err-transient-retried.jsonl#line=6
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[2].content[0]']
         ask: "ได้ผลไหม"
       do: >-
         gateway นอนรอตามเวลาแล้วเรียกใหม่ เวลารอเพิ่มเป็น 1, 2 และ 4 วินาที ถ้าผู้ใช้กด Stop ระหว่างรอ
@@ -184,9 +212,16 @@ scenario:
                 beat:
                   title: "ครั้งนี้ผู้ให้บริการตอบ"
                   text: >-
-                    ผู้ให้บริการตอบตามปกติ คำตอบ stream ออกมาแล้วจบด้วย end_turn
+                    ผู้ให้บริการตอบตามปกติ คำตอบ stream ออกมาแล้วจบด้วย `stop_reason: end_turn` คือตอบจบแล้ว ไม่ขอ tool
+                    การ์ดข้างล่างคือ `content` ของคำตอบจริงจากการรันเดียวกับการ์ดแรก ตามที่ Geno บันทึกลง log เมื่อ stream จบ
+                    ดู `text` ที่ไฮไลต์ ซึ่งเป็นต้นข้อความที่แชตแสดง
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A20-thai-question/sonnet-1/session.jsonl#seq=17
+                    select: content
+                    highlight: ['[0].text']
                 do: >-
                   ผู้ให้บริการตอบตามปกติ stream คำตอบออกมาแล้วจบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -200,7 +235,7 @@ scenario:
                     ทันทีที่การเรียกใหม่เริ่ม แถวประกาศหายไป แถว Thinking กลับมา แล้วคำตอบค่อยๆ ขึ้นในแชต
                   from: panel
                   to: you
-                  sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว, streaming: true }
+                  sees: { kind: message, from: geno, text: Coin Dash เป็นเกมเก็บเหรียญเล็กๆ ที่เล่นในเบราว์เซอร์, streaming: true }
                 alongside: true
                 do: >-
                   ทันทีที่การเรียกใหม่ได้ slot และเริ่ม (ก่อน byte แรก) `watchStream` รายงาน progress ครั้งแรก
@@ -244,7 +279,7 @@ scenario:
                   from: engine
                   to: panel
                   end: "retry ไม่สำเร็จ turn ล้มเหลว"
-                  sees: "แถบ error สีแดงพร้อมข้อความของผู้ให้บริการจากครั้งสุดท้ายที่ลอง"
+                  sees: "แถบ error สีแดงพร้อมข้อความจากครั้งสุดท้ายที่ลอง: ของผู้ให้บริการ หรือของ Geno ที่บอกว่า model เงียบนานเท่าไรและตัวแปรที่ตั้งให้รอนานขึ้น"
 ---
 
 gateway แยก error ของผู้ให้บริการเป็นหกชนิดด้วยตาราง `RULES` ใน `model-error.ts` แล้วแต่ละชนิดมีทางของตัวเอง

@@ -1,10 +1,10 @@
 ---
-title: "คุณสั่ง /compact ระหว่าง turn"
+title: "คุณสั่ง /compact ระหว่างสอง turn"
 description: ผู้ใช้สั่งสรุปบริบทเองด้วย /compact หรือปุ่ม Compact engine สรุปโดยไม่เปิด loop และ turn จบแบบ done
 scenario:
   surface: vscode
   given:
-    - เปิด session ของ Geno เอง (ไม่ใช่ backend ภายนอก) ในแผงแชตของ VS Code
+    - เปิด session ของ Geno เอง (ไม่ใช่ session ที่รันบน agent ภายนอกอย่าง Claude Code ซึ่งเก็บ context ของมันเอง) ในแผงแชตของ VS Code
     - ไม่มี turn ทำงานอยู่ และวงแหวน context ในช่องพิมพ์เกิน 80% จึงมีปุ่ม Compact ให้กด
   trigger: >-
     ผู้ใช้พิมพ์ `/compact เก็บรายละเอียดเรื่อง migration ไว้` แล้วกด Enter (กดปุ่ม Compact ก็ส่ง `/compact` แบบเดียวกัน)
@@ -15,8 +15,10 @@ scenario:
       beat:
         title: "คุณพิมพ์ /compact พร้อมเรื่องที่ให้เน้น"
         text: >-
-          ไม่มี turn ทำงานอยู่ และวงแหวน context เกิน 80% คุณพิมพ์ `/compact เก็บรายละเอียดเรื่อง migration ไว้`
-          หรือกดปุ่ม Compact ซึ่งส่งคำสั่งเดียวกัน
+          ไม่มี turn ทำงานอยู่ วงแหวน context ในช่องพิมพ์บอกว่าบทสนทนาใช้ context window ไปกี่ส่วน
+          (context window คือจำนวน token สูงสุดที่ model อ่านได้ในคำขอเดียว) ตอนนี้มันเกิน 80%
+          คุณสั่ง compaction เอง คือให้ model สรุปส่วนเก่าของบทสนทนาแล้วใช้สรุปแทน
+          คุณพิมพ์ `/compact เก็บรายละเอียดเรื่อง migration ไว้` หรือกดปุ่ม Compact ซึ่งส่งคำสั่งเดียวกัน
         from: you
         to: panel
         sees: { kind: composer, state: idle, text: /compact เก็บรายละเอียดเรื่อง migration ไว้ }
@@ -27,8 +29,8 @@ scenario:
       beat:
         title: "Engine ทำ /compact เอง ไม่เปิด loop"
         text: >-
-          `/compact` เป็นคำสั่งที่ engine ทำเอง มันจองช่อง turn ของ session ไว้เหมือน turn จริง ปุ่ม Stop จึงหยุดได้ และ
-          prompt อื่นเริ่มไม่ได้ระหว่างนี้
+          `/compact` เป็นคำสั่งที่ engine ทำเอง ไม่เปิด agent loop ที่ให้ model ตอบและเรียก tool
+          แต่ engine ทำเครื่องหมายว่ามี turn ทำงานอยู่ใน session นี้เหมือน turn จริง ปุ่ม Stop จึงหยุดได้ และ prompt อื่นเริ่มไม่ได้ระหว่างนี้
         from: engine
         to: engine
       do: >-
@@ -68,10 +70,18 @@ scenario:
       beat:
         title: "Geno ให้ model สรุปโดยเน้นเรื่องที่คุณบอก"
         text: >-
-          Geno วางจุดตัดแบบเดียวกับ compaction อัตโนมัติ แล้วเรียก model หนึ่งครั้งโดยไม่มี tool
-          เรื่องที่คุณพิมพ์ไปกับคำขอ ให้สรุปเน้นเรื่องนั้น
+          Geno วางจุดตัด คือจุดแบ่งบทสนทนา ส่วนก่อนจุดตัดถูกสรุป ส่วนหลังเก็บไว้คำต่อคำ แล้วเรียก model หนึ่งครั้งโดยไม่มี tool
+          คำขอมีข้อความเดียว คือบทสนทนาส่วนเก่าตามด้วยคำสั่งให้สรุป เรื่องที่คุณพิมพ์ต่อท้ายคำสั่งเป็นบรรทัด
+          `The user asked the summary to focus on: ...` การ์ดข้างล่างเป็นคำขอสรุปจริงจากการรันใน terminal ที่ตั้ง `GCODE_COMPACT_AT` ต่ำ จน Geno สรุปเองอัตโนมัติ
+          คำขอนั้นจึงไม่มีบรรทัด focus ท้ายคำสั่ง การ์ดแสดงท้ายข้อความเดียวนั้น
+          ดูคำสั่งที่ไฮไลต์ `Reply with the summary only.` ซึ่งปิดท้ายคำสั่งให้สรุป
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A31-compaction-forced/2/wire.jsonl.gz#line=43
+          select: messages[0]
+          quote: Reply with the summary only.
         ask: "ผลเป็นอย่างไร"
       do: >-
         `compactContext` (ตัวเดียวกับที่ loop ใช้) วางจุดตัดด้วย `planCompaction` แล้วเรียก model หนึ่งครั้งด้วย `SUMMARY_SYSTEM`
@@ -85,11 +95,17 @@ scenario:
             steps:
               - lane: model
                 beat:
-                  title: "Model เขียนสรุปที่เน้น migration"
+                  title: "Model เขียนสรุป"
                   text: >-
                     model สรุปส่วนเก่าของบทสนทนา โดยเก็บรายละเอียดเรื่อง migration ไว้ตามที่คุณขอ
+                    Geno เก็บสรุปไว้ใน event `compact` (บรรทัดใหม่ใน session log) การ์ดข้างล่างเป็นสรุปที่ model ตอบคำขอในการ์ดก่อน
+                    จึงใช้หัวข้อตามคำสั่งแต่ไม่ได้เน้นเรื่องใด ดู field `summary` ที่ไฮไลต์ ขึ้นต้นด้วยหัวข้อ Goal
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A31-compaction-forced/2/session.jsonl.gz#seq=84
+                    highlight: [summary]
                 do: >-
                   model เขียนสรุปส่วนเก่าของบทสนทนา โดยเน้นเรื่อง migration ตามที่ผู้ใช้ขอ
                 ref: packages/core/src/compaction.ts#SUMMARY_SYSTEM
@@ -98,8 +114,9 @@ scenario:
                 beat:
                   title: "Geno บันทึกสรุปลง session"
                   text: >-
-                    engine บันทึกสรุปพร้อมเรื่องที่ให้เน้นต่อท้ายบันทึกของ session แล้วแจ้งแชต SessionStart hook ได้รันหลัง
-                    compaction และขนาด context ใหม่ถูกส่งไปที่ช่องพิมพ์
+                    engine บันทึกสรุปพร้อมเรื่องที่ให้เน้นต่อท้ายบันทึกของ session แล้วแจ้งแชต
+                    ถ้าคุณตั้ง hook `SessionStart` ไว้ (คำสั่ง shell ที่ Geno รันตอนเริ่ม session) มันรันอีกครั้งหลัง compaction
+                    แล้วขนาด context ใหม่ถูกส่งไปที่ช่องพิมพ์
                   from: engine
                   to: panel
                 do: >-
@@ -129,16 +146,17 @@ scenario:
                 beat:
                   title: "แชตขึ้นเส้นคั่นพร้อม Focus"
                   text: >-
-                    แชตวาดเส้นคั่นที่พับได้ เปิดแล้วเห็น Focus สรุป และรายการไฟล์ วงแหวน context ลดลงและปุ่ม Compact หายไป
+                    แชตวาดเส้นคั่นที่พับได้ ตัวเลขบนเส้นคั่นคือจำนวน token ของ context ก่อนสรุป กับที่ Geno ประเมินว่าเหลือหลังสรุป
+                    เปิดแล้วเห็น Focus สรุป และรายการไฟล์ วงแหวน context ลดลงและปุ่ม Compact หายไป
                   from: panel
                   to: you
-                  sees: "เส้นคั่น \"Context compacted · 184,213 → about 31,400 tokens\" และ Focus \"เก็บรายละเอียดเรื่อง migration ไว้\""
+                  sees: "เส้นคั่น \"Context compacted · <ก่อน> → about <หลัง> tokens\" และ Focus \"เก็บรายละเอียดเรื่อง migration ไว้\""
                 alongside: true
                 do: >-
                   `compactStep` วาดเส้นคั่นที่พับได้ เปิดแล้วเห็น Focus สรุป และรายการไฟล์
                   คำตอบของคำสั่งเป็นข้อความว่าง ไม่มีอะไรตามมาในแผง
                 sees: >-
-                  เส้นคั่น "Context compacted · 184,213 → about 31,400 tokens" และ Focus "เก็บรายละเอียดเรื่อง migration ไว้"
+                  เส้นคั่น "Context compacted · <ก่อน> → about <หลัง> tokens" และ Focus "เก็บรายละเอียดเรื่อง migration ไว้"
                 ref: packages/extension/src/chat/compact-view.ts#compactStep
               - lane: server
                 at: turns
@@ -174,7 +192,7 @@ scenario:
                   หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน แต่ turn ไม่มีข้อความหลังเส้นคั่น `missingReply` จึงถือว่าคำตอบไม่มีข้อความ
                   และแสดงประกาศพร้อมปุ่ม Continue กับ Retry ทั้งที่การสรุปสำเร็จ
                 sees: >-
-                  หัวข้อ "worked for 9s" และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
+                  หัวข้อ "worked for <เวลา>" และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
                 ref: packages/extension/src/chat/rail.ts#missingReply
                 end: { turn: done, reason: end_turn }
 
@@ -219,11 +237,30 @@ scenario:
                   title: "Geno ยกเลิกการสรุป"
                   text: >-
                     การเรียก model เพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก context ยังเหมือนเดิม
+                    คำตอบของคำสั่งคือ `Stopped. The context is as it was.`
                   from: engine
                   to: engine
                 do: >-
                   engine abort controller ที่ `/compact` ลงทะเบียนไว้ การเรียก model เพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก
                   คำตอบของคำสั่งคือ "Stopped. The context is as it was."
+                ref: "packages/engine/src/serve.ts#\"if (outcome.kind === 'failed') return controller.signal.aborted\""
+
+          - id: failed
+            label: การเรียกเพื่อสรุปล้มเหลว
+            then: reply
+            steps:
+              - lane: server
+                at: turns
+                beat:
+                  title: "การเรียกเพื่อสรุปล้ม"
+                  text: >-
+                    การเรียก model เพื่อสรุปได้ error เช่นผู้ให้บริการล่ม หรือ model ตอบข้อความว่าง ไม่มีอะไรถูกบันทึก
+                    context ยังเหมือนเดิม คำตอบของคำสั่งคือ `Could not compact, so the context is as it was:` ตามด้วยข้อความ error
+                  from: engine
+                  to: engine
+                do: >-
+                  `compactContext` คืน `failed` และสัญญาณยกเลิกไม่ได้ถูกกด จึงตอบ
+                  "Could not compact, so the context is as it was: <message>" ไม่มี event `compact`
                 ref: "packages/engine/src/serve.ts#\"if (outcome.kind === 'failed') return controller.signal.aborted\""
 
     - id: reply
@@ -257,7 +294,8 @@ scenario:
       beat:
         title: "แชตขึ้นคำตอบของคำสั่ง"
         text: >-
-          คำตอบขึ้นเป็นข้อความของ Geno และหัวข้อเป็น worked for แม้ในทางที่คุณกด Stop
+          คำตอบขึ้นเป็นข้อความของ Geno ข้อความแล้วแต่ทาง คือ `Nothing to compact yet...` `Stopped. The context is as it was.`
+          หรือ `Could not compact...` การ์ดข้างล่างเป็นทางที่ยังไม่มีอะไรให้สรุป หัวข้อเป็น worked for แม้ในทางที่คุณกด Stop
         from: panel
         to: you
         end: "ไม่ได้สรุป context เหมือนเดิม"
@@ -265,12 +303,12 @@ scenario:
       do: >-
         คำตอบของคำสั่งขึ้นเป็นข้อความของ Geno หัวข้อเป็น "worked for ..." แม้ในทางที่ผู้ใช้กด Stop
       sees: >-
-        "Nothing to compact yet: ..." หรือ "Stopped. The context is as it was." และหัวข้อ "worked for 2s"
+        "Nothing to compact yet: ..." "Stopped. The context is as it was." หรือ "Could not compact, ..." และหัวข้อ "worked for <เวลา>"
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: done, reason: end_turn }
 ---
 
-`/compact` ไม่ใช่ turn ของเอเจนต์: engine ไม่เรียก `runAgent` ไม่มี checkpoint ไม่มีงานในแผง Tasks
+`/compact` ไม่ใช่ turn ของเอเจนต์: engine ไม่เรียก `runAgent` ไม่มี checkpoint ไม่มีงานในแผง Tasks (แผงที่แสดงงานที่กำลังรัน)
 และ prompt `/compact` ไม่ถูกบันทึกเป็น event `user` เมื่อเล่น session ซ้ำ `compactPrompt` สร้างชิป `/compact` ขึ้นจาก event `compact` แทน
 
 สิ่งที่ควรสังเกต
