@@ -33,6 +33,10 @@ const replies: readonly Reply[] = [
   verdict('deny', REASONS.deny),
   toolCall('Clearing dist too.', [bash(COMMANDS.removeDist)], usage),
   verdict('ask', REASONS.ask),
+  toolCall('Clearing coverage.', [bash(COMMANDS.removeCoverage)], usage),
+  verdict('deny', REASONS.deny),
+  toolCall('Clearing what dist holds.', [bash(COMMANDS.removeDistFile)], usage),
+  verdict('ask', REASONS.ask),
   asModel(answer('Cleaned build and dist, and I left a.ts alone.', usage)),
   // Denied in Ask, which ends the turn with no answer after it.
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
@@ -102,7 +106,7 @@ afterAll(() => {
 const exists = (file: string) => access(file).then(() => true, () => false);
 
 describe('Ask and Auto in the chat panel', () => {
-  it('starts in the configured mode, badges what Auto settled, asks about what the classifier is unsure of, and switches to Ask from the picker', async () => {
+  it('starts in the configured mode, badges what Auto settled, sends its refusals back to the model, asks the user after three in a row, and switches to Ask from the picker', async () => {
     // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
     const { work, home, workspace, suite } = await setUp('modes', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
@@ -120,20 +124,20 @@ describe('Ask and Auto in the chat panel', () => {
       GCODE_CLASSIFIER_MODEL: MODEL,
     });
     expect(requests).toHaveLength(replies.length);
-    // Auto asked the classifier three times; Ask and Plan never did.
-    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false, false, false]);
+    // Auto asked the classifier five times; Ask and Plan never did.
+    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, true, false, true, false, false, false, false, false]);
     // Every mode offers the same tools and system prompt, so a switch keeps the cached prefix; the notice tells the mode.
-    for (const i of [8, 9, 10]) expect(toolNames(i), `request ${i} offers the tools of request 0`).toEqual(toolNames(0));
-    for (const i of [8, 9, 10]) expect(requests[i]!.system, `request ${i} keeps the system prompt`).toEqual(requests[0]!.system);
-    expect(lastTexts(8), 'the Plan turn tells the model it is in Plan').toContain(MODE_NOTICES.plan);
-    const refused = lastBlocks(9).find((b) => b.type === 'tool_result' && b.tool_use_id === 'tu_edit_plan');
+    for (const i of [12, 13, 14]) expect(toolNames(i), `request ${i} offers the tools of request 0`).toEqual(toolNames(0));
+    for (const i of [12, 13, 14]) expect(requests[i]!.system, `request ${i} keeps the system prompt`).toEqual(requests[0]!.system);
+    expect(lastTexts(12), 'the Plan turn tells the model it is in Plan').toContain(MODE_NOTICES.plan);
+    const refused = lastBlocks(13).find((b) => b.type === 'tool_result' && b.tool_use_id === 'tu_edit_plan');
     expect(refused, 'Plan refuses the edit when it is called').toMatchObject({ is_error: true });
     expect(JSON.stringify(refused?.content)).toContain('edit is not available: Plan mode is read-only');
     expect(await readFile(path.join(workspace, 'a.ts'), 'utf8'), 'and a.ts is unchanged').toBe(FILES['a.ts']);
     // Start building left Plan for the configured default, Auto, told the model so, and sent the follow-up.
     expect(FOLLOW_UP, 'the fixture shows what Start building sends').toBe(PROMPT_ACTIONS['start-building']);
-    expect(lastTexts(10)).toEqual([MODE_NOTICES.auto, USER_PROMPT_FOLLOWS, userActionText(FOLLOW_UP)]);
+    expect(lastTexts(14)).toEqual([MODE_NOTICES.auto, USER_PROMPT_FOLLOWS, userActionText(FOLLOW_UP)]);
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
-    expect(await exists(path.join(workspace, 'dist')), 'the user allowed removing dist').toBe(false);
+    expect(await exists(path.join(workspace, 'dist/out.js')), 'the user allowed removing it on the card after three refusals').toBe(false);
   }, 600_000);
 });

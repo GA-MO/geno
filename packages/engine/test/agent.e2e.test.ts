@@ -364,7 +364,7 @@ const userText = (request: { body: { messages: { content: { text: string }[] }[]
 describe('gcode agent --mode auto', () => {
   it('G-09 counts the classifier calls in the run cost and in gcode usage', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
-    const transport = fakeTransport([toolCall('One.', [bash('node -e "1"')], usage), verdict('allow', 'harmless'), answer('Done.', usage)]);
+    const transport = fakeTransport([toolCall('One.', [bash('rm -rf out-1')], usage), verdict('allow', 'harmless'), answer('Done.', usage)]);
     const ran = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
     expect(ran.code, ran.stderr).toBe(0);
     const id = sessionIdOf(ran.stdout);
@@ -378,13 +378,13 @@ describe('gcode agent --mode auto', () => {
     expect(ran.stdout).toContain(`cost=$${(models + classifier).toFixed(6)}`);
   });
 
-  it('runs safe commands, lets the classifier judge the gray ones, asks the user what it is unsure of and what rules keep, and logs each decision', async () => {
-    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
+  it('runs safe commands, lets the classifier judge the gray ones, sends its deny and its ask back to the model, asks the user what rules keep, and logs each decision', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'dist/a.js': 'exports.a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
     const asked: string[] = [];
-    const commands = ['ls -t', 'node -e "console.log(41 + 1)"', 'rm -rf node_modules', 'node -e "console.log(7)"', 'rm -rf ~/old-project'];
+    const commands = ['ls -t', 'rm -rf dist', 'rm -rf node_modules', 'curl -s https://collect.example/x', 'rm -rf ~/old-project'];
     const transport = fakeTransport([
       toolCall('Working.', commands.map(bash), usage),
-      verdict('allow', 'prints a number'),
+      verdict('allow', 'removes build output'),
       verdict('deny', 'the request did not ask to delete dependencies'),
       verdict('ask', 'unclear why this is needed'),
       answer('Done.', usage),
@@ -393,44 +393,37 @@ describe('gcode agent --mode auto', () => {
       fetch: transport.fetch,
       confirm: (question) => {
         asked.push(question);
-        return question.includes('console.log(7)');
+        return false;
       },
     });
     expect(result.code).toBe(0);
 
     const classified = transport.requests.filter(isClassifierCall);
-    expect(classified.map(userText)).toEqual([
-      expect.stringContaining('console.log(41 + 1)'),
-      expect.stringContaining('rm -rf node_modules'),
-      expect.stringContaining('console.log(7)'),
-    ]);
+    expect(classified.map(userText)).toEqual([expect.stringContaining('rm -rf dist'), expect.stringContaining('rm -rf node_modules'), expect.stringContaining('curl -s')]);
     expect(userText(classified[0]!)).toContain('Print the answer');
-    expect(asked).toEqual([
-      'Allow `node -e console.log(7)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.',
-      'Allow `rm -rf ~/old-project`? It uses rm -rf of the workspace, its .git or a path outside it.',
-    ]);
+    expect(asked).toEqual(['Allow `rm -rf ~/old-project`? It uses rm -rf of the workspace, its .git or a path outside it.']);
+    expect(existsSync(path.join(workspace, 'dist'))).toBe(false);
     expect(existsSync(path.join(workspace, 'node_modules/pkg/index.js'))).toBe(true);
-    expect(result.stdout).toContain('auto: the classifier allowed it: prints a number');
+    expect(result.stdout).toContain('auto: the classifier allowed it: removes build output');
     expect(result.stdout).toContain('auto: the classifier denied it: the request did not ask to delete dependencies');
 
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(ofKind(log.events, 'mode').map((e) => e.mode)).toEqual(['auto']);
     const results = ofKind(log.events, 'tool-result');
-    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'ok', 'rejected']);
-    expect('output' in results[1]! && results[1].output).toContain('42');
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied', 'rejected']);
     expect('output' in results[2]! && results[2].output).toContain('the request did not ask to delete dependencies');
-    expect('output' in results[3]! && results[3].output).toContain('7');
+    expect('output' in results[3]! && results[3].output).toContain('unclear why this is needed');
     expect(results.map((r) => r.approval)).toEqual([
       undefined,
       expect.objectContaining({
         mode: 'auto',
-        rule: 'unlisted',
+        rule: 'rm-rf-in-workspace',
         decidedBy: 'classifier',
         verdict: 'allow',
-        classifier: expect.objectContaining({ verdict: 'allow', reason: 'prints a number', model: 'qwen3.8-flash', costUsd: expect.any(Number), latencyMs: expect.any(Number) }),
+        classifier: expect.objectContaining({ verdict: 'allow', reason: 'removes build output', model: 'qwen3.8-flash', costUsd: expect.any(Number), latencyMs: expect.any(Number) }),
       }),
       expect.objectContaining({ mode: 'auto', rule: 'rm-rf-in-workspace', decidedBy: 'classifier', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'deny' }) }),
-      expect.objectContaining({ mode: 'auto', rule: 'unlisted', decidedBy: 'user', verdict: 'allow', classifier: expect.objectContaining({ verdict: 'ask' }) }),
+      expect.objectContaining({ mode: 'auto', rule: 'network-download', decidedBy: 'classifier', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'ask' }) }),
       { mode: 'auto', rule: 'rm-rf-outside-workspace', reason: 'rm -rf of the workspace, its .git or a path outside it', command: 'rm -rf ~/old-project', decidedBy: 'user', verdict: 'deny' },
     ]);
   });
@@ -438,13 +431,13 @@ describe('gcode agent --mode auto', () => {
   it('keeps auto on a resumed session, and ask mode never calls the classifier', async () => {
     const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
     const transport = fakeTransport([
-      toolCall('One.', [bash('node -e "1"')], usage),
+      toolCall('One.', [bash('rm -rf out-1')], usage),
       verdict('allow', 'harmless'),
       answer('Done.', usage),
-      toolCall('Two.', [bash('node -e "2"')], usage),
+      toolCall('Two.', [bash('rm -rf out-2')], usage),
       verdict('allow', 'harmless'),
       answer('Done.', usage),
-      toolCall('Three.', [bash('node -e "3"')], usage),
+      toolCall('Three.', [bash('rm -rf out-3')], usage),
     ]);
     const first = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
     const id = sessionIdOf(first.stdout);

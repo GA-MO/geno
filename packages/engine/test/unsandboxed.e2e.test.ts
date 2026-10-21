@@ -139,18 +139,18 @@ describe('bash with dangerouslyDisableSandbox', () => {
     expect(run.approval).toMatchObject({ mode: 'auto', rule: 'unsandboxed', decidedBy: 'classifier', verdict: 'allow' });
   });
 
-  it("puts the card to the user in Auto when the classifier asks, and refuses when it denies", async () => {
+  it("sends the classifier's ask and its deny in Auto back to the model, with no card", async () => {
     const asks = escape();
-    const held = await bash({ command: asks.command, dangerouslyDisableSandbox: true }, { mode: 'auto', classifier: 'ask', answers: ['reject'] });
+    const held = await bash({ command: asks.command, dangerouslyDisableSandbox: true }, { mode: 'auto', classifier: 'ask', answers: ['allow'] });
     expect(held.classified).toHaveLength(1);
-    expect(held.asked).toEqual([expect.objectContaining({ rule: 'unsandboxed', verdict: 'classify' })]);
-    expect([held.run.status, existsSync(asks.target)]).toEqual(['rejected', false]);
+    expect(held.asked).toEqual([]);
+    expect([held.run.status, existsSync(asks.target)]).toEqual(['denied', false]);
 
     const denies = escape();
     const refused = await bash({ command: denies.command, dangerouslyDisableSandbox: true }, { mode: 'auto', classifier: 'deny', answers: ['allow'] });
     expect(refused.asked).toEqual([]);
     expect(refused.run.status).toBe('denied');
-    expect(refused.run.text).toContain('was refused by the safety classifier');
+    expect(refused.run.text).toContain("Auto mode's safety classifier refused");
     expect(existsSync(denies.target)).toBe(false);
   });
 
@@ -194,7 +194,7 @@ describe('bash with dangerouslyDisableSandbox', () => {
 
     const held = escape();
     const auto = await bash({ command: held.command, dangerouslyDisableSandbox: true }, { mode: 'auto', classifier: 'ask', permissionRequest, answers: ['reject'] });
-    expect(auto.asked).toEqual([expect.objectContaining({ rule: 'unsandboxed' })]);
+    expect([auto.asked, auto.run.status]).toEqual([[], 'denied']);
     expect(existsSync(held.target)).toBe(false);
 
     const alone = escape();

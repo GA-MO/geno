@@ -249,9 +249,10 @@ scenario:
 
 คำสั่งใน safe list ไม่ผ่านการตัดสินใดๆ นอกจากกฎของ workspace ไม่มีการ์ดในโหมด Ask และไม่มี classifier ในโหมด Auto
 safe list มีโปรแกรมอ่านอย่างเดียว (`ls`, `cat`, `grep`, `git status`, ...) และคำสั่งตรวจของโปรเจกต์ (`vitest`, `tsc`, `eslint`,
-`pnpm test`, `pnpm lint`, `pnpm build`, `node --version`, `node --check`, `node --test`, ...) คำสั่งอื่นต้องผ่านการขออนุญาต
+`pnpm test`, `pnpm lint`, `pnpm build`, `node --version`, `node --check`, `node --test`, ...) คำสั่งอื่นต้องผ่านการขออนุญาตในโหมด Ask
+ส่วนโหมด Auto รันคำสั่งอื่นใน sandbox เองถ้าไม่มีกฎอื่นจับ เช่น `pnpm add zod` และส่งที่กฎจับ เช่น `rm -rf dist` ให้ classifier
 ตัวแปรที่ยังไม่ได้แทนค่า เช่น `$?` อยู่ได้เฉพาะใน argument ของ `echo`, `printf`, `test`, `[`, `true`, `false` และ `for` อย่าง `echo "exit: $?"`
-ถ้าตัวแปรเป็นชื่อโปรแกรม ไฟล์ของ redirect หรือ argument อื่น คำสั่งนั้นต้องถาม และ `printf -v` ที่ตั้งค่าตัวแปรก็ต้องถาม
+ถ้าตัวแปรเป็นชื่อโปรแกรม ไฟล์ของ redirect หรือ argument อื่น คำสั่งนั้นไม่นับว่าอยู่ใน safe list และ `printf -v` ที่ตั้งค่าตัวแปรก็ไม่นับ
 ดู [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)
 
 สิ่งที่ควรสังเกต

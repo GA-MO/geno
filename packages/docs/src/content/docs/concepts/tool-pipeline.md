@@ -45,10 +45,12 @@ flowchart TD
   R -- "ไม่ติดธง" --> RUN["tool ทำงาน<br/>(shell ใน sandbox, ไฟล์ผ่าน buffer ของ editor)"]
   R -- "ติดธง" --> ST{"settle()"}
   ST -- "deny / non-interactive" --> PRH1["PermissionRequest hook (ถ้าตอบได้)"] --> DEN["ToolDenied (model ทำต่อ)"]
-  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, หมดเวลาหรือไม่มีคำตัดสิน<br/>ลองอีกครั้ง, ล้มเหลว = ask"]
+  ST -- "classify (Auto)" --> CL["classifier, 8 วินาที<br/>หมดเวลาหรือไม่มีคำตัดสิน ลองอีกครั้ง"]
   CL -- allow --> RUN
-  CL -- deny --> DEN
-  CL -- ask --> PRH2
+  CL -- "deny / ask / ประเมินไม่ได้" --> FB{"block ติดกัน 3 หรือรวม 20 แล้ว?<br/>autoFallsBack"}
+  FB -- "ยัง" --> DEN
+  FB -- "ถึงแล้ว" --> PRH2
+  CL -- "classifier ใช้ไม่ได้" --> PRH2
   ST -- "ask" --> PRH2["PermissionRequest hook"] --> CARD["การ์ดขออนุญาต<br/>session/request_permission"]
   CARD -- "Allow / session / workspace" --> RUN
   CARD -- "No + ข้อความ" --> DEN
@@ -75,19 +77,25 @@ flowchart TD
 | --- | --- | --- |
 | Plan | ปฏิเสธ | ปฏิเสธ (แสดงเป็นล้มเหลว) |
 | Ask (ค่าเริ่มต้น) | แสดงการ์ดถามผู้ใช้ | ไม่ถาม ผู้ใช้ตรวจทีหลัง |
-| Auto | ให้ classifier ตัดสิน ถ้าไม่แน่ใจก็ถามคุณ | ไม่ถาม |
+| Auto | รันใน sandbox ไม่ถาม classifier ถ้าไม่มีกฎอื่นติดธง ถ้ากฎอื่นติดธง classifier ตัดสิน ถ้าไม่ผ่านก็ส่งเหตุผลกลับไปหา model | ไม่ถาม |
 | non-interactive (`gcode agent --non-interactive` สำหรับ script ที่ไม่มีคนคอยตอบ) | รันใน sandbox เพราะไม่มีใครให้ถาม | ไม่ถาม |
 
-ตารางนี้คือกฎของคำสั่งที่แค่ไม่อยู่ใน safe list ข้อยกเว้นมีสี่ข้อ
+ตารางนี้คือกฎของคำสั่งที่แค่ไม่อยู่ใน safe list (กฎ `unlisted`) เช่น `make build` หรือ `npm install` ข้อยกเว้นมีดังนี้
 
-- **คำสั่งที่มีกฎเฉพาะส่วนใหญ่ไม่รันเองใน non-interactive** เช่นคำสั่งที่แตะไฟล์ความลับอย่าง `.env` `git push` `git reset --hard` `curl` หรือ CLI ของ cloud
-  กฎพวกนี้ถามคุณใน Ask ส่งให้ classifier ใน Auto และปฏิเสธใน run ที่ไม่มีใครให้ถาม
-
-- **คำสั่งที่ย้อนไม่ได้ถามคุณเสมอแม้ใน Auto** เช่น `rm -rf` ของโฟลเดอร์ workspace ทั้งโฟลเดอร์ ของ `.git` หรือของ path นอก workspace
-  กฎ allow ที่คุณบันทึกไว้ก็ครอบคลุมคำสั่งพวกนี้ไม่ได้ (ส่วน `rm -rf` ของโฟลเดอร์ย่อยใน workspace เป็นอีกกฎ ซึ่งใน Auto ส่งให้ classifier และใน non-interactive รันใน sandbox เหมือนคำสั่งนอก safe list)
+- **คำสั่งที่มีกฎเฉพาะไม่รันเองใน Auto** เช่น `curl` `git reset --hard` `rm -rf` ของโฟลเดอร์ย่อยใน workspace path นอก workspace
+  การค้น credential ด้วย `grep -rn password .` (กฎ `secret-search`) `git push` ที่ force หรือไป branch deploy (กฎ `git-push-risky`) และ MCP tool
+  กฎพวกนี้ถามคุณใน Ask ส่งให้ classifier ใน Auto และส่วนใหญ่ปฏิเสธใน run ที่ไม่มีใครให้ถาม
+  ถ้าส่วนใดของ pipe หรือ list ติดธง classifier ตัดสินทั้งบรรทัด ส่วน `git push` ธรรมดาไปยัง branch ของ repo เองรันตามกฎใน Auto
+- **ใน Auto คำว่าไม่ของ classifier ไม่ขึ้นการ์ด** classifier ตอบ `deny` หรือ `ask` หรือประเมินไม่ได้ (หมดเวลาหรือไม่มีคำตัดสินทั้งสองครั้ง หรือ request ล้มเหลว)
+  call นั้นถูกปฏิเสธ เหตุผลกลับไปหา model เป็น `tool_result` ด้วยถ้อยคำแบบ dontAsk ของ Claude Code และ PermissionRequest hook ไม่ถูกถาม
+  การปฏิเสธแบบนี้เรียกว่า block เมื่อ block ติดกันครบ 3 ครั้งหรือรวมครบ 20 ครั้งใน session (`autoBlocksOf` นับจาก log) block ถัดไปจึงขึ้นการ์ดให้คุณแทน
+  call ไหนที่ได้รันก็ตัดแถว block ที่ติดกัน
+- **classifier ที่ใช้ไม่ได้เลยขึ้นการ์ดทุก call** คือปิดอยู่ ไม่มี key หรือ provider ปฏิเสธ key หรือ model กรณีนี้ไม่นับเป็น block ถ้าไม่มี key หรือ key ถูกปฏิเสธ Geno บอกคุณครั้งเดียวต่อ session (ถ้าคุณปิดเองจะไม่มีข้อความ)
+- **คำสั่งที่ย้อนไม่ได้ถามคุณเสมอแม้ใน Auto** เช่น `rm -rf` ของโฟลเดอร์ workspace ทั้งโฟลเดอร์ หรือของ `.git`
+  กฎ allow ที่คุณบันทึกไว้ก็ครอบคลุมคำสั่งพวกนี้ไม่ได้
 - **การอนุญาตไม่ได้ยกเว้น sandbox** คำสั่งที่คุณกด Allow แล้วก็ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต
 - **ทางเดียวที่คำสั่งออกนอก sandbox** คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วได้รับอนุญาต
-  ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่ถ้าคำสั่งแตะที่เก็บ credential ของเครื่อง (เช่น `~/.ssh` `~/.aws`) หรือเป็นคำสั่งที่ต้องถามเสมอ การ์ดก็ยังขึ้น
+  ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่ถ้าคำสั่งแตะที่เก็บ credential ของเครื่อง (เช่น `~/.ssh` `~/.aws`) หรือเป็น `rm -rf` นอก workspace การ์ดก็ยังขึ้น
   hook และกฎ allow ตอบแทนคุณไม่ได้ ส่วน Plan กับ run ที่ไม่มีใครให้ถามปฏิเสธเสมอ
 
 เดินดูการ์ดและทางแยกทั้งสี่ได้ใน [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)

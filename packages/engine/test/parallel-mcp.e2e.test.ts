@@ -98,8 +98,8 @@ describe('read-only MCP tools of one turn', () => {
   it('runs read-only calls together in Auto, which asks nobody about them', async () => {
     const { asked, logged, executors } = await runEchoes('auto', 'reject');
 
-    expect(asked, 'env goes to the classifier, whose ask puts the card to the user').toEqual(['mcp__fake__env']);
-    expect(logged.map((e) => e.status)).toEqual(['ok', 'ok', 'ok', 'rejected']);
+    expect(asked, "env goes to the classifier, whose ask goes back to the model with no card").toEqual([]);
+    expect(logged.map((e) => e.status)).toEqual(['ok', 'ok', 'ok', 'denied']);
     const [first, second, third] = logged.map((e) => e.timing!);
     expect(Math.max(first!.startAt, second!.startAt, third!.startAt)).toBeLessThan(Math.min(first!.endAt, second!.endAt, third!.endAt) + 1);
     expect(executors['mcp__fake__echo']!.concurrent?.({})).toBe(true);

@@ -17,6 +17,7 @@ export const DENY_RULE_IDS = [
   'rm-rf-outside-workspace',
   'rm-rf-in-workspace',
   'git-push',
+  'git-push-risky',
   'git-reset-hard',
   'git-discard',
   'path-outside-workspace',
@@ -26,6 +27,7 @@ export const DENY_RULE_IDS = [
   'secret-path',
   'process-kill',
   'unlisted',
+  'secret-search',
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
 
@@ -48,9 +50,9 @@ export type SimpleCommand = {
 
 /**
  * `plan` reads and runs only what is clearly safe, and changes nothing. `ask` asks the user before every flagged command.
- * `auto` runs what is clearly safe, asks before an `rm -rf` outside the workspace, and lets the classifier judge the
- * rest: it runs what the classifier allows, refuses what it denies, and asks the user about the rest.
- * Non-interactive runs, such as evals, have nobody to ask.
+ * `auto` runs what is clearly safe and, in the sandbox, what no rule but the safe list flags; asks before an `rm -rf`
+ * outside the workspace; and lets the classifier judge the rest: it runs what the classifier allows and refuses the
+ * rest, until too many refusals hand the next one to the user. Non-interactive runs, such as evals, have nobody to ask.
  */
 export const APPROVAL_MODES = ['plan', 'ask', 'auto', 'non-interactive'] as const;
 export type ApprovalMode = (typeof APPROVAL_MODES)[number];
@@ -139,6 +141,8 @@ const ALWAYS_ASK = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': '
 // What Auto lets the classifier judge. A command still cannot write outside the workspace or reach the network,
 // because the sandbox stops it.
 const ASK_OR_CLASSIFY: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
+// What only Auto's classifier judges: in every other mode a rule ahead of it already flags the same command.
+const AUTO_ONLY: Verdicts = { plan: 'allow', ask: 'allow', auto: 'classify', 'non-interactive': 'allow' };
 
 const CLOUD_CLIS = new Set([
   'aws', 'az', 'bq', 'doctl', 'eksctl', 'firebase', 'fly', 'flyctl', 'gcloud', 'gsutil', 'helm', 'heroku',
@@ -274,6 +278,38 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 }
 
 const always = () => true;
+
+/** Branches a push to which can ship or publish, as deploy pipelines name them; a branch under one, such as release/1.2, counts too. */
+export const DEPLOY_BRANCHES = ['production', 'prod', 'release', 'gh-pages', 'deploy', 'live'] as const;
+
+const isDeployBranch = (branch: string): boolean => {
+  const name = branch.replace(/^refs\/heads\//, '').toLowerCase();
+  return DEPLOY_BRANCHES.some((deploy) => name === deploy || name.startsWith(`${deploy}/`));
+};
+
+// Push options that only report, check or set the upstream; any other may force, delete, mirror or run a program.
+const PLAIN_PUSH_OPTIONS = new Set(['-u', '--set-upstream', '-v', '--verbose', '-q', '--quiet', '-n', '--dry-run', '--porcelain', '--progress', '--no-progress', '--atomic']);
+// A remote's name, which git looks up in the repository's own config; a path or a URL is no remote.
+const REMOTE_NAME = /^\w[\w.-]*$/;
+
+/**
+ * A push of branches to one of the repository's own remotes: git's options before `push` only `-C` and `--no-pager`,
+ * no wrapper or variable that changes what runs, only options that report or set the upstream, a remote named, and
+ * no refspec that forces (`+`), deletes (`:branch`), globs or names a deploy branch as its destination.
+ */
+function plainPush({ prefix, args }: SimpleCommand): boolean {
+  if (prefix.some((word) => (isAssignment(word) ? CODE_VARIABLES.test(word) : !SAFE_PREFIXES.has(path.basename(word))))) return false;
+  let i = 0;
+  for (; args[i] !== 'push'; i++) {
+    if (args[i] === '-C') i++;
+    else if (args[i] !== '--no-pager') return false;
+  }
+  const rest = args.slice(i + 1);
+  if (rest.some((arg) => /[$`*]/.test(arg) || (arg.startsWith('-') && !PLAIN_PUSH_OPTIONS.has(arg)))) return false;
+  const [remote, ...refspecs] = rest.filter((arg) => !arg.startsWith('-'));
+  if (remote !== undefined && !REMOTE_NAME.test(remote)) return false;
+  return refspecs.every((refspec) => !/^[+:]/.test(refspec) && !isDeployBranch(refspec.slice(refspec.lastIndexOf(':') + 1)));
+}
 
 /**
  * What a kill sends its signal to: the words after its signal option, or undefined for `kill -l`, which only lists
@@ -431,6 +467,7 @@ export const inCredentialPlace = (places: readonly string[], target: string): bo
 
 // A search for credentials by name, which a recursive grep answers from any file it reaches, such as .env.
 const SECRET_TERM = /api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key/i;
+const SEARCH_PROGRAMS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
 // A write under .git, such as a hook, runs later outside any command the user sees.
 const GIT_DIR = /(?:^|\/)\.git(?:\/|$)/;
 const UNSAFE_WORD = [SECRET_PATH, HIDDEN_GLOB, SECRET_TERM, GIT_DIR];
@@ -469,10 +506,17 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command, scope) => removes(command, scope, 'workspace'),
   },
+  // Auto runs a push of the repository's own branches, as Claude Code's auto mode does; git-push-risky keeps the rest.
   'git-push': {
     reason: 'git push',
-    verdicts: ASK_OR_CLASSIFY,
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'deny' },
     matches: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
+  },
+  // Every other mode asks about or refuses every push under git-push.
+  'git-push-risky': {
+    reason: 'a git push that forces, deletes, mirrors or runs a program, or goes to a deploy branch or an address',
+    verdicts: AUTO_ONLY,
+    matches: (command) => command.program === 'git' && gitSubcommand(command.args).name === 'push' && !plainPush(command),
   },
   'git-reset-hard': {
     reason: 'git reset --hard',
@@ -526,12 +570,20 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: ASK_OR_CLASSIFY,
     matches: stopsOthers,
   },
-  // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. A run nobody can
-  // ask runs it in the sandbox.
+  // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. Auto and a run
+  // nobody can ask run it in the sandbox, as Claude Code's auto mode runs a sandboxed command no category flags; a
+  // command asked to run outside the sandbox meets the classifier all the same (`unsandboxedDenial`).
   unlisted: {
     reason: 'a command not on the safe list',
-    verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' },
     matches: (command, scope) => !isClearlySafe(command) && !killsOnlyOwn(command, scope),
+  },
+  // What the sandbox does not hold back of an unlisted command: a search for credentials by name prints what it finds,
+  // .env included, to the model. Every other mode meets the same search as unlisted.
+  'secret-search': {
+    reason: 'a search for credentials by name, which can print a file such as .env',
+    verdicts: AUTO_ONLY,
+    matches: ({ program, words }) => SEARCH_PROGRAMS.has(program) && words.some((word) => SECRET_TERM.test(word)),
   },
 };
 
@@ -557,7 +609,8 @@ export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
 /** A command line judged whole, before its words (`lineRuleOf`). */
 export const LINE_RULE_IDS = ['long-command', 'unparsable-command'] as const;
 export type LineRuleId = (typeof LINE_RULE_IDS)[number];
-// As the unlisted rule: Ask asks, and a run nobody can ask still runs it in the sandbox.
+// As the unlisted rule, Ask asks and a run nobody can ask still runs it in the sandbox; Auto's classifier judges it,
+// since Geno cannot tell what the line runs.
 const LINE_VERDICTS: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' };
 export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
   'long-command': { reason: 'a command over 10,000 characters', verdicts: LINE_VERDICTS },

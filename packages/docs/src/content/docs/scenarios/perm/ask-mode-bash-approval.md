@@ -82,7 +82,8 @@ scenario:
         from: engine
         to: panel
       do: >-
-        `settle` ไม่ปฏิเสธเอง (ไม่ใช่ deny) และไม่ส่งให้ classifier (ไม่ใช่โหมด Auto)
+        `settle` ไม่ปฏิเสธเอง (ไม่ใช่ deny) และไม่ส่งให้ classifier เพราะคำตัดสินคือ `ask` ไม่ใช่ `classify`
+        (ในโหมด Auto กฎ `unlisted` ให้ `allow` คำสั่งนี้จึงรันใน sandbox เลยโดยไม่ถึง `settle`)
         ไม่มี PermissionRequest hook ตอบแทน จึงส่งคำถามต่อให้ผู้ใช้ผ่าน `approval.approve`
       ref: packages/engine/src/tools/agent.ts#settle
 

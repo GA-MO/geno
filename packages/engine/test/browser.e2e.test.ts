@@ -240,7 +240,7 @@ describe('the built-in browser', () => {
 
     expect(permissions).toEqual([]);
     expect(JSON.stringify(transport.requests[1]!.body.messages)).toContain('opening a page on another host (rule browser-remote-url)');
-    expect(textOf(toolResults(transport.requests[2]!.body)[0]!)).toContain('`open http://localhost@evil.example/ (host evil.example)` was refused by the safety classifier: the request names no site');
+    expect(textOf(toolResults(transport.requests[2]!.body)[0]!)).toContain("Auto mode's safety classifier refused `open http://localhost@evil.example/ (host evil.example)`, so it did not run: the request names no site");
     expect(chromes(marker), 'a blocked navigation never starts Chrome').toEqual([]);
   }, 120_000);
 
