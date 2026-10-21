@@ -10,6 +10,7 @@ import {
   COMPACT_TRIGGERS,
   cutView,
   APPROVAL_RULE_IDS,
+  CLASSIFIER_FAILURES,
   EXTERNAL_BACKEND_IDS,
   EFFORTS,
   HUNK_STATUSES,
@@ -182,7 +183,7 @@ const approvalSchema = z.strictObject({
   command: z.string(),
   line: z.string().optional(),
   classifier: z
-    .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable() })
+    .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable(), failure: z.enum(CLASSIFIER_FAILURES).optional() })
     .optional(),
   decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: verdict.exclude(['ask']),

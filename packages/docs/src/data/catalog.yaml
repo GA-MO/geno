@@ -823,8 +823,8 @@ scenarios:
       - panel
     terminal: Model continues; badge "Denied by a rule"
   - id: perm.auto-classifier-asks-user
-    thai: Auto ถามคุณเมื่อ classifier ไม่แน่ใจ
-    english: Auto asks the user on classifier "ask"
+    thai: Auto ถามคุณหลัง classifier ปฏิเสธติดกัน 3 ครั้งหรือรวม 20 ครั้ง
+    english: Auto asks the user after 3 classifier blocks in a row or 20 in all
     chapter: 8
     priority: P2
     lanes:
