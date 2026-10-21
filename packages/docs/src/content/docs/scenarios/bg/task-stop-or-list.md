@@ -4,7 +4,7 @@ description: model เรียก list_agents ดูว่า session มีล
 scenario:
   surface: vscode
   given:
-    - ใน turn นี้ model เริ่มลูก `explore` แบบเบื้องหลัง เริ่ม `pnpm dev` เป็น `bg-1` และตั้ง `schedule_wakeup` เป็น `wake-2` ไว้แล้ว
+    - ใน turn นี้ model เริ่มลูก `explore` แบบเบื้องหลัง เริ่ม `pnpm dev` เป็น `bg-1` และตั้ง `schedule_wakeup` เป็น `wake-1` ไว้แล้ว
     - ผู้ใช้เพิ่งบอกว่าไม่ต้องสำรวจต่อแล้ว เพราะเจอคำตอบเอง
   trigger: >-
     model ต้องการรู้ว่ามีอะไรค้างอยู่ก่อนจะหยุด จึงเรียก `list_agents`
@@ -14,9 +14,19 @@ scenario:
     - id: lists
       beat:
         title: Model ขอดูว่ามีอะไรค้างอยู่
-        text: คุณบอกว่าไม่ต้องสำรวจต่อแล้ว ก่อนหยุดอะไร model เรียก `list_agents` เพื่อดูของที่ค้าง
+        text: >-
+          คุณบอกว่าไม่ต้องสำรวจต่อแล้ว ก่อนหยุดอะไร model เรียก `list_agents` เพื่อดูของที่ค้าง คือ subagent
+          (session ลูกที่ model สร้างไว้ทำงานย่อย) คำสั่งเบื้องหลัง และสิ่งที่ตั้งไว้ให้ปลุก session ทีหลัง
+          (ปลุกคือ engine เริ่ม turn ใหม่เอง) การ์ดข้างล่างเป็นคำตอบจริงจากการรันหนึ่งที่ model เรียก `list_agents` ก่อนหยุด dev server
+          บล็อกที่ไฮไลต์คือ `tool_use` ของ `list_agents` ซึ่งไม่มี input
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s3-2/session.jsonl#seq=46
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1]']
       lane: model
       do: >-
         model ขอเรียก `list_agents` ซึ่งไม่มี input จบคำตอบด้วย `stop_reason: tool_use`
@@ -29,9 +39,23 @@ scenario:
     - id: rows
       beat:
         title: Geno รวบรวมลูก คำสั่ง และการรอ
-        text: Geno อ่าน subagent จาก log คำสั่งเบื้องหลัง และ monitor wake-up หรือการเฝ้า PR ที่ยังค้าง แล้วส่งรายการให้ model
+        text: >-
+          Geno อ่านอย่างเดียว: subagent จาก log คำสั่งเบื้องหลัง และการรอที่ยังค้าง ได้แก่ monitor (การเฝ้า output ของคำสั่งจนเจอบรรทัดที่ต้องการ) การปลุกตามเวลา (wake-up)
+          และการเฝ้า PR แล้วเขียนรายการเป็น `tool_result` ลง log ผลนี้ถึง model ตอนเรียกครั้งถัดไป
+          การ์ดข้างล่างเป็นผลจริงจากการรันเดียวกับการ์ดก่อนหน้า ข้อความที่ไฮไลต์มีแค่คำสั่ง `bg-1` (แท็บแรก) และจบด้วยคำแนะนำให้หยุดด้วย `task_stop` (แท็บสอง)
         from: engine
-        to: model
+        to: engine
+        sees:
+          - kind: payload
+            source: docs/results/real-usecases/runs/A12-background-server/fix-s3-2/wire.jsonl.gz#line=31
+            select: messages[-1].content[0]
+            highlight: [content]
+            quote: "bg-1: background command `npm run dev`, running"
+          - kind: payload
+            source: docs/results/real-usecases/runs/A12-background-server/fix-s3-2/wire.jsonl.gz#line=31
+            select: messages[-1].content[0]
+            highlight: [content]
+            quote: Stop a running or pending one with task_stop and its id.
       lane: tool
       at: executor
       do: >-
@@ -46,7 +70,7 @@ scenario:
     - id: stops
       beat:
         title: Model ขอหยุดสิ่งที่ไม่ต้องการ
-        text: model เรียก `task_stop` ด้วย id ของสิ่งที่จะหยุด การ์ดเป็นคำขอจริงจากการรันที่หยุด dev server
+        text: model เรียก `task_stop` ด้วย id ของสิ่งที่จะหยุด การ์ดเป็นบล็อก `tool_use` จริงจากการรันที่หยุด dev server ดู `input.id` ว่าเป็น `bg-1`
         from: model
         to: engine
         sees:
@@ -65,7 +89,7 @@ scenario:
     - id: which
       beat:
         title: Geno ดูว่า id เป็นของอะไร
-        text: "`bg-N` คือคำสั่งเบื้องหลัง `wake-N` คือ monitor wake-up หรือการเฝ้า PR อย่างอื่นคือ session ของ subagent id ที่ไม่รู้จักได้ error"
+        text: "Geno ดูรูปของ id `bg-N` คือคำสั่งเบื้องหลัง `wake-N` คือ monitor การปลุกตามเวลา หรือการเฝ้า PR อย่างอื่นคือ session id ของ subagent id ที่ไม่รู้จักได้ error"
         from: engine
         to: engine
         ask: Model หยุดอะไร
@@ -85,9 +109,12 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno หยุด explore
-                  text: Geno ปิดเสียงรายงานที่จะมาทีหลัง แล้วหยุด explore และรอจนมันจบ แถวของมันขึ้นว่ายกเลิก ผลของ call คือข้อความที่ explore เขียนไว้ก่อนถูกหยุด
+                  text: >-
+                    Geno ปิดเสียงรายงาน คือรายงานของ explore จะไม่มาเป็นข้อความทีหลังอีก แล้วหยุด explore และรอจนมันจบ
+                    แถวของมันขึ้นว่ายกเลิก ผลของ call คือข้อความที่ explore เขียนไว้ก่อนถูกหยุด ห่อในรั้ว `<subagent_report>`
+                    ที่บอก model ว่าเป็นข้อมูล ไม่ใช่คำสั่ง ผลนี้ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                 at: tools
                 do: >-
                   `stopChild` หาตัวหยุดของลูก `stopNow` ปิดเสียงรายงานที่จะมาทีหลัง แล้ว abort ลูกด้วยเหตุ `MODEL_STOP`
@@ -121,14 +148,22 @@ scenario:
               - lane: tool
                 beat:
                   title: Geno หยุด `pnpm dev`
-                  text: Geno ส่ง SIGTERM แล้ว SIGKILL ถ้ายังไม่จบในไม่กี่วินาที ผลบอกท้ายของ output และที่อยู่ไฟล์ การ์ดเป็นผลจริงจากการรันเดียวกัน
+                  text: >-
+                    Geno ส่ง SIGTERM (ขอให้ process จบ) แล้ว SIGKILL (บังคับจบ) ถ้ายังไม่จบในไม่กี่วินาที
+                    การ์ดเป็น `tool_result` จริงจากการรันเดียวกัน (ในรันนั้นคำสั่งคือ `npm run dev`) ข้อความที่ไฮไลต์บอกว่าหยุด `bg-1` แล้วและไฟล์ที่เก็บ output ทั้งหมดอยู่ที่ไหน (แท็บแรก) ตามด้วยท้ายของ output (แท็บสอง)
                   from: engine
                   to: machine
                   sees:
-                    kind: payload
-                    source: docs/results/real-usecases/runs/A12-background-server/fix-a1/wire.jsonl#line=15
-                    select: messages[-1].content[0]
-                    highlight: [content]
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A12-background-server/fix-a1/wire.jsonl#line=15
+                      select: messages[-1].content[0]
+                      highlight: [content]
+                      quote: Stopped background command bg-1
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A12-background-server/fix-a1/wire.jsonl#line=15
+                      select: messages[-1].content[0]
+                      highlight: [content]
+                      quote: listening on http://localhost:5173
                 at: shell
                 do: >-
                   `stopJob` ส่ง SIGTERM ให้ `pnpm dev` แล้ว SIGKILL ถ้ายังไม่จบในไม่กี่วินาที
@@ -137,19 +172,19 @@ scenario:
                 ref: "packages/engine/src/tools/work.ts#\"async function stopJob(\""
 
           - id: wake
-            label: wake-up wake-2
+            label: wake-up wake-1
             then: result
             steps:
               - lane: tool
                 beat:
-                  title: Geno ยกเลิก `wake-2`
-                  text: Geno ล้างนาฬิกาและจดลง log ว่ายกเลิก engine ตัวถัดไปจึงไม่ตั้งนาฬิกานี้อีก
+                  title: Geno ยกเลิก `wake-1`
+                  text: Geno ล้างนาฬิกาและจดลง log ว่ายกเลิก ถ้า engine เริ่มใหม่ ตัวใหม่จึงไม่ตั้งนาฬิกานี้อีก
                   from: engine
                   to: engine
                 at: executor
                 do: >-
-                  `Wakes.stop` ล้างนาฬิกาของ `wake-2` แล้วบันทึกโน้ต `wake` ชนิด `stopped` ลง log
-                  engine ตัวถัดไปจึงไม่ตั้งนาฬิกานี้อีก ผลคือ "Cancelled wake-up wake-2. It will not wake you."
+                  `Wakes.stop` ล้างนาฬิกาของ `wake-1` แล้วบันทึกโน้ต `wake` ชนิด `stopped` ลง log
+                  engine ตัวถัดไปจึงไม่ตั้งนาฬิกานี้อีก ผลคือ "Cancelled wake-up wake-1. It will not wake you."
                 ref: "packages/engine/src/tools/work.ts#\"async function stopWake(\""
                 emits: [stopped]
 
@@ -159,9 +194,10 @@ scenario:
               - lane: tool
                 beat:
                   title: explore จบไปแล้ว
-                  text: ไม่มีอะไรให้หยุด Geno ตอบ error ว่า explore ไม่ได้รันแล้ว subagent แบบรอก็หยุดทางนี้ไม่ได้ เพราะมันจบพร้อมรายงานอยู่แล้ว
+                  text: >-
+                    ไม่มีอะไรให้หยุด Geno เขียน `tool_result` แบบ error ว่า explore ไม่ได้รันแล้วลง log ผลนี้ถึง model ตอนเรียกครั้งถัดไป
                   from: engine
-                  to: model
+                  to: engine
                 at: executor
                 do: >-
                   ลูกไม่ได้รันแล้ว `stopChild` จึงโยน `ToolError` "explore subagent ... is not running: it ended (done)."
@@ -171,14 +207,26 @@ scenario:
               - use: tool-result-returns
               - lane: loop
                 beat:
-                  title: Model อ่าน error แล้วทำต่อ
-                  text: turn ไม่จบ model อ่านเหตุผลแล้วทำงานต่อ
-                  from: model
-                  to: engine
+                  title: Geno ส่ง error ให้ model ในคำขอใหม่
+                  text: >-
+                    turn ไม่จบ Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้ง การ์ดข้างล่างเป็นคำขอจริงจากการรันที่ model เรียก `task_stop`
+                    กับ `bg-1` ซ้ำหลังมันหยุดไปแล้ว error มีรูปแบบเดียวกัน การ์ดแรกคือข้อความรองสุดท้าย ส่วนที่ไฮไลต์คือ call `task_stop`
+                    ของ model การ์ดที่สองคือข้อความสุดท้าย ส่วนที่ไฮไลต์คือ `tool_result` ที่มี `is_error: true` model อ่านเหตุผลแล้วทำงานต่อ
+                  from: engine
+                  to: model
+                  sees:
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=23
+                      select: messages[-2]
+                      highlight: ['content[1]']
+                    - kind: payload
+                      source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=23
+                      select: messages[-1]
+                      highlight: ['content[0]']
                   end: Model ทำต่อ
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` model อ่าน error แล้วทำต่อ
+                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` คำขอใหม่มี `tool_result` ที่ `is_error` เป็น true อยู่ท้ายสุด
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -213,13 +261,23 @@ scenario:
     - id: tells
       beat:
         title: Model บอกคุณว่าหยุดอะไรไปแล้ว
-        text: model สรุปสิ่งที่หยุด และสิ่งที่ explore เจอก่อนถูกหยุด
+        text: >-
+          model บอกคุณว่าหยุดอะไรไปแล้ว ถ้าหยุด explore ก็สรุปสิ่งที่มันเจอก่อนถูกหยุดด้วย
+          การ์ดข้างล่างเป็นคำตอบจริงจากการรันเดียวกับการ์ดของ `task_stop` ซึ่งหยุด dev server ส่วนที่ไฮไลต์คือ model
+          บอกผลที่ได้และว่าหยุด server แล้ว จบคำตอบด้วย `end_turn`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/fix-a1/session.jsonl#seq=24
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].text']
+          quote: The server has been stopped.
         end: Turn จบ
       lane: model
       do: >-
-        model บอกผู้ใช้ว่าหยุดอะไรไปแล้ว และสรุปสิ่งที่ explore เจอก่อนถูกหยุด
+        model บอกผู้ใช้ว่าหยุดอะไรไปแล้ว ถ้าหยุด explore ก็สรุปสิ่งที่มันเจอก่อนถูกหยุดด้วย
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
       end: { turn: done, reason: end_turn }
@@ -239,5 +297,6 @@ scenario:
 สิ่งที่ควรสังเกต
 
 - **ลูกไม่มี tool สองตัวนี้** `list_agents` และ `task_stop` อยู่ในรายการที่ลูกไม่ได้ ลูกหยุดงานของแม่ไม่ได้
-- **workflow หยุดได้เฉพาะเมื่อเปิดการปลุก** (อ่านจากโค้ด) session ของ workflow ถูกจดเป็นการรอใน `Wakes` เฉพาะเมื่อการปลุกอัตโนมัติเปิด
+- **subagent แบบที่แม่รอหยุดด้วย `task_stop` ไม่ได้** call ที่เริ่มมันจบพร้อมรายงานของมันเองอยู่แล้ว `task_stop` จึงตอบเป็น error
+- **[workflow](/start/glossary/) หยุดได้เฉพาะเมื่อเปิดการปลุก** (อ่านจากโค้ด) session ของ workflow ถูกจดเป็นการรอใน `Wakes` เฉพาะเมื่อการปลุกอัตโนมัติเปิด
   ถ้าปิดอยู่ `task_stop` ด้วย id ของ workflow หาไม่เจอ

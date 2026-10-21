@@ -16,8 +16,12 @@ scenario:
       beat:
         title: "Model ขอ tool ที่เปลี่ยนอะไรบางอย่าง"
         text: >-
-          ทุกโหมดได้ tool ชุดเดียวกัน `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และ model เรียกได้ ทั้งที่ประกาศของโหมด Plan
-          บอกแล้วว่าทำไม่ได้ ประกาศจาก run จริงด้านล่างเป็นแบบนี้
+          ทุกโหมดได้ tool ชุดเดียวกัน เพื่อให้ prompt cache (ส่วนต้นของคำขอที่ผู้ให้บริการจำไว้ให้อ่านเร็วและถูกลง)
+          ไม่หลุดเมื่อสลับโหมด ยกเว้น `agent` (tool ที่เริ่ม subagent) ซึ่งการตั้งค่า `agentTool` ในไฟล์ตั้งค่าของ Geno เช่น `.g-code/settings.json` เลือกได้ว่าให้ในโหมดไหน
+          `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และ model เรียกได้
+          ทั้งที่ประกาศของโหมด Plan (ข้อความ `[Geno]` ที่ Geno แทรกให้ model เมื่อโหมดเปลี่ยน) บอกแล้วว่าทำไม่ได้
+          การ์ดข้างล่างคือประกาศนั้นจาก run จริง ดูว่ามันบอกว่า `edit` และ tool ที่เริ่มงานเบื้องหลังถูกปฏิเสธ
+          และ `bash` รันได้แค่คำสั่งอ่านอย่างเดียวจาก safe list
         from: model
         to: engine
         sees:
@@ -74,9 +78,9 @@ scenario:
                   title: "กฎในตัวของโหมด Plan ปฏิเสธคำสั่ง"
                   text: >-
                     โหมด Plan ใช้แค่กฎในตัว ไม่อ่านกฎของ workspace `pnpm add zod` ไม่อยู่ในรายการคำสั่งปลอดภัยจึงถูกปฏิเสธ
-                    ไม่ถามคุณและไม่มี classifier ผลบอกให้เปลี่ยนเป็น Ask หรือ Auto ถ้าจะแก้อะไร
+                    ไม่ถามคุณและไม่มี classifier (model ตัวช่วยที่โหมด Auto ใช้ตัดสินคำสั่ง) ผลบอกให้เปลี่ยนเป็น Ask หรือ Auto ถ้าจะแก้อะไร
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   `ruledDenial` ในโหมด Plan ใช้แค่คำตัดสินในตัว ไม่อ่านกฎของ workspace กฎ `unlisted` ในโหมด Plan คือ `deny`
                 ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -110,17 +114,17 @@ scenario:
                 sees: ป้าย "Denied by a rule" และ "A command not on the safe list is not allowed here."
                 ref: packages/extension/src/chat/session-updates.ts#denialOf
           - id: edit
-            label: edit src/date.ts
+            label: edit src/version.ts
             then: denied
             steps:
               - lane: tool
                 at: executor
                 beat:
-                  title: "โหมด Plan ไม่มี edit ให้ใช้"
+                  title: "โหมด Plan ไม่ยอมให้ edit รัน"
                   text: >-
-                    `edit` ไม่อยู่ในรายการ tool ของโหมด Plan call ล้มเหลวทันทีก่อนอ่านไฟล์หรือดูกฎใดๆ และไม่มีบันทึกการปฏิเสธ
+                    `edit` อยู่ในคำขอ แต่ไม่อยู่ในรายการ tool ที่โหมด Plan ยอมให้รัน call จึงล้มเหลวทันทีก่อนอ่านไฟล์หรือดูกฎใดๆ และไม่มีบันทึกการปฏิเสธ
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   `inMode` เห็นว่า `AGENT_MODE_TOOLS.plan` ไม่มี `edit` จึงโยน `ToolError`
                   "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it."
@@ -141,11 +145,11 @@ scenario:
                     ผลเป็น error ไม่ใช่การปฏิเสธ แชตจึงแสดงขั้นเป็นล้มเหลวธรรมดาโดยไม่มีป้าย
                   from: panel
                   to: you
-                  sees: { kind: step, label: edit src/date.ts, status: failed, output: "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it." }
+                  sees: { kind: step, label: edit src/version.ts, status: failed, output: "edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it." }
                 alongside: true
                 do: >-
                   ผลมีสถานะ `error` ไม่ใช่ `denied` แผงจึงแสดงขั้นเป็นล้มเหลวธรรมดา ไม่มีป้ายปฏิเสธ
-                sees: ขั้นของ `edit src/date.ts` ขึ้นไอคอน error และผลที่พับไว้คือข้อความของ `ToolError`
+                sees: ขั้นของ `edit src/version.ts` ขึ้นไอคอน error และผลที่พับไว้คือข้อความของ `ToolError`
                 ref: packages/extension/src/chat/session-updates.ts#updateActions
           - id: background
             label: bash แบบเบื้องหลัง
@@ -156,9 +160,10 @@ scenario:
                 beat:
                   title: "โหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด"
                   text: >-
-                    งานเบื้องหลังถูกปฏิเสธก่อนดูกฎใดๆ แม้คำสั่งนั้นจะอยู่ในรายการคำสั่งปลอดภัย
+                    model ขอ `bash` แบบ `run_in_background` (รันต่อไปโดย turn ไม่รอให้จบ)
+                    งานเบื้องหลังแบบนี้ถูกปฏิเสธก่อนดูกฎใดๆ แม้คำสั่งนั้นจะอยู่ในรายการคำสั่งปลอดภัย
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   `approveCommand` ปฏิเสธงานเบื้องหลังในโหมด Plan ก่อนดูกฎใดๆ ด้วย `ToolError`
                   "background commands are not available: Plan mode is read-only; ... Do not retry it."
@@ -172,13 +177,24 @@ scenario:
       beat:
         title: "Model ทำแผนต่อด้วย tool อ่านอย่างเดียว"
         text: >-
-          ไม่มีอะไรรันและไม่มีการ์ด การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียก model ต่อ
-          model อ่านเหตุผลแล้วทำแผนต่อ
+          ไม่มีอะไรรันและไม่มีการ์ดขออนุญาต การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียก model ต่อ
+          ในคำขอใหม่ model ได้ `tool_result` ที่มี `is_error: true` และเหตุผล แล้วทำแผนต่อ
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในรอบนั้น model อ่าน `src/version.ts` ก่อน แล้วขอ `edit` การ์ดแรกคือข้อความท้ายของคำขอถัดไป ดู `is_error` และเหตุผล
+          การ์ดที่สองคือคำตอบถัดมาของ model ซึ่งเปลี่ยนไปขอ `grep` เพื่อหาจุดที่เรียก parseVersion
         from: engine
         to: model
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/perm-plan-refuses.jsonl#line=6
+            select: messages[-1].content
+            highlight: ['[0].is_error', '[0].content']
+          - kind: payload
+            source: packages/docs/src/data/recorded/perm-plan-refuses.jsonl#line=8
+            select: messages[5].content
+            highlight: ['[0].text', '[1].input']
         end: "model ทำแผนต่อ"
       do: >-
-        ไม่มีอะไรรันและไม่มีการ์ด `loopStep` ตัดสิน `call-model` เพราะการปฏิเสธนี้ไม่ได้มาจากผู้ใช้
+        ไม่มีอะไรรันและไม่มีการ์ดขออนุญาต `loopStep` ตัดสิน `call-model` เพราะการปฏิเสธนี้ไม่ได้มาจากผู้ใช้
         model อ่านเหตุผลแล้วทำแผนต่อด้วย tool อ่านอย่างเดียว
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
@@ -187,6 +203,7 @@ scenario:
 ---
 
 โหมด Plan ไม่ได้ซ่อน tool ทุกโหมดได้ tool ชุดเดียวกันเพื่อให้ prompt cache ไม่หลุดเมื่อสลับโหมด
+ข้อยกเว้นเดียวคือ `agent` ซึ่งได้เฉพาะในโหมดที่การตั้งค่า `agentTool` ระบุ
 Plan ปฏิเสธตอน call รันแทน และประกาศของโหมดบอก model ล่วงหน้าว่าอะไรจะถูกปฏิเสธ
 
 | call | ถูกปฏิเสธที่ | สถานะ | แผงแสดง |

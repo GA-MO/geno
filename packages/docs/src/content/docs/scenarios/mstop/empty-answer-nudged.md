@@ -16,9 +16,17 @@ scenario:
       beat:
         title: "Model จบคำตอบโดยไม่มีข้อความ"
         text: >-
-          model คิดอยู่พักหนึ่ง แล้วจบคำตอบด้วยสัญญาณ end_turn โดยไม่มีข้อความให้อ่าน และไม่ขอใช้ tool
+          model คิดอยู่พักหนึ่ง แล้วจบคำตอบด้วย `stop_reason` เป็น `end_turn` (`stop_reason` คือ field ท้ายคำตอบที่บอกว่า
+          model หยุดเพราะอะไร `end_turn` แปลว่าตอบจบแล้ว) แต่ไม่มีข้อความให้อ่าน และไม่ขอใช้ tool
+          การ์ดข้างล่างเป็นคำตอบเปล่าจริงจากการรันหนึ่ง ดู `type` ที่ไฮไลต์ไว้ มันเป็น `thinking` และเป็นบล็อกเดียวใน `content`
+          ไม่มีบล็อก `text` หรือ `tool_use` เลย
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A29-thai-big-create/2/session.jsonl#seq=16
+          select: content
+          highlight: ['[0].type']
       do: >-
         model ส่งบล็อกความคิดออกมาแล้วจบด้วย `end_turn` ไม่มีข้อความที่ไม่ว่าง และไม่ขอเรียก tool
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -46,8 +54,9 @@ scenario:
       beat:
         title: "Geno เห็นว่าคำตอบนี้ไม่มีอะไรให้อ่าน"
         text: >-
-          ปกติ end_turn แปลว่า turn จบ แต่คำตอบนี้ไม่มีอะไรให้คุณอ่าน และ Geno ยังไม่เคยกระตุ้น model ใน turn นี้
-          จึงเลือกกระตุ้นแทนการจบ
+          ปกติ `end_turn` แปลว่า turn จบ แต่คำตอบนี้ไม่มีอะไรให้คุณอ่าน Geno จึงเลือกกระตุ้นแทนการจบ
+          การกระตุ้น (nudge) คือ Geno ต่อข้อความสั้นๆ ท้ายบทสนทนาเพื่อบอก model ให้ทำต่อ Geno กระตุ้นได้ครั้งเดียวติดกัน
+          และคำตอบนี้ไม่ได้ตามหลังคำกระตุ้น
         from: engine
         to: engine
       do: >-
@@ -77,8 +86,16 @@ scenario:
         title: "Geno เรียก model อีกรอบ"
         text: >-
           คำขอรอบนี้มีคำกระตุ้นต่อท้ายบทสนทนา การเรียกนี้นับเป็นหนึ่งในขีดจำกัดของ turn เหมือนการเรียกอื่น
+          การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ไม่ใช่การรันเดียวกับการ์ดแรก ดูสองข้อความท้ายที่ไฮไลต์ไว้ ข้อความ `assistant` คือคำตอบเปล่าที่มีแต่ `thinking`
+          ข้อความสุดท้ายคือคำกระตุ้นที่ขึ้นต้นด้วย "[Geno] Your last response ended with no text and no tool call"
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/empty-answer-nudged.jsonl#line=4
+          select: messages
+          collapse: ['[0]']
+          highlight: ['[1]', '[2]']
 
     - id: again
       lane: model
@@ -86,8 +103,15 @@ scenario:
         title: "Model ตอบอีกครั้ง"
         text: >-
           model อ่านคำกระตุ้นแล้วตอบใหม่ ลองเลือกว่ารอบนี้มีข้อความหรือยังเปล่าอยู่
+          การ์ดข้างล่างมาจากการบันทึกเดียวกับการ์ดก่อน ซึ่ง model ทำตามที่คิดไว้: เขียนข้อความสั้นๆ แล้วขอ `read` ไฟล์ `src/version.ts`
+          ดู `type` ที่ไฮไลต์ รอบนี้ block แรกเป็น `text` เลย ไม่มี `thinking` นำหน้า
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/empty-answer-nudged.jsonl#line=5
+          select: '[1]'
+          highlight: [data.content_block.type]
         ask: "รอบนี้มีข้อความไหม"
       do: >-
         model อ่านคำกระตุ้นแล้วตอบอีกครั้ง
@@ -102,10 +126,11 @@ scenario:
                 beat:
                   title: "คำตอบขึ้นในแชต"
                   text: >-
-                    model เขียนคำตอบออกมา ข้อความค่อยๆ ขึ้นในแชตเหมือน turn ปกติ
+                    model เขียนคำตอบออกมา ข้อความค่อยๆ ขึ้นในแชตเหมือน turn ปกติ ในการบันทึก model อ่าน `src/version.ts` ก่อน
+                    แล้วจึงตอบจากสิ่งที่อ่านได้
                   from: engine
                   to: panel
-                  sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว 3 กรณี, streaming: true }
+                  sees: { kind: message, from: geno, text: "parseVersion returns [0, 0, 0] for an empty string (src/version.ts:2).", streaming: true }
 
               - use: turn-ends
                 beat:
@@ -139,8 +164,8 @@ scenario:
                 beat:
                   title: "เหตุผลไปอยู่แค่ใน output channel"
                   text: >-
-                    Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น แผงรู้แค่ว่า
-                    turn ล้มเหลว
+                    Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น
+                    (ช่องในแผง Output ของ VS Code ที่รับข้อความ log ของ engine) แผงแชตรู้แค่ว่า turn ล้มเหลว
                   from: engine
                   to: panel
                 do: >-
@@ -165,7 +190,7 @@ scenario:
                 beat:
                   title: "แชตขึ้นว่า Geno หยุดโดยไม่มีคำตอบ"
                   text: >-
-                    แผงเห็นว่าไม่มีข้อความ ไม่มี error และคุณไม่ได้กด Stop จึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ
+                    แผงเห็นว่าไม่มีข้อความ ไม่มีบล็อก error ในแชต และคุณไม่ได้กด Stop จึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ
                     และให้ปุ่มทำต่อหรือลองใหม่
                   from: panel
                   to: you
@@ -175,14 +200,14 @@ scenario:
                   `missingReply` เห็นว่าไม่มีข้อความ ไม่มีบล็อก error ไม่ได้ถูกหยุด และขั้นสุดท้ายไม่ได้ถูกปฏิเสธ
                   จึงให้เหตุผลว่าคำตอบสุดท้ายไม่มีข้อความ
                 sees: >-
-                  หัวข้อ "failed after 14s" กล่อง "Geno stopped without a reply · Its last reply had no text."
+                  หัวข้อ "failed after ..." กล่อง "Geno stopped without a reply · Its last reply had no text."
                   พร้อมปุ่ม [Continue] [Retry] และท้าย turn ขึ้น "Failed"
                 ref: packages/extension/src/chat/rail.ts#missingReply
                 end: { turn: failed, reason: error }
 ---
 
-คำตอบที่มีแต่ความคิดไม่ใช่คำตอบ ผู้ใช้ไม่เห็นอะไรเลย Geno จึงไม่ถือว่า turn จบ
-แต่บอก model หนึ่งครั้งว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ
+คำตอบที่มีแต่ความคิด ([thinking](/start/glossary/)) ไม่ใช่คำตอบ ผู้ใช้ไม่เห็นอะไรเลย Geno จึงไม่ถือว่า turn จบ
+แต่บอก model หนึ่งครั้งว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ ความหมายของ `stop_reason` และ turn ดูที่[คำศัพท์](/start/glossary/)
 
 สิ่งที่ควรสังเกต
 

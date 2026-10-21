@@ -32,6 +32,7 @@ payloads:
 import Payload from '../../../components/Payload.astro';
 
 **model ที่รองรับรูปอ่านรูปได้ แต่เขียนออกมาได้แค่ข้อความ**
+model แบบนี้เรียกว่า multimodal คือรับข้อมูลได้หลายชนิด เช่นข้อความและรูป
 รูปเข้าสู่ model เป็นบล็อก `image` ที่เข้ารหัส base64 ใน request ส่วนภาพทุกภาพที่คุณเห็นในแชต
 Geno วาดจากข้อความที่ model เขียน หรือโหลดจากไฟล์ที่โปรแกรมสร้าง
 
@@ -42,14 +43,14 @@ Geno วาดจากข้อความที่ model เขียน ห�
 | วางหรือลากรูปลงช่องพิมพ์ | คุณ | บล็อก `image` ในข้อความ user **ก่อน**ข้อความที่คุณพิมพ์ |
 | `read` ไฟล์ PNG JPEG GIF WebP | model | บล็อก `image` ใน `tool_result` ต่อจากข้อความบรรทัดเดียว |
 | `read` PDF ที่เป็นภาพสแกน หรือ notebook ที่มีรูปใน output | model | หน้าหรือ output ที่ไม่มีข้อความกลายเป็นบล็อก `image` |
-| MCP tool ที่ส่งรูปกลับ เช่น screenshot ของ browser ในตัว | model | Geno เก็บรูปแล้วส่งเป็นบล็อก `image` เหมือน `read` |
+| MCP tool (tool จากโปรแกรมภายนอก) ที่ส่งรูปกลับ เช่น screenshot ของ browser ในตัว | model | Geno เก็บรูปแล้วส่งเป็นบล็อก `image` เหมือน `read` |
 
 Geno วางรูปก่อนข้อความในข้อความ user เพราะ model อ่านรูปได้ดีกว่าเมื่อเห็นรูปก่อนคำที่พูดถึงมัน (คอมเมนต์ที่ `userBlocks` ใน `packages/core/src/session.ts`)
 
 ### รูปที่คุณวาง
 
 1. แผงอ่านชนิดและขนาดจากไบต์ของไฟล์ ถ้าด้านยาวเกิน 1,568 px หรือไฟล์เกิน 1 MB จะวาดใหม่บน canvas ให้ด้านยาวเหลือ 1,568 px
-   รูปถ่ายเป็น JPEG คุณภาพ 0.85 ภาพหน้าจอคงเป็น PNG เว้นแต่ JPEG เล็กกว่าครึ่ง (`chooseEncoding` ใน `packages/extension/src/chat/attachment-model.ts`)
+   รูปถ่ายเป็น JPEG คุณภาพ 0.85 ภาพหน้าจอคงเป็น PNG เว้นแต่ PNG ใหญ่เกิน 1 MB และ JPEG เล็กกว่าครึ่ง (`chooseEncoding` ใน `packages/extension/src/chat/attachment-model.ts`)
 2. ข้อความหนึ่งมีรูปได้สูงสุด 8 รูป รวมไม่เกิน 5 MB (`MAX_IMAGES` และ `MAX_MESSAGE_BYTES` ใน `packages/core/src/attachments.ts`)
    PDF ที่แนบถูกปฏิเสธด้วยข้อความ "is a PDF, which Geno cannot read yet" แต่ถ้า PDF อยู่ใน workspace model ใช้ `read` อ่านได้
 3. extension ส่งรูปเป็นบล็อก ACP `image` engine ตรวจซ้ำ แล้วเก็บไฟล์ไว้ที่ `<session>/attachments/<sha256>.<ext>`
@@ -71,7 +72,7 @@ Geno วางรูปก่อนข้อความในข้อควา
 
 <Payload of={frontmatter.payloads.imageSent} />
 
-request ถัดไป (บรรทัด 15 ของไฟล์เดียวกัน) มีบล็อกเดียวกันนี้อีกครั้ง เพราะทุก request ส่งบทสนทนาทั้งหมด ([หน้าที่ 1](/foundations/model-is-one-call/))
+request ถัดไป (บรรทัด 15 ของไฟล์เดียวกัน) มีบล็อกเดียวกันนี้อีกครั้ง เพราะทุก request ส่งบทสนทนาทั้งหมด ([Model คือ API call หนึ่งครั้ง](/foundations/model-is-one-call/))
 รูปจึงกิน token ทุกครั้งที่ยังอยู่ในบทสนทนา ไม่ใช่แค่ครั้งแรก
 
 model เห็นพิกเซลจริง thinking ของมันบรรยายว่าปุ่มสีแดงล้นขอบขวาของการ์ดในภาพก่อน และปุ่มสีเขียวอยู่ในการ์ดในภาพหลัง แล้วเรียก `show_files`

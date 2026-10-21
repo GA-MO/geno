@@ -5,7 +5,7 @@ scenario:
   surface: vscode
   given:
     - เพิ่งติดตั้ง Geno เปิดโฟลเดอร์แล้ว และแผงแชตแสดงหน้าเริ่มต้น
-    - ยังไม่ได้ตั้ง API key ของ provider ที่เลือกไว้ (ค่าเริ่มต้นคือ Model Studio) ทั้งใน SecretStorage และในตัวแปรสภาพแวดล้อม
+    - ยังไม่ได้ตั้ง API key ของ provider ที่เลือกไว้ (ค่าเริ่มต้นคือ Model Studio) ทั้งใน SecretStorage (ที่เก็บความลับของ VS Code) และในตัวแปรสภาพแวดล้อม
   trigger: >-
     ผู้ใช้พิมพ์ "สวัสดี" แล้วกด Enter
   covers: [start.first-run-no-key]
@@ -16,7 +16,8 @@ scenario:
       beat:
         title: "คุณส่งข้อความแรก “สวัสดี”"
         text: >-
-          คุณเพิ่งติดตั้ง Geno และพิมพ์ "สวัสดี" แล้วกด Enter ทันที แผงไม่มี turn ค้างอยู่ จึงส่งข้อความต่อให้ VS Code
+          คุณเพิ่งติดตั้ง Geno และพิมพ์ "สวัสดี" แล้วกด Enter ทันที แผงไม่มี turn ค้างอยู่ จึงส่งข้อความต่อให้ส่วนของ Geno ใน VS Code
+          (extension host) ซึ่งเป็นฝ่ายที่ต่อ engine
         from: you
         to: panel
       do: ผู้ใช้พิมพ์ข้อความแรกในช่องพิมพ์แล้วกด Enter
@@ -53,8 +54,8 @@ scenario:
       beat:
         title: "Geno ตรวจการตั้งค่าก่อนเปิด engine"
         text: >-
-          ก่อนเปิด engine ครั้งแรก Geno อ่าน provider model และ API key แล้วตรวจว่าครบไหม provider ตั้งต้นคือ Model
-          Studio และช่องแรกที่ขาดคือ API key
+          ก่อนเปิด engine ครั้งแรก Geno อ่าน provider (บริษัทที่รัน model ให้) ชื่อ model และ API key แล้วตรวจว่าครบไหม
+          provider ตั้งต้นคือ Model Studio และช่องแรกที่ขาดคือ API key
         from: panel
         to: panel
       do: >-
@@ -68,7 +69,8 @@ scenario:
       beat:
         title: "VS Code ขึ้น toast ว่ายังไม่มี API key"
         text: >-
-          Geno แสดง toast พร้อมปุ่มที่แก้ปัญหานั้นตรงๆ แล้วหยุด ไม่มี engine ถูกเปิด และไม่มี session ถูกสร้าง
+          Geno แสดง toast (ข้อความแจ้งเตือนมุมขวาล่างของ VS Code) พร้อมปุ่มที่แก้ปัญหานั้นตรงๆ แล้วหยุด ไม่มี engine ถูกเปิด
+          และไม่มี session (แชตหนึ่งชุดที่มี id และ log ของตัวเอง) ถูกสร้าง
         from: panel
         to: you
         sees: { kind: toast, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", actions: [ Set API Key ] }
@@ -85,7 +87,7 @@ scenario:
       beat:
         title: "Turn นี้ล้มเหลวทันที"
         text: >-
-          VS Code บอกแผงว่า turn ล้มเหลว พร้อมข้อความเดียวกับใน toast
+          การตรวจโยน error ส่วนของ Geno ใน VS Code จับได้ แล้วบอกแผงว่า turn ล้มเหลว พร้อมข้อความเดียวกับใน toast
         from: panel
         to: panel
       do: >-
@@ -109,7 +111,7 @@ scenario:
         เพราะ error บอกเหตุผลอยู่แล้ว
       sees: >-
         ใต้บับเบิลมีบรรทัด error สีแดง "Geno has no Model Studio API key. Run Geno: Set API Key."
-        หัวข้อเป็น "failed after 120ms" (ไม่ถึงวินาที) ท้าย turn ขึ้น "Failed" และปุ่ม Send กลับมา
+        หัวข้อเป็น "failed after" ตามด้วยเวลาที่ใช้ (เช่น "failed after 120ms" ไม่ถึงวินาที) ท้าย turn ขึ้น "Failed" และปุ่ม Send กลับมา
       ref: packages/extension/src/chat/render.ts#turnFooter
 
     - id: choice
@@ -159,13 +161,16 @@ scenario:
                 end: { turn: failed }
 ---
 
-Geno ตรวจการตั้งค่าใน extension host ก่อนเปิด engine เสมอ ข้อความแรกจึงล้มเหลวเร็วและไม่ทิ้งอะไรไว้:
+หน้านี้เล่าสิ่งที่เกิดเมื่อคุณเพิ่งติดตั้ง Geno แล้วส่งข้อความแรกโดยยังไม่ได้ตั้ง API key เป็นความผิดพลาดแรกที่ผู้ใช้ใหม่มักเจอ
+และอธิบายว่าทำไมไม่มีอะไรถูกส่งไปหา model เลย
+
+Geno ตรวจการตั้งค่าใน [extension host](/start/glossary/) ก่อนเปิด engine เสมอ ข้อความแรกจึงล้มเหลวเร็วและไม่ทิ้งอะไรไว้
 ไม่มี process ของ engine ไม่มีไฟล์ log ของ session และไม่มีการเรียก model
 
 สิ่งที่ควรสังเกต
 
 - **toast อาจมาก่อนผู้ใช้ส่งข้อความ** การเปิดแผงครั้งแรกก็เรียก `Engine.connection()` อยู่แล้ว
-  (หน้าเริ่มต้นขอรายการแชต และแถบสถานะ PR ขอข้อมูลจาก engine) ผู้ใช้ที่ยังไม่มีคีย์จึงเห็น toast เดียวกันตั้งแต่เปิดแผง
+  (หน้าเริ่มต้นขอรายการแชต และแถบสถานะ PR (บอกสถานะ pull request ของ branch) ขอข้อมูลจาก engine) ผู้ใช้ที่ยังไม่มีคีย์จึงเห็น toast เดียวกันตั้งแต่เปิดแผง
   ดู [เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine](/scenarios/start/open-window/)
 - **ปุ่มบน toast เปลี่ยนตามสิ่งที่ขาด** ขาดคีย์ได้ "Set API Key" ขาด endpoint ของ Model Studio ได้ "Open Settings"
   ที่เปิดไปที่ `gcode.baseUrl` ขาด model หรือช่องอื่นได้ "Open Geno Settings"

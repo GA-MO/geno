@@ -14,15 +14,20 @@ scenario:
     - id: change
       beat:
         title: งานของ “migrate tests” เปลี่ยนสถานะ
-        text: คุณเปลี่ยนแชตไปอีก session และสลับไปเบราว์เซอร์ engine บันทึกสถานะใหม่ของงาน ตัดสินว่าควรแจ้งไหม แล้วส่งให้ทุกหน้าต่าง
+        text: >-
+          คุณเปลี่ยนแชตไปอีก session และสลับไปเบราว์เซอร์ แต่ turn ของ "migrate tests" ยังรันใน engine engine เก็บงานของทุก session
+          ไว้ในรายการเดียว ซึ่งแผง Tasks ของ VS Code แสดงเป็นกลุ่ม เช่น Working (กำลังทำ) Needs you (รอคุณ) และ Ready (เสร็จแล้ว คุณยังไม่ได้เปิดดู)
+          เมื่องานเปลี่ยนสถานะ engine บันทึกสถานะใหม่แล้วส่งให้ทุกหน้าต่าง (ถ้าไม่มีหน้าต่างเลย มันจำไว้ว่ามีเรื่องต้องแจ้ง)
+          แต่ละหน้าต่างตัดสินเองว่าจะแจ้งไหมและแจ้งทางไหน (toast คือกล่องแจ้งเตือนเล็กที่มุมหน้าต่าง)
         from: engine
         to: panel
         ask: งานเปลี่ยนเป็นอะไร
       lane: server
       at: tasks
       do: >-
-        `Tasks.put` บันทึกสถานะใหม่ของงาน คำนวณว่าการเปลี่ยนนี้ควรแจ้งไหม (`taskNotice`) แล้วส่ง notification
-        `_gcode/taskUpdate` ให้ทุกหน้าต่างที่เชื่อมอยู่ ถ้าตอนนั้นไม่มีหน้าต่างเลย การแจ้งถูกเก็บไว้ส่งเมื่อหน้าต่างเชื่อมมา
+        `Tasks.put` บันทึกสถานะใหม่ของงานแล้วส่ง notification `_gcode/taskUpdate` ให้ทุกหน้าต่างที่เชื่อมอยู่
+        ถ้าตอนนั้นไม่มีหน้าต่างเลย `taskNotice` บอกว่าการเปลี่ยนนี้ควรแจ้งไหม และ engine เก็บไว้ส่งเมื่อหน้าต่างเชื่อมมา
+        หน้าต่างที่เชื่อมอยู่ไม่ใช้ผลนี้ `TaskHost.updated` ของแต่ละหน้าต่างคำนวณการแจ้งเองจากกลุ่มที่งานย้ายไป
       ref: packages/engine/src/tasks.ts#Tasks.put
       emits: [_gcode/taskUpdate]
       fork:
@@ -34,7 +39,9 @@ scenario:
               - lane: editor
                 beat:
                   title: งานต้องขอ permission
-                  text: งานย้ายเข้ากลุ่ม Needs you ตัวเลขบนไอคอนเพิ่มขึ้น หน้าต่างไม่ได้โฟกัส Geno จึงแจ้งทั้งใน VS Code และผ่าน macOS
+                  text: >-
+                    model ขอรันคำสั่งที่ต้องถามคุณก่อน งานจึงย้ายเข้ากลุ่ม Needs you และตัวเลขบนไอคอนของแผงเพิ่มขึ้น
+                    หน้าต่างไม่ได้โฟกัส Geno จึงแจ้งทั้งใน VS Code (toast) และผ่าน macOS
                   from: engine
                   to: panel
                 at: chat
@@ -155,7 +162,7 @@ scenario:
               - lane: external
                 beat:
                   title: macOS และ VS Code แจ้งว่างานล้ม
-                  text: การแจ้งเตือนของ macOS ขึ้น พร้อม toast สีแดงใน VS Code
+                  text: การแจ้งเตือนของ macOS ขึ้น พร้อม toast แบบ error (ไอคอนสีแดง) ใน VS Code
                   from: machine
                   to: you
                   sees:
@@ -165,7 +172,7 @@ scenario:
                       - Open
                 do: macOS แสดงการแจ้งเตือน
                 sees: >-
-                  การแจ้งเตือนของ macOS "Geno failed: migrate tests" และ toast สีแดงใน VS Code พร้อมปุ่ม Open
+                  การแจ้งเตือนของ macOS "Geno failed: migrate tests" และ toast แบบ error (ไอคอนสีแดง) ใน VS Code พร้อมปุ่ม Open
                 ref: packages/extension/src/chat/notices.ts#osNotification
               - lane: user
                 beat:
@@ -188,7 +195,7 @@ scenario:
 
 | ผู้ใช้อยู่ที่ | toast ของ VS Code | การแจ้งเตือนของ macOS |
 | --- | --- | --- |
-| ดู session นั้นอยู่ในหน้าต่างที่โฟกัส | ไม่แจ้ง | ไม่แจ้ง |
+| ดู session นั้นอยู่ในแผงแชตที่เปิดอยู่ ในหน้าต่างที่โฟกัส | ไม่แจ้ง | ไม่แจ้ง |
 | หน้าต่างโฟกัสแต่ดู session อื่น | แจ้ง | ไม่แจ้ง |
 | หน้าต่างไม่ได้โฟกัส | แจ้ง | แจ้ง ถ้าเป็นเรื่องที่ต้องการผู้ใช้หรือล้มเหลว |
 

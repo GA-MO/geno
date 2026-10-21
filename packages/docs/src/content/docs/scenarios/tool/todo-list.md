@@ -15,8 +15,10 @@ scenario:
       beat:
         title: "Model ตั้งรายการ todo พร้อมอ่านไฟล์"
         text: >-
-          งานนี้มีหลายขั้น model ส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts`
-          ในคำตอบเดียว run จริงด้านล่างส่ง todo กับ read คู่กันแบบนี้
+          งานนี้มีหลายขั้น model จึงเรียก tool `todo` ซึ่งใช้เขียนรายการงานของตัวเองให้คุณเห็น
+          มันส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts` ในคำตอบเดียว
+          การ์ดข้างล่างมาจาก run จริงที่ส่ง todo กับ read คู่กันแบบนี้ ดู `items` ใน `input` ของ `todo`
+          แต่ละข้อมี `id` `text` และ `status` ทุกครั้งที่เรียก model ส่งรายการทั้งหมดใหม่
         from: model
         to: engine
         sees:
@@ -43,7 +45,7 @@ scenario:
       beat:
         title: "Geno จัด todo กับ read ไว้ชุดเดียว"
         text: >-
-          todo ไม่เปลี่ยนอะไรบนเครื่องและไม่ถามใคร จึงรันพร้อมการอ่านไฟล์ได้
+          Geno แบ่ง call เป็นชุดที่รันพร้อมกัน todo ไม่เปลี่ยนอะไรบนเครื่องและไม่ถามใคร จึงอยู่ชุดเดียวกับการอ่านไฟล์ได้
         from: engine
         to: engine
 
@@ -53,8 +55,9 @@ scenario:
       beat:
         title: "Geno ตรวจรายการ"
         text: >-
-          รายการต้องไม่ยาวเกินกำหนด id ไม่ซ้ำ และมีข้อที่กำลังทำได้ข้อเดียว ถ้าผิด call ล้มเหลวพร้อมบอกว่าผิดตรงไหน
-          รอบนี้ผ่าน ผลสรุปว่าเสร็จกี่ข้อและข้อไหนกำลังทำ แบบในผลจาก run จริงด้านล่าง
+          รายการต้องมีไม่เกิน 30 ข้อ id ไม่ซ้ำ และมีข้อที่กำลังทำได้ข้อเดียว ถ้าผิด call ล้มเหลวพร้อมบอกว่าผิดตรงไหน
+          รอบนี้ผ่าน ผลสรุปว่าเสร็จกี่ข้อและข้อไหนกำลังทำ ผลนี้ถึง model ตอนเรียกครั้งถัดไป
+          การ์ดข้างล่างเป็นผลจาก run จริงอีกตัว ดู `content` ที่ไฮไลต์ไว้ ขึ้นต้นด้วย "Updated the todo list"
         from: engine
         to: engine
         sees:
@@ -117,17 +120,46 @@ scenario:
       beat:
         title: "Model ทำต่อ Geno เตือนถ้าลืมอัปเดต"
         text: >-
-          Geno เรียก model ต่อ ถ้าเรียกไป 10 ครั้งโดยที่ model ไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอ `todo` กับ `read` ของ model
+          และผลทั้งสองที่ Geno เตรียมไว้ ถ้า Geno เรียก model ไป 10 ครั้งโดยที่ model ไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
+          การ์ดข้างล่างเป็นข้อความท้ายสุดของคำขอจริงจากการรันเดียวกับการ์ดผลของ todo
+          บทสนทนาก่อนหน้ายาวเกินกว่าจะแสดงทั้งหมด ข้อความนี้มีผลสองชิ้น ชิ้นแรกคือผลของ `todo`
         from: engine
         to: model
-        end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A19-poteto-thai/1/requests.jsonl#seq=35
+          select: messages[-1]
+          highlight: ['content[0]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ถ้า loop เรียก model ไป 10 ครั้งโดยที่ model ไม่อัปเดตรายการที่ยังไม่เสร็จ
         `deliver()` จะเพิ่ม `notice` ที่แนบรายการมาเตือน (`todoReminder`)
       ref: packages/core/src/loop.ts#todoReminder
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ตอบหลังเห็นผล"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model ทำงานต่อตามรายการ โดยขออ่านไฟล์อีกสองไฟล์ในคำตอบเดียว
+          ดู `input` ของ `read` สองตัวที่ไฮไลต์ไว้
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A19-poteto-thai/1/session.jsonl#seq=35
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input', '[2].input']
+        end: "model ทำต่อ"
+      do: >-
+        model อ่าน `tool_result` ของ `todo` และ `read` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `read` สองครั้ง
+        และจบคำตอบด้วย `stop_reason: tool_use` turn วนต่อไปจนกว่า model จะตอบโดยไม่ขอ tool
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 รายการ todo เป็นของ session ไม่ใช่ของ tool `todo` ไม่เก็บอะไรไว้ในหน่วยความจำ

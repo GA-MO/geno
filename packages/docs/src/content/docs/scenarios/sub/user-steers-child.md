@@ -4,7 +4,7 @@ description: ผู้ใช้เปิดบทสนทนาของลู�
 scenario:
   surface: vscode
   given:
-    - turn ของแม่ทำงานอยู่ และมีลูก `explore` แบบเบื้องหลังที่กำลังค้นโค้ด แถวของลูกขึ้น Running ใต้ขั้นของ `agent`
+    - turn ของแม่ทำงานอยู่ และรอลูก `explore` ที่กำลังค้นโค้ด แถวของลูกขึ้น Running ใต้ขั้นของ `agent`
   trigger: >-
     ผู้ใช้คลิกแถวของ explore เพื่อเปิดบทสนทนาของลูก แล้วพิมพ์ข้อความในช่องของลูก
   covers: [sub.user-steers-child]
@@ -13,7 +13,10 @@ scenario:
     - id: open
       beat:
         title: คุณเปิดบทสนทนาของ explore
-        text: คลิกแถวของ explore แชตแสดงบทสนทนาของมันแทนของแม่ ใต้บทสนทนามีช่องข้อความของ explore ตราบที่มันยังทำงาน
+        text: >-
+          explore คือ subagent (session ลูกที่ค้นโค้ดแล้วส่งรายงานกลับ) ที่ model ของแม่ (session หลักที่คุณคุยอยู่)
+          เริ่มไว้และรอรายงานของมัน คลิกแถวของ explore แชตแสดงบทสนทนาของมันแทนของแม่
+          ใต้บทสนทนามีช่องข้อความของ explore ตราบที่มันยังทำงาน
         from: you
         to: panel
         sees: บทสนทนาของ explore และช่อง "Message explore…" พร้อมปุ่ม [Send]
@@ -28,7 +31,9 @@ scenario:
     - id: type
       beat:
         title: คุณพิมพ์ “Skip src/update.ts.”
-        text: คุณกด Send ใต้ช่องขึ้นว่ากำลังส่ง และข้อความจะลงที่รอบ tool ถัดไป
+        text: >-
+          คุณกด Send ใต้ช่องขึ้นว่ากำลังส่ง ซึ่งบอกว่าข้อความจะลงที่รอบ tool ถัดไปถ้า explore ยังทำงาน
+          คือหลัง tool ที่ explore รันอยู่จบ และก่อนมันเรียก model ครั้งถัดไป
         from: you
         to: panel
         sees: Sending… it lands at the next tool round
@@ -60,8 +65,10 @@ scenario:
 
     - id: route
       beat:
-        title: Geno ใส่ข้อความในกล่องของ explore
-        text: ข้อความต้องเป็นข้อความล้วน แนบไฟล์หรือ @mention ไม่ได้ Geno รอจนรู้ว่า explore รับหรือรับไม่ได้
+        title: Geno ส่งข้อความไปที่กล่องของ explore
+        text: >-
+          ข้อความต้องเป็นข้อความล้วน แนบไฟล์หรือ @mention ไม่ได้ กล่องข้อความของ explore คือคิวข้อความที่รอส่งให้มัน
+          ถ้ากล่องยังเปิด Geno ใส่ข้อความไว้ แล้วรอจนรู้ว่า explore รับหรือรับไม่ได้
         from: engine
         to: engine
         ask: explore ยังทำงานไหม
@@ -113,7 +120,8 @@ scenario:
         text: >-
           ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความเป็นคำของคุณเอง ถ้ามันกำลังรัน tool ข้อความรอจน tool ชุดนั้นจบ
           ใน request ถัดไปของ explore ข้อความต่อท้ายผลของ `grep` เป็นโน้ต "[Geno] The user sent a new message while you were working"
-          ไม่อยู่ในรั้ว ต่างจากข้อความที่แม่ส่งด้วย `message_agent` ซึ่งอยู่ในรั้ว `<parent_message>` (แท็บสอง จากอีก flow หนึ่ง)
+          แท็บแรกไฮไลต์โน้ตนี้ มันไม่อยู่ในรั้ว (แท็กที่ห่อข้อความไว้ว่าเป็นข้อมูล) ต่างจากข้อความที่แม่ส่งด้วย `message_agent`
+          ซึ่งอยู่ในรั้ว `<parent_message>` (แท็บสอง จากอีก flow หนึ่ง)
         from: engine
         to: model
         sees:
@@ -123,6 +131,7 @@ scenario:
             highlight: ['content[1].text']
           - kind: payload
             source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
+            quote: "<parent_message>"
             select: messages[2]
             highlight: ['content[1].text']
       lane: child@explore
@@ -181,12 +190,13 @@ scenario:
         title: explore ปรับการค้นตามคุณ
         text: >-
           explore อ่านว่าคุณส่งข้อความใหม่ระหว่างทำงาน แล้วข้ามไฟล์นั้น แม่ไม่รู้เรื่องนี้จนกว่าจะอ่านรายงานของ explore
-          ซึ่งกลับไปเป็นผลของ call `agent` ในรั้วตามปกติ (การ์ด)
+          แม่รอ explore อยู่ รายงานจึงกลับไปเป็นผลของ call `agent` ในรั้วตามปกติ การ์ดไฮไลต์ `content` ของผลนั้น: รายงานในรั้ว `<subagent_report>` บอกว่า explore ข้าม `src/update.ts` ตามที่คุณขอ
         from: model
         to: engine
         sees:
           kind: payload
           source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=8
+          quote: "I skipped src/update.ts, as you asked."
           select: messages[2].content[0]
           highlight: [content]
         end: explore ทำต่อ
@@ -207,4 +217,6 @@ scenario:
 
 - **ช่องของลูกมีเฉพาะตอนลูก Running** หลังลูกจบช่องซ่อน แต่บรรทัดสถานะสุดท้ายยังอยู่จนผู้ใช้พิมพ์ใหม่
 - **ข้อความไม่หยุดลูก** ลูกทำ tool ชุดที่รันอยู่จนจบก่อน แล้วจึงอ่านข้อความ
+- **ลูกเบื้องหลังรับข้อความได้เหมือนกัน** ถ้าแม่เริ่ม explore แบบเบื้องหลัง (ไม่รอมัน) ข้อความถึงลูกแบบเดียวกัน
+  แต่รายงานไม่กลับเป็นผลของ call `agent` มันมาทีหลังเป็นข้อความจาก Geno ดู [ส่งข้อความถึง subagent ที่กำลังทำงานหรือจบแล้ว](/scenarios/sub/message-child/)
 - **ข้อความแบบเดียวกันส่งจากแผง Tasks ได้** ปุ่ม Message บนงานในแผง Tasks ใช้ `steerSession` ทางเดียวกัน

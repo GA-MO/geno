@@ -219,8 +219,9 @@ A figure's title also says whether a real model answered: ข้อมูลจ�
 ### Recorded flows
 
 Some moments appear in no real run, such as a subagent's permission card or a forced report. For those,
-`pnpm docs:record` runs the real engine against the conformance harness's fake provider. Each flow in
-`packages/engine/test/docs-record/flows.ts` scripts the model's replies. The recorder writes every request the
+`pnpm docs:record` runs the real engine against the conformance harness's fake provider. Each flow, in a
+`packages/engine/test/docs-record/flows-<name>.ts` file that imports only from `kit.ts` and is listed in `flows.ts`,
+scripts the model's replies. The recorder writes every request the
 engine sent, as sent, to `packages/docs/src/data/recorded/<flow>.jsonl`:
 
 - Line 1 names the flow and the engine commit.

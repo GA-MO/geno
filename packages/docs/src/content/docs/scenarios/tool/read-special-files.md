@@ -16,9 +16,16 @@ scenario:
         title: "Model ขออ่านไฟล์ที่ไม่ใช่ข้อความ"
         text: >-
           model ขอ `read` ไฟล์อย่าง `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o` ถ้าเป็น
-          PDF ระบุหน้าได้ ถ้าเป็น notebook ระบุ cell ได้
+          PDF ระบุหน้าได้ ถ้าเป็น notebook ระบุ cell ได้ การ์ดข้างล่างเป็นคำตอบจริงจากการรันที่ model ขออ่านรูป PNG สองรูป
+          ดู `path` ใน `input` ของ `read` สองตัวที่ไฮไลต์ไว้ model ใช้ `read` ตัวเดียวกับที่อ่านไฟล์ข้อความ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A35-show-before-after/2/session.jsonl#seq=30
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input', '[3].input']
       do: >-
         model ขอ `read` ไฟล์หนึ่งไฟล์ (ใส่ `pages` ได้ถ้าเป็น PDF หรือ `cells` ถ้าเป็น notebook) จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -48,8 +55,9 @@ scenario:
       beat:
         title: "read ดูชนิดของไฟล์ก่อนอ่าน"
         text: >-
-          read หา path จริงใน workspace ตรวจว่าไม่ใช่ไฟล์ลับ แล้วเลือกวิธีอ่าน โฟลเดอร์ถูกปฏิเสธ รูปและ PDF ดูจากนามสกุล
-          ไฟล์อื่นอ่านเป็นข้อความก่อนแล้วตรวจไบต์ NUL ลองเลือกชนิดของไฟล์
+          read หา path จริงใน workspace ตรวจว่าไม่ใช่ไฟล์ลับ เช่น `.env` แล้วเลือกวิธีอ่าน โฟลเดอร์ถูกปฏิเสธ
+          รูปและ PDF ดูจากนามสกุล ไฟล์อื่นอ่านเป็นข้อความก่อนแล้วหาไบต์ NUL (ไบต์ค่าศูนย์ ซึ่งไฟล์ข้อความปกติไม่มี)
+          ลองเลือกชนิดของไฟล์
         from: engine
         to: machine
         ask: "ไฟล์ชนิดไหน"
@@ -136,7 +144,8 @@ scenario:
       beat:
         title: "ผลของ read กลับมาที่แชต"
         text: >-
-          รูปที่ได้ติดไปกับผลเป็นไฟล์แนบ ไม่ได้อยู่ในข้อความ Geno บันทึกผลแล้วขั้นในแชตหยุดหมุน
+          รูปที่ได้ (ถ้ามี: ไฟล์รูป หรือหน้าสแกนของ PDF) ติดไปกับผลเป็นไฟล์แนบ ไม่ได้อยู่ในข้อความของผล Geno บันทึกผลแล้วขั้นในแชตหยุดหมุน
+          ตอนสร้างคำขอถัดไป Geno จึงแนบรูปให้ model เป็นบล็อกภาพแยก notebook ไฟล์ไบนารี และ PDF ที่มีแต่ข้อความไม่มีรูปแนบ การ์ดเป็นทางรูป
         from: engine
         to: panel
         sees: { kind: step, label: read assets/logo.png, status: done, output: "assets/logo.png is a 512x512 PNG image (34 KB), attached below." }
@@ -150,20 +159,50 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: "Model เห็นภาพจริง"
+        title: "Geno ส่งผลไปกับคำขอถัดไป"
         text: >-
-          Geno เรียก model ต่อ รูปไปถึง model เป็นบล็อกภาพในผลของ tool model ที่อ่านรูปได้จึงเห็นภาพจริง
-          ผลที่ล้มเหลวไปถึงพร้อมป้ายว่าเป็น error
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ข้อความสุดท้ายมีผลของ `read` ถ้ามีรูป แต่ละรูปเป็นข้อความสั้นๆ
+          และบล็อกภาพ model ที่อ่านรูปได้จึงเห็นภาพจริง ผลที่ล้มเหลวไปถึงพร้อม `is_error: true`
+          การ์ดข้างล่างเป็นข้อความสุดท้ายของคำขอจริงจากการรันเดียวกับการ์ดแรก ใน `content` ของ `tool_result` แต่ละตัว
+          ดูบล็อก `text` ที่บอกขนาดรูป และบล็อก `image` ที่มีไบต์ของรูปเป็น base64
         from: engine
         to: model
-        end: "model ทำต่อ"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A35-show-before-after/2/wire.jsonl#line=19
+          select: messages[-1].content
+          highlight: ['[0]', '[1]']
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` รูปไปถึง model เป็นบล็อก image ใน `tool_result`
-        model ที่อ่านรูปได้จึงเห็นภาพจริง ผลที่ล้มเหลวไปถึงเป็น `is_error: true`
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` รูป (ถ้ามี) ไปถึง model เป็นบล็อก image ใน `tool_result`
+        ผลที่ล้มเหลวไปถึงเป็น `is_error: true`
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model อ่านผล"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ (ทางรูป) model อ่านทั้งรูปก่อนแก้และหลังแก้
+          แล้วขอ `show_files` เพื่อแสดงสองรูปให้คุณดู พร้อมคำบรรยายใน `caption` ดู `input` ที่ไฮไลต์ไว้
+          คำบรรยายตรงกับสิ่งที่ผู้ใช้สั่ง แต่ prompt ของการรันนี้บอกสีปุ่มและตำแหน่งปุ่มไว้แล้ว
+          การ์ดนี้จึงไม่ได้พิสูจน์ว่า model รู้เรื่องสีจากภาพเอง
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A35-show-before-after/2/session.jsonl#seq=34
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: "model ทำต่อ"
+      do: >-
+        model อ่านบล็อกภาพใน `tool_result` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `show_files`
+        และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 `read` ตัวเดียวอ่านไฟล์ได้หลายชนิด model ไม่ต้องเลือก tool เอง
@@ -184,4 +223,4 @@ scenario:
 - **notebook ที่ระบุบรรทัดอ่านเป็น JSON** ถ้าส่ง `start_line` หรือ `end_line` มากับไฟล์ `.ipynb` `read` อ่านเป็นข้อความธรรมดา
 - **ไฟล์ลับยังผ่านด่านก่อน** ชนิดของไฟล์ไม่ได้ข้ามการตรวจไฟล์ลับ ดู [Model อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
 
-ไฟล์ลับและไฟล์นอก workspace ดู [Model อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
+ไฟล์นอก workspace ดู [Model อ่านไฟล์นอก workspace](/scenarios/perm/read-outside-workspace/)

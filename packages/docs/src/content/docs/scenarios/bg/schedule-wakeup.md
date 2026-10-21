@@ -5,7 +5,7 @@ scenario:
   surface: vscode
   given:
     - การปลุกอัตโนมัติเปิดอยู่ หน้าต่างที่แสดง session นี้ยังเปิดอยู่
-    - model เพิ่ง deploy ไป staging และ staging ใช้เวลาราว 10 นาทีกว่าจะพร้อม
+    - คุณเพิ่ง deploy ไป staging แล้วขอให้ตรวจ `https://staging.shop.example/health` เมื่อพร้อม ซึ่งใช้เวลาราว 10 นาที
   trigger: >-
     model เรียก `schedule_wakeup` เพื่อกลับมาตรวจ staging ทีหลัง
   covers: [bg.schedule-wakeup]
@@ -14,9 +14,22 @@ scenario:
     - id: wants
       beat:
         title: Model ตั้งเวลาปลุกตัวเองใน 10 นาที
-        text: model เพิ่ง deploy ไป staging ซึ่งใช้เวลาราว 10 นาทีกว่าจะพร้อม มันขอให้ Geno ปลุก พร้อมเหตุผล "check staging health after the deploy"
+        text: >-
+          คุณเพิ่ง deploy ไป staging และให้ที่อยู่หน้า health ไว้ในข้อความ staging ใช้เวลาราว 10 นาทีกว่าจะพร้อม model เรียก tool `schedule_wakeup` ขอให้ Geno ปลุก session
+          ใน 600 วินาที พร้อมเหตุผล "check staging health after the deploy" ปลุกคือ engine เริ่ม turn ใหม่เองโดยไม่มีใครพิมพ์
+          การ์ดมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ใบแรกคือ event ของ stream ที่เปิดบล็อก `tool_use` ดู `name` ว่าเป็น `schedule_wakeup`
+          ใบที่สองคือชิ้นแรกของ input ที่มี `delay_s: 600` และต้นของเหตุผล
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=5
+            select: '[4]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=5
+            select: '[5]'
+            highlight: [data.delta.partial_json]
       lane: model
       do: >-
         model ขอเรียก `schedule_wakeup` ด้วย `delay_s: 600` และ `reason: "check staging health after the deploy"`
@@ -43,10 +56,12 @@ scenario:
 
     - id: arm
       beat:
-        title: Geno ตั้งนาฬิกาแล้วบอก model ให้จบ turn
-        text: ผลของ call บอกเวลาที่จะปลุก และบอกให้จบ turn ตอนนี้
+        title: Geno ตั้งนาฬิกาแล้วเตรียมผลให้ model
+        text: >-
+          Geno ตั้งนาฬิกาในหน่วยความจำของ engine แล้วเขียน `tool_result` ลง log ผลบอกเวลาที่จะปลุก
+          และบอกให้จบ turn ตอนนี้ ผลนี้ถึง model ตอนเรียกครั้งถัดไป
         from: engine
-        to: model
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -61,9 +76,20 @@ scenario:
     - id: says
       beat:
         title: Model บอกว่าจะกลับมาตรวจ แล้วจบ turn
-        text: model บอกว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบ turn
+        text: >-
+          model บอกว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบ turn
+          การ์ดมาจากการบันทึกเดียวกับการ์ดแรก ใบแรกคือข้อความที่ model ตอบ ใบที่สองคือท้าย stream ของคำตอบนั้น
+          ดู `stop_reason` ที่ไฮไลต์ว่าเป็น `end_turn`
         from: model
         to: engine
+        sees:
+          - kind: message
+            from: geno
+            text: Staging takes about 10 minutes to come up. I will check its health in 10 minutes.
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=7
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
       lane: model
       do: >-
         model บอกผู้ใช้ว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบด้วย `stop_reason: end_turn`
@@ -79,12 +105,14 @@ scenario:
         sees:
           kind: composer
           state: idle
-          header: worked for 9s
+          header: worked for <เวลา>
 
     - id: meanwhile
       beat:
         title: Tasks บอกว่ารอการปลุก
-        text: ระหว่างรอ แผง Tasks บอกเวลาที่จะปลุก นาฬิกาอยู่ในหน่วยความจำของ engine
+        text: >-
+          ระหว่างรอ แผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) บอกเวลาที่จะปลุก นาฬิกาอยู่ในหน่วยความจำของ engine
+          แต่โน้ตใน log ยังอยู่ถ้า engine ตัวนี้จบไป
         from: panel
         to: you
         sees: Wakes on a wake-up at <เวลา>
@@ -127,7 +155,9 @@ scenario:
     - id: due
       beat:
         title: นาฬิกาดัง
-        text: Geno ลบการรอ แล้วใส่โน้ตว่าการปลุกถึงกำหนด พร้อมเหตุผล ลงกล่องข้อความของ session
+        text: >-
+          Geno ลบการรอ แล้วใส่โน้ตว่าการปลุกถึงกำหนด พร้อมเหตุผล ลงกล่องข้อความของ session (คิวของสิ่งที่รอส่งให้ model)
+          โน้ตนั้นถูกบันทึกลง log และปิดการปลุกนี้ไม่ให้ engine ตัวอื่นรับช่วงอีก
         from: engine
         to: engine
       lane: server
@@ -150,9 +180,29 @@ scenario:
     - id: reads
       beat:
         title: Model ไปตรวจ staging
-        text: model อ่านเหตุผลที่ตัวเองเขียนไว้ และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเปิดหน้า health ของ staging
+        text: >-
+          model อ่านเหตุผลที่ตัวเองเขียนไว้ และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเปิดหน้า health ของ staging
+          การ์ดมาจากการบันทึกเดียวกับการ์ดแรก ใบแรกคือข้อความสุดท้ายของคำขอใน turn ที่ถูกปลุก ดูสองข้อความที่ไฮไลต์:
+          โน้ตว่า wake-1 ถึงกำหนดพร้อมเหตุผล และข้อความว่า Geno เริ่ม turn นี้เอง (woke: scheduled)
+          ใบที่สองคือ event ของ stream ที่เปิดบล็อก `tool_use` ดู `name` ว่าเป็น `web_fetch` ใบที่สามคือชิ้นแรกของ input ที่มี URL ของ staging ซึ่ง model เอามาจากข้อความของคุณ
+          ในการบันทึกนี้ staging เป็นชื่อสมมติที่ไม่มีอยู่จริง `web_fetch` จึงหาเครื่องไม่เจอ และ model เล่าว่าเข้า staging ไม่ได้
+          การบันทึกรันด้วยนาฬิกาที่เร็วขึ้น 600 วินาทีจึงผ่านไปในราวหนึ่งวินาที แต่ model ยังเห็นตัวเลขจริงคือ 600 วินาที
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=8
+            select: messages[-1].content
+            highlight: ['[0].text', '[1].text']
+            quote: "Geno started this turn by itself (woke: scheduled)"
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=9
+            select: '[4]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/bg-schedule-wakeup.jsonl#line=9
+            select: '[5]'
+            highlight: [data.delta.partial_json]
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
@@ -165,12 +215,12 @@ scenario:
     - use: bg-woken-ends
 ---
 
-`schedule_wakeup` เป็นการรอแบบเดียวที่รอดการเริ่ม engine ใหม่ เพราะมันเขียนโน้ตลง log ก่อนตั้งนาฬิกา
+`schedule_wakeup` ([การปลุก](/start/glossary/)แบบตั้งเวลา) เป็นการรอแบบเดียวที่รอดการเริ่ม engine ใหม่ เพราะมันเขียนโน้ตลง log ก่อนตั้งนาฬิกา
 monitor และการเฝ้า PR อยู่แค่ในหน่วยความจำ
 
 สิ่งที่ควรสังเกต
 
-- **ไม่ปลุกเกินกำหนด** ถ้าตอนถึงเวลามี turn รันอยู่ ผู้ใช้กำลังพิมพ์ หรือมีการ์ดค้าง ประตูรอจนว่าง
+- **อาจปลุกช้ากว่ากำหนด** ถ้าตอนถึงเวลามี turn รันอยู่ ผู้ใช้กำลังพิมพ์ หรือมีการ์ดค้าง ประตูรอจนว่าง
   ดู [การปลุกถูกพักหรือรอ](/scenarios/bg/wake-held-or-paused/)
 - **ยกเลิกได้สองทาง** model เรียก `task_stop wake-1` (ได้โน้ต `stopped` และไม่ดัง) หรือผู้ใช้กด Cancel ในแผง Tasks
 - **ต้องมี engine ที่มีหน้าต่างต่ออยู่** engine จบเองหลังหน้าต่างสุดท้ายปิดไป 10 วินาที ถ้าไม่มีหน้าต่างเปิดเลยตอนถึงเวลา

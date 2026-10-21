@@ -36,7 +36,8 @@ scenario:
       beat:
         title: "แชตขึ้นข้อความของคุณกับแถว Thinking"
         text: >-
-          แผงแสดงข้อความของคุณก่อนติดต่อ engine แล้ว VS Code เริ่มหา session ที่จะส่งข้อความนี้เข้าไป
+          แผงแสดงข้อความของคุณและแถว Thinking ก่อนติดต่อ engine แล้วส่วนของ Geno ใน VS Code (extension host) เริ่มหา session
+          (บทสนทนาหนึ่งชุดที่มี log ของตัวเอง) ที่จะส่งข้อความนี้เข้าไป
         from: panel
         to: you
         sees: { kind: composer, state: working, header: working }
@@ -52,8 +53,8 @@ scenario:
       beat:
         title: "VS Code ขอ session ใหม่จาก engine"
         text: >-
-          ไม่มีแชตที่แสดงอยู่หรือที่จำไว้ VS Code จึงขอ session ใหม่ พร้อมโฟลเดอร์ของหน้าต่าง และ MCP server
-          ที่คุณตั้งไว้ใน VS Code
+          ไม่มีแชตที่แสดงอยู่หรือที่จำไว้ ส่วนของ Geno ใน VS Code จึงขอ session ใหม่จาก engine พร้อมโฟลเดอร์ของหน้าต่าง
+          และ MCP server (โปรแกรมภายนอกที่เสนอ tool เพิ่มให้ model) ที่คุณตั้งไว้ใน VS Code
         from: panel
         to: engine
       do: >-
@@ -67,7 +68,8 @@ scenario:
       beat:
         title: "Geno เลือก provider และ model"
         text: >-
-          engine เลือก provider และ model ก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้และไม่มีไฟล์ session ค้างไว้
+          engine เลือก provider (บริษัทที่รัน model ให้) และ model ก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้
+          และไม่มีไฟล์ session ค้างไว้
         from: engine
         to: engine
       do: >-
@@ -81,7 +83,8 @@ scenario:
       beat:
         title: "Geno อ่านไฟล์คำสั่งของคุณและของโปรเจกต์"
         text: >-
-          Geno อ่านไฟล์คำสั่งของคุณก่อน แล้วเดินจากรากของดิสก์ลงมาถึง workspace เพื่อเก็บ `AGENTS.md` หรือ `CLAUDE.md`
+          ไฟล์คำสั่งคือไฟล์ที่คุณหรือ repo เขียนบอก model ว่าควรทำงานอย่างไร Geno อ่านไฟล์ของคุณเองก่อน
+          แล้วเดินจากรากของดิสก์ลงมาถึง workspace เพื่อเก็บ `AGENTS.md` หรือ `CLAUDE.md`
           ของแต่ละโฟลเดอร์ ไฟล์หนึ่งดึงไฟล์อื่นเข้ามาด้วยบรรทัด `@path` ได้อีกหลายชั้น
         from: engine
         to: engine
@@ -97,8 +100,8 @@ scenario:
       beat:
         title: "Geno โหลด skill, memory และสภาพแวดล้อม"
         text: >-
-          พร้อมกันนั้น Geno โหลดรายการ skill ที่ model เรียกได้ โน้ตใน memory ของคุณและของโปรเจกต์ และภาพของเครื่อง
-          เช่นสถานะ git, shell และวันที่
+          พร้อมกันนั้น Geno โหลดรายการ skill (คู่มือที่ model โหลดเนื้อหาเต็มได้เมื่อต้องใช้) โน้ตใน memory
+          (โน้ตที่คุณเคยอนุมัติให้ model จำ) ของคุณและของโปรเจกต์ และภาพของเครื่อง เช่นสถานะ git, shell และวันที่
         from: engine
         to: engine
       do: >-
@@ -113,7 +116,8 @@ scenario:
         title: "Geno เขียนทั้งหมดเป็นบรรทัดแรกของ session"
         text: >-
           ทุกอย่างถูกบันทึกเป็นบรรทัดแรกของไฟล์ session และไม่ถูกอ่านใหม่อีก ทุกคำขอต่อจากนี้ส่งข้อความชุดนี้ซ้ำทุกไบต์
-          prompt cache จึงไม่หลุด และการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
+          prompt cache จึงไม่หลุด (ผู้ให้บริการจำส่วนต้นของ request ไว้ชั่วคราว request ถัดไปที่ขึ้นต้นด้วยไบต์เดิมจึงถูกและเร็วกว่า)
+          ข้อเสียคือการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
         from: engine
         to: engine
       do: >-
@@ -128,8 +132,8 @@ scenario:
       beat:
         title: "VS Code ได้ session แล้วส่ง prompt"
         text: >-
-          engine ตอบ id ของ session VS Code สลับโหมดให้ตรงกับที่แผงเลือกไว้ แล้วส่ง prompt ของคุณ คำขอนี้ค้างอยู่จนกว่า
-          turn จะจบ
+          engine ตอบ id ของ session ส่วนของ Geno ใน VS Code สลับโหมด permission (Ask Auto หรือ Plan) ให้ตรงกับที่แผงเลือกไว้
+          แล้วส่ง prompt ของคุณ คำขอนี้ค้างอยู่จนกว่า turn จะจบ เหมือน HTTP request ที่ยังไม่ได้ response
         from: panel
         to: engine
       do: >-
@@ -151,7 +155,7 @@ scenario:
       beat:
         title: "Geno เริ่ม turn และตั้งชื่อแชต"
         text: >-
-          engine รับ turn เปิดงานในแผง Tasks และตั้งชื่อแชตจากข้อความแรกของคุณ
+          engine รับ turn เพิ่มงานนี้ในแผง Tasks (แผงที่แสดงงานที่กำลังทำอยู่) และตั้งชื่อแชตจากข้อความแรกของคุณ
         from: engine
         to: panel
       do: >-
@@ -167,8 +171,10 @@ scenario:
       beat:
         title: "hook ตอนเริ่ม session ได้ทำงาน"
         text: >-
-          ถ้าคุณตั้ง SessionStart hook ไว้ มันทำงานครั้งแรกตรงนี้ สิ่งที่ hook พิมพ์ออกมาถูกบันทึก
-          และไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ข้ามไป
+          hook คือคำสั่ง shell ที่คุณตั้งให้ Geno รันเมื่อเกิดเหตุการณ์หนึ่ง ถ้าคุณตั้ง SessionStart hook ไว้ มันทำงานครั้งแรกตรงนี้
+          สิ่งที่ hook พิมพ์ออกมาถูกบันทึก และไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ข้ามไป
+          การ์ดคือบล็อกนั้นจากการรันจริง ดูบรรทัด `[Geno] SessionStart:startup hook success:` ตามด้วยข้อความที่ hook พิมพ์
+          (ในการ์ดถูกแทนด้วยข้อความ removed เพื่อซ่อนของผู้ใช้)
         from: engine
         to: machine
         sees:
@@ -211,7 +217,10 @@ scenario:
         title: "Geno ประกอบข้อความ user แรก"
         text: >-
           ข้อความ user แรกเรียงคำสั่งของคุณ คำสั่งของโปรเจกต์ รายการ skill, memory และสภาพแวดล้อมไว้ก่อน แล้วจึงต่อด้วย
-          prompt ของคุณ system prompt เหมือนเดิมทุก session ส่วนเปิดนี้จึงถูก cache ไปด้วย
+          prompt ของคุณ system prompt (คู่มือที่ส่งแยกใน field `system`) เหมือนเดิมทุก session ส่วนเปิดนี้จึงถูก cache ไปด้วย
+          การ์ดมาจากการรันจริงที่ prompt ต่างจากตัวอย่างของหน้านี้ บล็อก `[0]` (คำสั่งและรายการ skill) กับ `[1]` (สภาพแวดล้อม)
+          พับไว้ `[2]` คือผลของ hook และบล็อกที่ไฮไลต์ `[3]` คือ prompt ของผู้ใช้ ซึ่งมี `cache_control` บอกว่าให้ cache ถึงตรงนี้
+          การรันนี้ไม่มีโน้ตใน memory ถ้ามี โน้ตจะเป็นบล็อกของตัวเองระหว่างบล็อกคำสั่งกับบล็อกสภาพแวดล้อม
         from: engine
         to: model
         sees:
@@ -243,14 +252,26 @@ scenario:
         title: "Model อ่านคำสั่งก่อนเริ่มงาน"
         text: >-
           model อ่านคำสั่งของคุณและของโปรเจกต์ก่อนถึงคำขอ แล้วเริ่มทำงาน จากตรงนี้ turn เดินเหมือน turn ปกติ
+          การ์ดข้างล่างเป็นคำตอบจริงต่อคำขอในการ์ดก่อนหน้า ความคิดของ model พูดถึง skill changelog จากรายการในข้อความแรก
+          แล้วมันขอ `bash` กับ `grep` เพื่อดู repo จบคำตอบด้วย `stop_reason: tool_use` (หยุดเพื่อรอผลของ tool)
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A18-project-skill/1/session.jsonl#seq=4
+          select: content
+          quote: There's a changelog skill
+          highlight: ['[0].thinking', '[2].input', '[3].input']
         end: "turn ทำต่อตามปกติ"
       do: >-
         model อ่านคำสั่งของผู้ใช้และของโปรเจกต์ก่อนคำขอ แล้วเริ่มทำงานตามข้อความ turn ดำเนินต่อเหมือน turn ปกติ
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       end: { turn: continues }
 ---
+
+หน้านี้เล่าสิ่งที่เกิดเมื่อคุณส่งข้อความแรกในหน้าต่างที่ยังไม่มีแชต engine สร้าง session ใหม่ แล้วรวบรวมสิ่งที่ model
+ควรรู้ก่อนเริ่มงาน ได้แก่ไฟล์คำสั่ง skill memory และสภาพแวดล้อม การรู้ว่าของพวกนี้อยู่ตรงไหนของ request
+อธิบายว่าทำไมแก้ `AGENTS.md` ระหว่างแชตแล้ว model ไม่เห็น
 
 context ของ session ถูกโหลด**ครั้งเดียว** ตอนที่ engine ได้คำขอ `session/new` ไม่ใช่ทุก turn
 และไม่ได้อยู่ใน system prompt แต่อยู่ในข้อความ user แรก system prompt จึงเหมือนกันทุก session และทุกโหมด
@@ -269,7 +290,7 @@ context ของ session ถูกโหลด**ครั้งเดียว*
   context จึงถูกอ่านตอนกดปุ่ม ไม่ใช่ตอนพิมพ์ ดู [เริ่มแชทใหม่](/scenarios/sess/new-chat/)
 - **ไฟล์คำสั่งในโฟลเดอร์ย่อย** ไม่ถูกส่งตั้งแต่ต้น ข้อความแรกบอกแค่ว่ามีไฟล์ไหนบ้าง แต่ละไฟล์ถูกแนบไปกับผล `read`
   ครั้งแรกของไฟล์ที่อยู่ใต้โฟลเดอร์นั้น
-- **หน่วยความจำที่เปลี่ยนระหว่างแชต** ไม่แก้ส่วนเปิด การเปลี่ยนไปถึง model เป็น notice ที่จุดปลอดภัยก่อนการเรียก model ครั้งถัดไป
+- **หน่วยความจำที่เปลี่ยนระหว่างแชต** ไม่แก้ส่วนเปิด การเปลี่ยนไปถึง model เป็น [โน้ต `[Geno]`](/start/glossary/) ก่อนการเรียก model ครั้งถัดไป
 - **แก้ `AGENTS.md` แล้วต้องเริ่มแชตใหม่** แชตเดิมยังส่งข้อความชุดที่ถูกบันทึกไว้ใน `session-start`
 
 อ่านต่อที่ [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) เพื่อดู turn ที่ตามมา

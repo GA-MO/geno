@@ -14,7 +14,7 @@ scenario:
     - id: target
       beat:
         title: คุณเลือกบรรทัดแล้วกด Cmd-K Cmd-I
-        text: คุณเลือกบรรทัด 12 ถึง 18 ของ `src/date.ts` ส่วนขยายขยายการเลือกเป็นบรรทัดเต็ม แล้วเปิดกล่องให้พิมพ์คำสั่ง
+        text: คุณเลือกบรรทัด 12 ถึง 18 ของ `src/date.ts` ส่วนของ Geno ใน VS Code (extension host) ขยายการเลือกเป็นบรรทัดเต็ม แล้วเปิดกล่องให้พิมพ์คำสั่ง
         from: you
         to: panel
         sees: กล่องพิมพ์ของ VS Code "Edit the selection" ข้อความจาง "What should change?"
@@ -30,7 +30,7 @@ scenario:
     - id: type
       beat:
         title: คุณพิมพ์ “รองรับรูปแบบ ISO week”
-        text: คุณกด Enter คำสั่งไปทางเดียวกับข้อความที่พิมพ์ในแผง พร้อมบอกไฟล์และช่วงบรรทัด
+        text: คุณกด Enter คำสั่งไปทางเดียวกับข้อความที่พิมพ์ในแผง คือกลายเป็น turn หนึ่งของแชตที่แผงแสดงอยู่ พร้อมบอกไฟล์และช่วงบรรทัด
         from: you
         to: panel
       lane: user
@@ -66,9 +66,9 @@ scenario:
     - id: accept
       beat:
         title: Geno เตรียม turn ที่มีแค่ tool edit
-        text: Geno ปฏิเสธไฟล์นอก workspace อ่านไฟล์และ problem ของไฟล์จาก VS Code แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่งของคุณ แล้วส่งให้ model
+        text: engine เห็นว่าเป็นการแก้แบบ Cmd-K จึงไม่ใช้ turn แบบปกติ มันปฏิเสธไฟล์นอก workspace (โฟลเดอร์ที่คุณเปิด) อ่านไฟล์และ problem ของไฟล์ (error และ warning ที่ VS Code แสดงในแผง Problems) แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่งของคุณ model ได้ system prompt (คู่มือที่ Geno ส่งแยกใน field `system` ของคำขอ ไม่ใช่ข้อความของคุณ) สำหรับการแก้โดยเฉพาะ ได้ tool แค่ `edit` และเรียก model ได้ไม่เกิน 4 ครั้ง prompt นี้ไปถึง model ตอนเรียกครั้งแรกของ turn
         from: engine
-        to: model
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -99,9 +99,16 @@ scenario:
     - id: edit-call
       beat:
         title: Model ขอแก้ช่วงนั้น
-        text: model อ่านไฟล์จาก prompt จึงไม่ต้อง read ก่อน มันส่ง `old_str` และ `new_str` แชตขึ้นขั้นของ edit
+        text: >-
+          model อ่านไฟล์จาก prompt จึงไม่ต้อง read ก่อน มันขอ `edit` ด้วย `old_str` (ข้อความเดิมที่จะถูกแทน) และ `new_str` (ข้อความใหม่) แชตขึ้นขั้นของ edit
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ไฟล์ในรอบนั้นเป็น `src/date.ts` ตัวอย่าง การ์ดคือคำตอบของ model ตามที่ Geno ส่งกลับในคำขอถัดไป ดู `input` ของ `edit`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/ed-inline-edit-cmd-k.jsonl#line=4
+          select: messages[1].content
+          highlight: ['[1].input']
       lane: model
       do: >-
         model อ่านไฟล์จาก prompt แล้วขอ `edit` ด้วย `old_str` และ `new_str` จบด้วย `stop_reason: tool_use`
@@ -132,22 +139,30 @@ scenario:
               - use: edit-write-lands
                 beat:
                   title: VS Code เขียนการแก้ลง buffer
-                  text: การแก้เข้า buffer ที่คุณเปิดอยู่ ขั้นของ edit บอกจำนวนบรรทัด Geno ส่งผลให้ model
+                  text: การแก้เข้า buffer (ข้อความของไฟล์ที่ VS Code ถือไว้) ที่คุณเปิดอยู่ ขั้นของ edit บอกจำนวนบรรทัด Geno ส่งผลให้ model ในการเรียกครั้งถัดไป
                   from: engine
                   to: panel
                   sees:
                     kind: step
                     label: Edited date.ts
                     status: done
-                    note: +9 −2
+                    note: +9 −1
               - use: tool-result-returns
               - use: model-call
               - lane: model
                 beat:
                   title: Model บอกว่าแก้อะไร
-                  text: model ตอบสั้นๆ แล้วจบ turn
+                  text: >-
+                    model ตอบประโยคเดียวแล้วจบ turn ในการบันทึกเดียวกับการ์ด `edit` ประโยคนั้นคือ
+                    "parseDate now reads ISO week dates such as 2026-W03-2 and turns them into the calendar date."
+                    การ์ดคือ event ท้ายของคำตอบ ดู `stop_reason` เป็น `end_turn` ซึ่งบอกว่า model ไม่ขอ tool อีก
                   from: model
                   to: engine
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/ed-inline-edit-cmd-k.jsonl#line=5
+                    select: '[-2]'
+                    highlight: [data.delta.stop_reason]
                 do: >-
                   model ตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
                 ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
@@ -155,7 +170,7 @@ scenario:
               - use: turn-ends
                 beat:
                   title: Turn จบ
-                  text: ปุ่ม Send กลับมา hunk ของการแก้รอคุณตรวจตามโหมด review
+                  text: ปุ่ม Send กลับมา การแก้รอคุณตรวจตามที่ตั้ง `gcode.review.mode` ไว้ เช่นเป็น hunk (ก้อนบรรทัดที่เปลี่ยน) ที่มี Keep และ Undo
                   from: engine
                   to: panel
                   sees:
@@ -168,9 +183,9 @@ scenario:
               - lane: tool
                 beat:
                   title: การแก้ไม่ลง
-                  text: "`old_str` ไม่ตรง หรือคุณแก้ไฟล์ไประหว่างนั้น ไม่มีอะไรถูกเขียน"
+                  text: "`old_str` ไม่ตรง หรือคุณแก้ไฟล์ไประหว่างนั้น ไม่มีอะไรถูกเขียน Geno เขียนผล error ไว้ใน log ผลนี้ถึง model ตอนเรียกครั้งถัดไป"
                   from: engine
-                  to: model
+                  to: engine
                 at: executor
                 do: >-
                   `old_str` ไม่ตรง หรือผู้ใช้แก้ไฟล์ไประหว่างนั้น `edit` ล้มเหลวด้วย `ToolError` ไม่มีอะไรถูกเขียน
@@ -178,10 +193,23 @@ scenario:
                 emits: [ToolError]
               - lane: loop
                 beat:
-                  title: Model ลองใหม่ได้สามครั้ง
-                  text: Geno ให้ model ลองใหม่ ถ้าครบสามครั้งยังไม่ลง การเรียกครั้งสุดท้ายไม่มี tool model จึงเขียนได้แค่ประโยคปิดท้าย
-                  from: model
-                  to: engine
+                  title: Geno ให้ model ลองแก้ได้รวมสามครั้ง
+                  text: >-
+                    Geno เรียก model อีกครั้งพร้อม error ให้ลองใหม่ ลองใหม่ได้สองครั้ง ถ้ารวมสามครั้งยังไม่ลง การเรียกครั้งสุดท้ายไม่มี tool model จึงเขียนได้แค่ประโยคปิดท้าย
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บทให้ model ส่ง `old_str` ที่ไม่ตรงทั้งสามครั้ง การ์ดคือข้อความท้ายของคำขอครั้งที่สี่
+                    ดู error ครั้งที่สาม และโน้ต `[Geno]` ที่บอกว่านี่เป็นการเรียกครั้งสุดท้ายและ tool ปิด
+                    การ์ดที่สองคือคำขอเดียวกันทั้งก้อน ดู `tool_choice` เป็น `none` คำขอยังส่งรายการ `edit` ไปเหมือนเดิม แต่ model เรียกมันไม่ได้
+                  from: engine
+                  to: model
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/ed-inline-edit-cmd-k-fails.jsonl#line=8
+                      select: messages[-1].content
+                      highlight: ['[0].content', '[1].text']
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/ed-inline-edit-cmd-k-fails.jsonl#line=8
+                      collapse: [tools, system, messages]
+                      highlight: [tool_choice]
                   end: Turn จบโดยแก้ไม่ลง
                 at: step
                 do: >-
@@ -193,7 +221,10 @@ scenario:
                 end: { turn: done, reason: end_turn }
 ---
 
-Cmd-K ไม่ใช่ระบบแยก มันคือ turn หนึ่งของแชตที่แผงแสดงอยู่ ใช้ log ใช้ checkpoint และใช้ทางเขียนไฟล์เดียวกับ `edit` ของเอเจนต์
+หน้านี้เล่าสิ่งที่เกิดเมื่อคุณเลือกโค้ดใน editor แล้วกด Cmd-K Cmd-I เพื่อสั่งแก้ด้วยประโยคสั้นๆ
+แทนการพิมพ์ในแผงแชต
+
+Cmd-K ไม่ใช่ระบบแยก มันคือ turn หนึ่งของแชตที่แผงแสดงอยู่ ใช้ session log ใช้ [checkpoint](/start/glossary/) และใช้ทางเขียนไฟล์เดียวกับ `edit` ของเอเจนต์
 ต่างกันที่ engine สร้าง prompt เองจากไฟล์และการเลือก และให้ model มีแค่ `edit`
 
 | | turn ปกติ | Cmd-K |

@@ -16,8 +16,9 @@ scenario:
       beat:
         title: "Model ขอรันคำสั่งที่ไม่จบเองเบื้องหลัง"
         text: >-
-          `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง model จึงขอรันเป็นงานเบื้องหลัง run จริงด้านล่างขอรัน dev server
-          แบบเดียวกัน
+          `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง model จึงขอรันเป็นงานเบื้องหลัง คือคำสั่งที่รันต่อไปโดย turn ไม่รอให้จบ
+          การ์ดข้างล่างมาจาก run จริงที่ขอรัน dev server แบบเดียวกัน ดู `input` ของ `tool_use` ที่ไฮไลต์ไว้
+          มี `command` และ `run_in_background: true` ซึ่งเป็นตัวบอกว่าให้รันเบื้องหลัง
         from: model
         to: engine
         sees:
@@ -57,9 +58,10 @@ scenario:
       beat:
         title: "Geno ตรวจคำสั่งเบื้องหลังด้วยกฎชุดเดิม"
         text: >-
-          คำสั่งเบื้องหลังไม่ต้องผ่านการตรวจ sleep และ dev server ที่ใช้กับคำสั่งรอผล
-          แต่ผ่านกฎสิทธิ์ชุดเดียวกับคำสั่งปกติ ต่างกันข้อเดียวคือโหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด
-          คำสั่งนี้ไม่ติดกฎใด จึงไม่มีการ์ด
+          คำสั่งปกติเป็นแบบรอผล Geno รอให้จบก่อนตอบ model จึงปฏิเสธคำสั่งรอผลที่ขึ้นต้นด้วย `sleep` หรือเปิด dev server
+          เพราะจะทำให้ turn ค้าง คำสั่งเบื้องหลังข้ามการตรวจสองข้อนี้ แต่ยังผ่านกฎ permission ชุดเดียวกับคำสั่งปกติ
+          ต่างกันข้อเดียวคือโหมด Plan ซึ่งเป็นโหมดอ่านอย่างเดียว ปฏิเสธงานเบื้องหลังทั้งหมด
+          คำสั่งนี้ไม่ติดกฎใด จึงไม่มีการ์ดถามคุณ
         from: engine
         to: engine
       do: >-
@@ -80,7 +82,8 @@ scenario:
       beat:
         title: "Geno เปิดงาน bg-1 ใน sandbox"
         text: >-
-          Geno ตั้งชื่องานว่า bg-1 แล้วเปิดคำสั่งใน sandbox โดยไม่มีเวลาสูงสุด รันพร้อมกันได้ 4 งานต่อ session output
+          Geno ตั้งชื่องานว่า bg-1 แล้วเปิดคำสั่งใน sandbox ซึ่งเป็นกรอบของระบบปฏิบัติการที่จำกัดว่าคำสั่งเขียนไฟล์และต่อเครือข่ายได้แค่ไหน
+          งานนี้ไม่มีเวลาสูงสุด รันพร้อมกันได้ 4 งานต่อ session output
           ส่วนท้ายไม่เกิน 1 MB ถูกเก็บไว้ในหน่วยความจำและในไฟล์ log ของงาน
         from: engine
         to: machine
@@ -114,8 +117,8 @@ scenario:
       beat:
         title: "แชตขึ้นแถว Running in background"
         text: >-
-          ทุกครั้งที่งานเปลี่ยนสถานะหรือพิมพ์ output แผง Tasks และแชตได้รับแจ้ง ใต้กล่องของคำสั่งมีแถวสถานะ และปุ่ม Stop
-          ของงานนั้นเอง ซึ่งไม่ใช่ปุ่ม Stop ของ turn
+          ทุกครั้งที่งานเปลี่ยนสถานะหรือพิมพ์ output แผง Tasks ซึ่งเป็นรายการงานของ Geno และแชตได้รับแจ้ง
+          ใต้กล่องของคำสั่งมีแถวสถานะ และปุ่ม Stop ของงานนั้นเอง ซึ่งไม่ใช่ปุ่ม Stop ของ turn
         from: panel
         to: you
         sees: "แถว \"Running in background as bg-1\" ไอคอนจุดทึบ และปุ่ม Stop ที่ชี้แล้วขึ้น \"Stop bg-1: SIGTERM, then SIGKILL\""
@@ -132,15 +135,18 @@ scenario:
       beat:
         title: "bash คืนผลทันทีโดยไม่รอ"
         text: >-
-          ผลบอกชื่องานและที่อยู่ไฟล์ output และบอก model ว่าไม่ต้องคอยถาม Geno จะบอกเองเมื่องานจบ
+          Geno เขียนข้อความผลไว้ใน log ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
+          ในการ์ด ดู `content` ของ `tool_result` ผลบอกชื่องาน bg-1 และที่อยู่ไฟล์ output และบอก model ว่าไม่ต้องคอยถาม
+          Geno จะบอกเองเมื่องานจบ
         from: engine
-        to: model
+        to: engine
         sees:
           kind: payload
           source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=10
           select: messages[-1].content[0]
           highlight:
             - content
+          quote: Geno tells you when it ends, so do not poll it
       do: >-
         `bash` คืนผลทันทีโดยไม่รอคำสั่ง ข้อความผลบอกชื่องาน ที่อยู่ไฟล์ output และบอก model ว่าไม่ต้องคอยถาม
         ("Started background command bg-1. ... Geno tells you when it ends, so do not poll it.")
@@ -152,18 +158,46 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: "Model ทำงานอื่นต่อ"
+        title: "Geno เรียก model อีกครั้ง"
         text: >-
-          Geno เรียก model ต่อ ขณะที่ bg-1 ยังรันอยู่ model ทำอย่างอื่นใน turn เดิมได้
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขอ `bash` ของ model และผลที่บอกว่างานเริ่มแล้ว
+          ขณะที่ bg-1 ยังรันอยู่ การ์ดข้างล่างเป็นคำขอจริงจากการรันเดียวกับการ์ดแรก
         from: engine
         to: model
-        end: "งานรันต่อเบื้องหลัง"
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=10
+          select: messages
+          collapse: ['[0]', '[1]', '[2]']
+          highlight: ['[3].content[2]', '[4].content[0]']
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ทำงานอื่นต่อขณะที่ `bg-1` ยังรันอยู่
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ขณะที่ `bg-1` ยังรันอยู่
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ทำงานอื่นต่อ"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model ไม่รอ server แต่ขอรัน `bash` อีกตัว
+          ดู `command` ใน `input` ที่ไฮไลต์ไว้ เป็นลูปที่เรียก /health ซ้ำจนกว่า server จะพร้อม ขณะที่ bg-1 ยังรันอยู่
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A12-background-server/1/session.jsonl#seq=10
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: "งานรันต่อเบื้องหลัง"
+      do: >-
+        model อ่าน `tool_result` ที่บอกว่า `bg-1` เริ่มแล้ว และตอบด้วยคำขอใหม่ ในการรันนี้คือ `bash` อีกตัว
+        จบคำตอบด้วย `stop_reason: tool_use` turn วนต่อขณะที่ `bg-1` ยังรันอยู่
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
 งานเบื้องหลังเป็นของ engine ไม่ใช่ของ turn มันรันต่อหลัง turn จบ และแสดงในแผง Tasks จนกว่าจะจบหรือถูกหยุด
@@ -178,7 +212,7 @@ scenario:
 
 - **sandbox เดียวกับคำสั่งปกติ** งานเบื้องหลังเขียนได้เฉพาะใน workspace และไดเรกทอรีชั่วคราว และใช้เครือข่ายไม่ได้ถ้าไม่ได้อนุญาตโดเมนไว้
   ความต่างคือไม่มีเวลาสูงสุด
-- **การจบของงานกลับมาหา model เอง** เมื่อ `bg-1` จบ engine ส่งข่าวเข้า inbox ของ session ซึ่ง `deliver()` บันทึกที่จุดปลอดภัยถัดไป
+- **การจบของงานกลับมาหา model เอง** เมื่อ `bg-1` จบ engine ส่งข่าวเข้า inbox ของ session ซึ่งเป็นคิวข่าวที่รอส่งให้ model `deliver()` บันทึกข่าวนั้นลง log ที่จุดปลอดภัยถัดไป คือหลังผลของ tool ชุดล่าสุดและก่อนเรียก model ครั้งถัดไป
   หรือปลุก session ขึ้นมาใหม่ถ้าไม่มี turn ทำงาน
 - **โหมด Plan ไม่มีงานเบื้องหลัง** `approveCommand` ปฏิเสธด้วย `ToolError` ก่อนดูกฎใดๆ
   ("background commands are not available: ...")

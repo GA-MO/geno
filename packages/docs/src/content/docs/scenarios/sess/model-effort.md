@@ -1,11 +1,11 @@
 ---
 title: "เปลี่ยน effort หรือเปลี่ยน model"
-description: เมนู model ในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วน model เป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
+description: เมนู model ในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจาก turn ถัดไป ส่วน model เป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
 scenario:
   surface: vscode
   given:
     - แชตนี้มี turn ที่จบแล้ว และไม่มี turn ทำงาน
-    - provider ของแชตคือ Model Studio และมีอีก model ของ provider เดียวกันพร้อมใช้
+    - provider ของแชต (บริการที่ให้เรียก model ผ่าน API) คือ Model Studio และมีอีก model ของ provider เดียวกันพร้อมใช้
   trigger: >-
     ผู้ใช้คลิกปุ่มชื่อ model ในช่องพิมพ์ เมนูแสดง backend model ของ provider ที่พร้อมใช้ และระดับ effort
   covers: [sess.effort-change, sess.model-change]
@@ -14,7 +14,10 @@ scenario:
     - id: menu
       beat:
         title: คุณเปิดเมนู model ในช่องพิมพ์
-        text: เมนูรวม backend ที่คุยกับแชต model ของ Geno และ effort ของ session สองอย่างหลังมีผลต่างกัน
+        text: >-
+          เมนูรวมสามเรื่อง backend คือตัวที่รันแชต (loop ของ Geno เองหรือ agent ภายนอกที่ engine รู้จัก)
+          model คือ model ที่ Geno เรียก และ effort คือระดับที่บอก model ว่าให้คิดหนักแค่ไหน ตั้งแต่ `low` ถึง `max`
+          ทัวร์นี้ดูสองอย่างหลัง (model และ effort) ซึ่งเก็บไว้คนละที่จึงมีผลต่างกัน
         from: you
         to: panel
         ask: คุณเลือกอะไร
@@ -37,7 +40,7 @@ scenario:
               - lane: panel
                 beat:
                   title: คุณเลือก effort high
-                  text: แชตส่งค่าใหม่ให้ engine
+                  text: แผงส่งค่าใหม่ผ่าน VS Code ไปให้ engine เพราะ effort เป็นค่าของ session ซึ่ง engine ถือไว้
                   from: you
                   to: panel
                 at: composer
@@ -52,7 +55,9 @@ scenario:
               - lane: server
                 beat:
                   title: Geno บันทึก effort ลง log
-                  text: effort เป็นของ session ถ้า turn ทำงานอยู่ Geno บันทึกข้าง turn นั้น ช่องพิมพ์แสดง effort ใหม่
+                  text: >-
+                    engine บันทึก event `effort` ต่อท้าย session log ของแชตนี้ (ไฟล์ที่ Geno ต่อท้ายทุกเหตุการณ์ของแชต) แล้วตอบรายการระดับ effort ที่มีเครื่องหมายบอกระดับปัจจุบัน
+                    ช่องพิมพ์แสดง effort ใหม่ ถ้า turn ทำงานอยู่ ค่าใหม่ถูกบันทึกลงไฟล์ทันที แต่ turn นั้นยังใช้ค่าเดิมจนจบ
                   from: engine
                   to: engine
                   sees: ปุ่ม model ในช่องพิมพ์บอก effort "high"
@@ -70,15 +75,29 @@ scenario:
                 ref: packages/extension/src/chat/composer-view.ts#modelMenu
               - lane: loop
                 beat:
-                  title: มีผลตั้งแต่การเรียก model ครั้งถัดไป
-                  text: ทุกการเรียก model อ่าน effort ล่าสุดจาก log แล้วปรับระดับตามชนิดของการเรียก
+                  title: มีผลตั้งแต่ turn ถัดไป
+                  text: >-
+                    ตอนเริ่ม turn ถัดไป Geno อ่าน log ซึ่งมี event `effort` ใหม่อยู่แล้ว ก่อนเรียก model ทุกครั้งใน turn นั้น
+                    Geno ใส่ระดับที่คุณเลือกตรงๆ ลงใน request เป็น `output_config.effort` ถ้า model รองรับ effort
+                    (ถ้าไม่รองรับ request ไม่มี field นี้)
+                    การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน บน qwen3.8-flash ซึ่งรองรับ effort การ์ดแรกคือ request แรกของ turn แรกซึ่งส่ง `medium` (request ที่สองของ turn นั้นส่งค่าเดียวกัน) การ์ดที่สองคือ request ของ turn ถัดไปหลังคุณเลือก high ซึ่งส่ง `high` ดูที่ไฮไลต์ของทั้งสองใบ
                   from: engine
                   to: model
+                  sees:
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/sess-model-effort.jsonl#line=2
+                      collapse: [tools, system, messages]
+                      highlight: [output_config.effort]
+                    - kind: payload
+                      source: packages/docs/src/data/recorded/sess-model-effort.jsonl#line=6
+                      collapse: [tools, system, messages]
+                      highlight: [output_config.effort]
                   end: effort ใหม่มีผล
                 at: model-call
                 do: >-
-                  ตั้งแต่รอบถัดไป ทุกการเรียก model อ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` ซึ่งขยับระดับตาม policy ของชนิดการเรียก
-                  (หลัง prompt หลัง tool หรือหลัง tool ล้ม) แล้วส่งเป็น `output_config.effort` สำหรับ model ที่รองรับ effort
+                  ทุกการเรียก model ใน turn อ่าน effort ล่าสุดจากสำเนา event ที่ `drive` คัดลอกจาก log ตอนเริ่ม turn ผ่าน `withTurnEffort`
+                  ซึ่งใช้ policy `flat` ไม่ขยับระดับ (policy อื่นที่ลดระดับหลัง tool สำเร็จใช้แค่ใน eval)
+                  แล้วส่งเป็น `output_config.effort` สำหรับ model ที่รองรับ effort
                 ref: packages/core/src/effort.ts#withTurnEffort
                 end: { turn: none }
           - id: model
@@ -87,7 +106,7 @@ scenario:
               - lane: panel
                 beat:
                   title: คุณเลือก model อื่น
-                  text: model ของ Geno เป็นการตั้งค่าของ VS Code ไม่ใช่ของ session VS Code เขียนการตั้งค่าระดับผู้ใช้ โดยไม่ส่งอะไรถึง engine
+                  text: model ของ Geno เป็นการตั้งค่าของ VS Code (`gcode.provider` และ `gcode.model`) ไม่ใช่ของ session VS Code เขียนการตั้งค่าระดับผู้ใช้ โดยยังไม่ส่งอะไรถึง engine
                   from: you
                   to: panel
                 at: composer
@@ -102,7 +121,11 @@ scenario:
               - lane: editor
                 beat:
                   title: ส่วนขยายเปลี่ยนไปใช้ engine ตัวใหม่
-                  text: การตั้งค่าที่ engine ใช้เปลี่ยน ส่วนขยายจึงตัดการเชื่อมต่อ และเปิด engine ตัวใหม่ตามการตั้งค่าชุดใหม่ ปุ่มในช่องพิมพ์ขึ้นชื่อ model ใหม่
+                  text: >-
+                    engine หนึ่งตัวเริ่มจากการตั้งค่าชุดหนึ่ง และส่วนขยายหา engine ด้วยที่อยู่ socket
+                    (ไฟล์พิเศษที่ส่วนขยายใช้ต่อกับ engine เหมือนพอร์ตของ server) ที่คำนวณจากการตั้งค่า
+                    การตั้งค่าเปลี่ยน ส่วนขยายจึงตัดการเชื่อมต่อกับ engine ตัวเดิม และเปิด engine ตัวใหม่ตามการตั้งค่าชุดใหม่เมื่อต้องใช้
+                    ปุ่มในช่องพิมพ์ขึ้นชื่อ model ใหม่
                   from: panel
                   to: engine
                   sees: ปุ่ม model ในช่องพิมพ์เปลี่ยนเป็นชื่อ model ใหม่
@@ -120,7 +143,9 @@ scenario:
               - lane: server
                 beat:
                   title: engine ตัวเดิมปิดตัวเอง
-                  text: engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวหลังว่าง 10 วินาที engine ตัวใหม่รับแชตที่เปิดอยู่ model ใหม่มีผลกับแชตใหม่
+                  text: >-
+                    engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวหลังว่าง 10 วินาที engine ตัวใหม่เปิดแชตที่แสดงอยู่ต่อ
+                    แต่แชตนี้อ่าน provider และ model จากบรรทัดแรกของ log ที่เขียนตอนสร้างแชต จึงยังใช้ model เดิม model ใหม่มีผลกับแชตใหม่
                   from: engine
                   to: engine
                   end: model ใหม่ใช้กับแชตใหม่
@@ -137,13 +162,15 @@ scenario:
 
 | เปลี่ยน | เก็บที่ | มีผลกับ | เมื่อไร |
 | --- | --- | --- | --- |
-| effort | event `effort` ใน log ของ session | แชตนี้ | รอบถัดไป |
+| effort | event `effort` ใน log ของ session | แชตนี้ | turn ถัดไป |
 | model | การตั้งค่า `gcode.model` ของ VS Code | แชตใหม่ | หลัง engine ตัวใหม่เริ่ม |
 
 สิ่งที่ควรสังเกต
 
-- **effort ระหว่าง turn ไม่มีผลกับ turn นั้น** engine บันทึก effort ข้าง turn ที่ทำงานทันที แต่ `drive` ทำงานกับสำเนาของ event
-  ที่อ่านตอนเริ่มรอบ การเรียก model ที่เหลือของ turn นั้นจึงใช้ effort เดิม ต่างจากโหมดที่มีผลกับ call ถัดไปทันที
+- **effort ระหว่าง turn ไม่มีผลกับ turn นั้น** engine เขียน event `effort` ต่อท้ายไฟล์ log ทันที แต่ `drive` (ฟังก์ชันที่เดิน turn)
+  ทำงานกับสำเนาของ event ที่อ่านจาก log ตอนเริ่ม turn และสำเนานั้นไม่ได้รับ event ใหม่นี้
+  การเรียก model ที่เหลือของ turn นั้นจึงใช้ effort เดิม turn ถัดไปอ่าน log ใหม่จึงได้ค่าใหม่
+  ต่างจากโหมด ซึ่ง engine ถือไว้ในหน่วยความจำและอ่านใหม่ทุกครั้งที่ใช้ จึงมีผลกับ call ถัดไปทันที
 - **ชื่อในช่องพิมพ์ไม่ตรงกับ model ของแชตที่เปิดอยู่** หลังเปลี่ยน model ปุ่มแสดงชื่อ model ใหม่
   แต่ turn ถัดไปของแชตที่เปิดอยู่ยังเรียก model เดิมที่บันทึกไว้ตอนสร้าง session ผู้ใช้ต้องเปิดแชตใหม่จึงได้ model ใหม่
 - **เปลี่ยน provider แชตเดิมยังใช้ provider เดิม** engine ตัวใหม่ได้ค่าของทุก provider ที่ผู้ใช้ตั้งไว้ ไม่ใช่แค่ provider ที่เลือกใหม่

@@ -14,9 +14,18 @@ scenario:
     - id: edit
       beat:
         title: Model แก้ `src/date.ts`
-        text: ก่อน turn นี้เรียก model ครั้งแรก Geno เก็บ checkpoint ของ workspace ไว้แล้ว Undo จะใช้ checkpoint นี้
+        text: >-
+          ก่อน turn นี้เรียก model ครั้งแรก Geno เก็บ checkpoint (ภาพถ่ายไฟล์ทั้ง workspace ใน git repo ซ่อนนอกโฟลเดอร์ของคุณ)
+          ไว้แล้ว Undo จะใช้ checkpoint นี้ การ์ดข้างล่างเป็นคำขอ `edit` จริงจากการรันอื่น ที่ model แก้ไฟล์ที่อ่านไว้แล้วแบบเดียวกัน
+          ดู `input` ที่ไฮไลต์ คือไฟล์ `src/money.ts` ข้อความเดิม (`old_str`) และข้อความใหม่ (`new_str`)
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A01-fix-failing-test/1/session.jsonl#seq=14
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       lane: tool
       at: executor
       do: >-
@@ -28,14 +37,13 @@ scenario:
     - use: edit-write-lands
       beat:
         title: VS Code บันทึกการแก้ลงดิสก์ทันที
-        text: ในโหมด review แบบ auto ไม่มี hunk ที่รอ Keep ใน editor จึงไม่มี CodeLens หรือแถบสีของการแก้
+        text: ในโหมด review แบบ auto การแก้ถูกบันทึกลงดิสก์ทันที ไม่มี hunk (ก้อนบรรทัดที่เปลี่ยน) ที่รอคุณกด Keep ใน editor จึงไม่มี CodeLens (ปุ่มเล็กเหนือบรรทัดในโค้ด) หรือแถบสีของการแก้
         from: engine
         to: panel
         sees:
           kind: step
           label: Edited date.ts
           status: done
-          note: +3 −1
 
     - id: not-tracked
       lane: editor
@@ -62,14 +70,14 @@ scenario:
     - id: row
       beat:
         title: ท้าย turn มีแถวพร้อม Undo
-        text: แชตรวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ก่อนการแก้ครั้งแรก
+        text: แชตรวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ที่เก็บก่อนการเรียก model ครั้งแรกของ turn
         from: panel
         to: you
         sees: แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุป model token และค่าใช้จ่าย
       lane: panel
       at: rail
       do: >-
-        `turnChangesOf` รวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ก่อนการแก้ครั้งแรกของ turn
+        `turnChangesOf` รวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ของการแก้แรกของ turn ซึ่งเก็บก่อนการเรียก model ครั้งแรกของ turn
         แผงวาดแถวการเปลี่ยนแปลงท้าย turn พร้อมปุ่ม Undo
       sees: >-
         แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุป model token และค่าใช้จ่าย
@@ -120,7 +128,7 @@ scenario:
               - lane: editor
                 beat:
                   title: VS Code ถามยืนยันเมื่อจำเป็น
-                  text: ถ้า turn หลังจากนี้แก้ไฟล์ไว้ด้วย การคืน checkpoint จะลบการแก้เหล่านั้น VS Code จึงถามก่อน turn นี้เป็น turn ล่าสุด จึงไม่ถาม
+                  text: ถ้า turn หลังจากนี้แก้ไฟล์ไว้ด้วย การคืน checkpoint จะลบการแก้เหล่านั้น VS Code จึงถามก่อน ในตัวอย่างนี้ turn นี้เป็น turn ล่าสุด จึงไม่มีคำถาม
                   from: panel
                   to: engine
                 at: vscode-ui
@@ -155,7 +163,7 @@ scenario:
               - lane: panel
                 beat:
                   title: แถวขึ้นว่า Undone
-                  text: VS Code โหลดไฟล์ที่เปลี่ยนบนดิสก์ใหม่
+                  text: engine บอกแผงว่า hunk ทั้งหมดของ turn นี้ถูก undo แล้ว แถวท้าย turn เปลี่ยนจาก Undo เป็น Undone และ VS Code โหลดไฟล์ที่เปลี่ยนบนดิสก์ใหม่
                   from: panel
                   to: you
                   sees: แถว "1 file changed · Undone" และแต่ละ hunk ในการ์ดขึ้นป้าย "Undone"
@@ -167,6 +175,9 @@ scenario:
                 ref: packages/extension/src/chat/render.ts#turnChangesRow
                 end: { turn: none }
 ---
+
+หน้านี้เล่าว่าหลัง Geno แก้ไฟล์ในโหมดค่าเริ่มต้น คุณดูการเปลี่ยนแปลงของ turn และย้อนทั้งหมดด้วยปุ่มเดียวได้อย่างไร
+และ Undo ย้อนอะไรบ้าง ซึ่งมากกว่าที่หลายคนคิด
 
 โหมด review แบบ `auto` ไม่ได้ให้ตรวจทีละ hunk มันบันทึกการแก้ทันที แล้วให้ปุ่มเดียวต่อ turn ที่ย้อนทั้ง turn
 ปุ่มนั้นไม่ได้ย้อนการแก้ทีละ hunk แต่คืน workspace เป็น checkpoint ที่ engine เก็บไว้ก่อนการเรียก model ครั้งแรกของ turn
@@ -181,7 +192,7 @@ scenario:
 - **Undo คืนทั้ง workspace ไม่ใช่เฉพาะไฟล์ของ Geno** `restore` checkout ทุกไฟล์ที่ต่างจาก checkpoint และลบไฟล์ที่เกิดหลัง checkpoint
   ถ้าผู้ใช้แก้ไฟล์เองหลัง turn เริ่ม การแก้นั้นก็หายไปด้วย modal ยืนยันขึ้นเฉพาะเมื่อ turn หลังจากนี้ของ Geno แก้ไฟล์
   ไม่ได้ขึ้นเพราะการแก้ของผู้ใช้ (คำสั่ง Undo All Changes of the Session ต่างออกไป มันเตือนเรื่องการแก้ของผู้ใช้เสมอ)
-- **Undo ใช้ไม่ได้ขณะ turn ทำงาน** engine ตอบว่า "stop the running turn before undoing the session" และ VS Code แสดงเป็น toast เตือน
+- **Undo ใช้ไม่ได้ขณะ turn ทำงาน** engine ตอบว่า "stop the running turn before undoing the session" และ VS Code แสดงเป็น toast เตือน (ข้อความแจ้งเตือนมุมขวาล่าง)
 - **ไฟล์ที่ turn สร้างถูกลบ** ไฟล์ที่ไม่มีใน checkpoint ถือว่าเกิดหลัง checkpoint ดู [สร้างไฟล์ใหม่](/scenarios/edit/create-file/)
 - **บทสนทนาไม่ถูกย้อน** Undo คืนเฉพาะไฟล์ ข้อความถัดไปที่ส่งมีโน้ตจาก event `restored` บอก model ว่าไฟล์ไหนถูกคืน
-  และให้อ่านไฟล์ใหม่ก่อนแก้ การย้อนบทสนทนาด้วยคือ Rewind บนข้อความ
+  และให้อ่านไฟล์ใหม่ก่อนแก้ การย้อนบทสนทนาด้วยคือ Rewind บนข้อความ ดู [ย้อนไฟล์และ/หรือบทสนทนา](/scenarios/sess/rewind/)

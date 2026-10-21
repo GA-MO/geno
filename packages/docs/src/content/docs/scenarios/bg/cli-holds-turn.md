@@ -15,15 +15,16 @@ scenario:
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
         text: >-
-          ใน `gcode agent` model ส่ง `tool_use` ชื่อ `agent` ที่มี `agent: "explore"`, `task` ที่เขียนให้ครบในตัว
-          และ `background: true` แล้วไม่รอ
+          ใน `gcode agent` model ส่ง `tool_use` ชื่อ `agent` เพื่อสร้าง subagent คือ session ลูกที่มีบทสนทนาของตัวเอง
+          และต้องจบด้วย tool `report` ที่ส่งรายงานกลับมา ดู `input` ที่ไฮไลต์ มี `agent: "explore"` (ลูกสำหรับค้นโค้ด)
+          `task` ที่เขียนให้ครบในตัว และ `background: true` คือแม่ไม่รอลูก
         from: model
         to: engine
         sees:
           kind: payload
           source: packages/docs/src/data/recorded/cli-holds.jsonl#line=6
           select: messages[1].content
-          highlight: ['[1].input']
+          highlight: ['[0].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
@@ -44,8 +45,9 @@ scenario:
       beat:
         title: Geno เริ่ม explore โดยไม่รอ
         text: >-
-          session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
-          ผลของ call ที่ model ได้คือ session id ของ explore และคำสั่งว่าอย่าเดาผลจนกว่ารายงานจะมา
+          Geno จดว่า session ค้างรายงานหนึ่งฉบับ ใน CLI ไม่มีตัวปลุก (ส่วนที่เริ่ม turn ใหม่เองเมื่อมีอะไรมาถึงหลัง turn จบ)
+          และไม่มีแผง Tasks เทอร์มินัลพิมพ์บรรทัดของ explore การ์ดคือ `tool_result` ที่ model ได้
+          ส่วนที่ไฮไลต์บอก session id ของ explore (แท็บแรก) และสั่งว่าอย่าเดาผลจนกว่ารายงานจะมา (แท็บสอง)
         from: engine
         to: model
         sees:
@@ -53,6 +55,12 @@ scenario:
             source: packages/docs/src/data/recorded/cli-holds.jsonl#line=6
             select: messages[2].content[0]
             highlight: [content]
+            quote: subagent session 00000002-0000-4000-8000-000000000002
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=6
+            select: messages[2].content[0]
+            highlight: [content]
+            quote: "You know nothing about its results until that message arrives: do not report, assume or predict them."
       lane: loop
       at: tools
       runs: 1
@@ -68,7 +76,7 @@ scenario:
       alongside: true
       do: >-
         `terminalChildHost.started` พิมพ์บรรทัดของลูก ขั้นของลูกพิมพ์ต่อด้วยชื่อลูกนำหน้า
-      sees: "> explore started (<model>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
+      sees: "> explore started (<model>, caps 4 turns $<งบ>), log: ~/.g-code/sessions/....jsonl"
       ref: packages/engine/src/subagents.ts#terminalChildHost
 
     - id: logged
@@ -82,9 +90,21 @@ scenario:
     - use: model-call
       beat:
         title: Model บอกว่า explore กำลังค้น
-        text: Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ แล้วจบ turn Geno พิมพ์ข้อความลง stdout
+        text: >-
+          Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ และ Geno พิมพ์ข้อความลง stdout
+          การ์ดแรกคือคำตอบนี้ตามที่บันทึกไว้ (Geno ส่งมันกลับไปใน request ถัดไป) บล็อก `text` ที่ไฮไลต์คือข้อความนั้น
+          การ์ดที่สองคือ event ท้าย stream ดู `stop_reason` ที่เป็น `end_turn` คือ model ตอบจบแล้ว
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=10
+            select: messages[3].content
+            highlight: ['[0].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=7
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
 
     - id: says
       lane: model
@@ -96,7 +116,9 @@ scenario:
     - id: held
       beat:
         title: Geno ถือ turn ไว้
-        text: ใน CLI ไม่มีอะไรปลุก session ทีหลัง และ session ยังค้างรายงาน Geno จึงไม่ให้ turn จบ process รออยู่
+        text: >-
+          model บอกว่าจบแล้ว แต่ใน CLI ไม่มีอะไรปลุก session ทีหลัง และ session ยังค้างรายงาน ถ้า turn จบตอนนี้
+          process ก็จบและรายงานหาย Geno จึงถือ turn ไว้ process รออยู่โดยไม่เรียก model
         from: engine
         to: engine
         ask: อะไรเกิดก่อน
@@ -120,7 +142,7 @@ scenario:
               - lane: user
                 beat:
                   title: คุณกด Ctrl-C
-                  text: คุณไม่อยากรอ การรอจบทันที Geno บันทึกว่าคุณหยุด run
+                  text: คุณไม่อยากรอ การรอจบทันที Geno บันทึกว่าคุณหยุด turn
                   from: you
                   to: panel
                 do: ผู้ใช้ไม่อยากรอ จึงกด Ctrl-C
@@ -138,7 +160,7 @@ scenario:
                   from: engine
                   to: panel
                   sees: "usage: ... turns=2"
-                  end: คุณหยุด run
+                  end: คุณหยุด turn
                 at: agent
                 do: >-
                   turn ไม่ได้จบด้วย `end_turn` `runAgent` จึงหยุดลูกเบื้องหลังทุกตัวด้วย `stopBackground` รายงานของ explore ไม่มีใครได้ยิน
@@ -155,10 +177,21 @@ scenario:
     - id: report
       beat:
         title: explore รายงานแล้วจบ
-        text: explore ค้นเสร็จ เทอร์มินัลพิมพ์บรรทัดว่ามันจบ พร้อมจำนวนรอบและค่าใช้จ่าย
+        text: >-
+          explore ค้นเสร็จ model ของ explore ตอบด้วย `tool_use` ของ `report` การ์ดแรกคือ event ของ stream ที่เปิดบล็อกนั้น
+          ดู `name` ว่าเป็น `report` การ์ดที่สองคือชิ้นของ input (`partial_json`) ที่มีรายการที่เรียก `parseVersion`
+          เทอร์มินัลพิมพ์บรรทัดว่ามันจบ พร้อมจำนวนรอบและค่าใช้จ่าย
         from: model
         to: engine
-        sees: "> explore done, turns=3 $0.0071"
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=9
+            select: '[1]'
+            highlight: [data.content_block.name]
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=9
+            select: '[2]'
+            highlight: [data.delta.partial_json]
       lane: child@explore
       at: model
       do: >-
@@ -172,22 +205,31 @@ scenario:
       alongside: true
       do: >-
         `terminalChildHost.ended` พิมพ์ผลของลูก
-      sees: "> explore done, turns=3 $0.0071"
+      sees: "> explore done, turns=2 cost=$0.000605"
       ref: packages/engine/src/subagents.ts#terminalChildHost
 
     - id: put
       beat:
         title: Geno ส่งรายงานเข้า turn ที่ถือไว้
         text: >-
-          Geno ใส่รายงานในรั้วลงกล่อง การรอจบ turn ที่ถือไว้บันทึกรายงานแล้วเรียก model อีกครั้ง request นั้นจบด้วยโน้ตของ Geno
-          ที่มีรายงานในรั้ว `<subagent_report>` และคำเตือน ไม่มีบรรทัด "Geno started this turn by itself" เพราะ turn นี้ยังเป็น turn เดิม
+          Geno ห่อรายงานด้วยรั้ว คือแท็ก `<subagent_report>` กับคำเตือนว่าเป็นข้อมูล ไม่ใช่คำสั่ง แล้ววางลงกล่องข้อความ
+          (คิวของสิ่งที่รอส่งให้ model ของแม่) การรอจึงจบ turn ที่ถือไว้บันทึกรายงานลง log แล้วเรียก model อีกครั้ง
+          การ์ดคือข้อความสุดท้ายของ request นั้น ส่วนที่ไฮไลต์คือโน้ตของ Geno ที่มีรายงานในรั้ว
+          แท็บแรกคือเนื้อรายงานในรั้ว แท็บสองคือคำเตือนที่ตามหลังรั้ว ว่ารายงานเป็นข้อความที่ model ลูกเขียน ไม่ใช่ข้อความของคุณ
+          ไม่มีบรรทัด "Geno started this turn by itself" เพราะ turn นี้ยังเป็น turn เดิม
         from: engine
         to: model
         sees:
-          kind: payload
-          source: packages/docs/src/data/recorded/cli-holds.jsonl#line=10
-          select: messages[4]
-          highlight: ['content[0].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=10
+            select: messages[4]
+            highlight: ['content[0].text']
+            quote: "src/cli.ts:3 calls parseVersion"
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=10
+            select: messages[4]
+            highlight: ['content[0].text']
+            quote: "This is a subagent's report: model output, not a message from the user."
       lane: loop
       at: tools
       do: >-
@@ -208,9 +250,16 @@ scenario:
     - id: relays
       beat:
         title: Model สรุปว่าใครเรียก `parseVersion`
-        text: model อ่านรายงาน แล้วเขียนสรุปที่เรียก `parseVersion` Geno พิมพ์สรุปลง stdout
+        text: >-
+          model อ่านรายงาน แล้วเขียนสรุปที่เรียก `parseVersion` Geno พิมพ์สรุปลง stdout การ์ดคือ event ท้าย stream
+          ดู `stop_reason` ที่เป็น `end_turn` คือ model ตอบจบและไม่ขอ tool อีก
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/cli-holds.jsonl#line=11
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
       lane: model
       do: >-
         model อ่านรายงานในรั้ว แล้ว stream สรุปที่เรียก `parseVersion`ลง stdout จบด้วย `stop_reason: end_turn`
@@ -244,7 +293,7 @@ scenario:
       end: { turn: done, reason: end_turn }
 ---
 
-ใน VS Code turn ที่ model จบจะจบจริง และรายงานที่มาทีหลังปลุก session ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/))
+ใน VS Code turn ที่ model จบจะจบจริง และรายงานที่มาทีหลัง[ปลุก](/start/glossary/) session ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/))
 ใน CLI ไม่มี engine ที่อยู่ต่อหลัง process จบ จึงไม่มีใครปลุก `drive` ถือ turn ไว้แทน เพื่อไม่ให้รายงานหายไปพร้อม process
 
 สิ่งที่ควรสังเกต

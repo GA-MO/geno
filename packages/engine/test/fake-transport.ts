@@ -89,13 +89,24 @@ let loads = 0;
 /** A tool_search call that loads deferred tools, for a turn before their first call. */
 export const loadTools = (...names: string[]): FakeToolUse => ({ id: `tu_load_${loads++}`, name: 'tool_search', input: { select: names } });
 
+/** A text block at `index` that streams `text` in pieces of `chunk` characters; none for empty text, which a provider never sends. */
+const textBlock = (index: number, text: string, chunk = text.length): SseEvent[] =>
+  text === ''
+    ? []
+    : [
+        { type: 'content_block_start', index, content_block: { type: 'text', text: '', citations: null } },
+        ...Array.from({ length: Math.ceil(text.length / chunk) }, (_, i) => ({ type: 'content_block_delta', index, delta: { type: 'text_delta', text: text.slice(i * chunk, (i + 1) * chunk) } })),
+        { type: 'content_block_stop', index },
+      ];
+
 /**
  * A Messages stream that says `text`, then asks for each tool use with its input streamed as JSON fragments.
  * `cutOff` stops at `max_tokens` halfway through the last tool use's input, as a provider does at the output limit.
  */
 export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage, opts: { cutOff?: true } = {}): Reply {
+  const said = textBlock(0, text);
   const blocks = uses.flatMap((use, i): SseEvent[] => {
-    const index = i + 1;
+    const index = i + (said.length === 0 ? 0 : 1);
     const json = use.rawJson ?? JSON.stringify(use.input);
     const half = Math.ceil(json.length / 2);
     const cut = opts.cutOff === true && i === uses.length - 1;
@@ -109,9 +120,7 @@ export function toolCall(text: string, uses: readonly FakeToolUse[], usage: Cach
   return {
     events: [
       messageStart(usage),
-      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '', citations: null } },
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
-      { type: 'content_block_stop', index: 0 },
+      ...said,
       ...blocks,
       {
         type: 'message_delta',
@@ -126,13 +135,24 @@ export function toolCall(text: string, uses: readonly FakeToolUse[], usage: Cach
 /** A subagent's last turn: its report call, which ends its run. */
 export const handBack = (message: string, usage: CacheUsage, id = 'tu_report'): Reply => toolCall('', [{ id, name: 'report', input: { message } }], usage);
 
-/** A hand-built Messages stream: a thinking block, then the text in chunks of `chunk` characters. */
-export function answer(text: string, usage: CacheUsage, opts: { stopReason?: string; chunk?: number } = {}): Reply {
-  const chunk = opts.chunk ?? 8;
-  const deltas: SseEvent[] = [];
-  for (let i = 0; i < text.length; i += chunk) {
-    deltas.push({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: text.slice(i, i + chunk) } });
-  }
+/** A thinking block's text and signature. */
+export type Thinking = { readonly thought: string; readonly signature: string };
+
+/**
+ * A hand-built Messages stream: a thinking block, then the text, if any, in chunks of `chunk` characters. `thinking`
+ * sets the thinking block, or leaves it out with `null`; by default it holds a placeholder that names the text's length.
+ */
+export function answer(text: string, usage: CacheUsage, opts: { stopReason?: string; chunk?: number; thinking?: Thinking | null } = {}): Reply {
+  const thinking = opts.thinking === undefined ? { thought: `pondering ${text.length}`, signature: `sig-${text.length}` } : opts.thinking;
+  const thought: SseEvent[] =
+    thinking === null
+      ? []
+      : [
+          { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: thinking.thought } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: thinking.signature } },
+          { type: 'content_block_stop', index: 0 },
+        ];
   return {
     events: [
       {
@@ -154,13 +174,8 @@ export function answer(text: string, usage: CacheUsage, opts: { stopReason?: str
           },
         },
       },
-      { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
-      { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: `pondering ${text.length}` } },
-      { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: `sig-${text.length}` } },
-      { type: 'content_block_stop', index: 0 },
-      { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '', citations: null } },
-      ...deltas,
-      { type: 'content_block_stop', index: 1 },
+      ...thought,
+      ...textBlock(thought.length === 0 ? 0 : 1, text, opts.chunk ?? 8),
       {
         type: 'message_delta',
         delta: { stop_reason: opts.stopReason ?? 'end_turn', stop_sequence: null, stop_details: null },

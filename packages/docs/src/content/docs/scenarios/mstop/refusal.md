@@ -4,7 +4,7 @@ description: model จบคำตอบด้วย stop_reason refusal gateway
 scenario:
   surface: vscode
   given:
-    - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังเรียก model
+    - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังเรียก model เป็นครั้งแรกของ turn
   trigger: >-
     ผู้ให้บริการจบคำตอบด้วย `stop_reason: refusal` (หรือ `finish_reason: content_filter` บน wire แบบ OpenAI)
   covers: [mstop.refusal]
@@ -15,9 +15,16 @@ scenario:
       beat:
         title: "Model ปฏิเสธที่จะตอบต่อ"
         text: >-
-          model ปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วยสัญญาณ refusal
+          model ปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วย `stop_reason` เป็น `refusal`
+          (`stop_reason` คือ field ท้ายคำตอบที่บอกว่า model หยุดเพราะอะไร) ข้อความที่ model เขียนมาก่อนปฏิเสธขึ้นในแชตตามปกติ
+          การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ในการบันทึกนั้น model เขียนข้อความสั้นๆ ว่าช่วยไม่ได้ก่อน การ์ดคือท้าย stream ดู `stop_reason` ที่ไฮไลต์ไว้ เป็น `refusal`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/refusal.jsonl#line=3
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
       do: >-
         model ปฏิเสธที่จะตอบต่อ บางครั้งมีข้อความอธิบายสั้นๆ หรือ `stop_details.explanation` มาด้วย
         แล้วจบด้วย `stop_reason: refusal`
@@ -31,7 +38,8 @@ scenario:
       beat:
         title: "Geno แปลงการปฏิเสธเป็น error"
         text: >-
-          Geno ไม่ถือว่านี่เป็นคำตอบ แต่บันทึกเป็น error ชนิด refusal ข้อความที่ model เขียนมาก่อนปฏิเสธจึงไม่อยู่ในบันทึก
+          Geno ไม่บันทึกคำตอบของ model แต่บันทึก error ชนิด refusal แทน ข้อความของ error คือคำอธิบายของผู้ให้บริการ
+          ถ้าไม่มีก็ข้อความที่ model เขียน ถ้าไม่มีอีกก็ "the model refused"
         from: engine
         to: engine
       do: >-
@@ -43,7 +51,8 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `callModel` บันทึก event `error` ชนิด `refusal` ไม่มี event `assistant` ข้อความที่ stream มาก่อนจึงไม่อยู่ใน log
+        `callModel` บันทึก event `error` ชนิด `refusal` ไม่มี event `assistant` ข้อความที่ stream มาก่อนจึงไม่อยู่ใน log เป็นคำตอบ
+        (ยกเว้นเมื่อมันกลายเป็นข้อความของ error เพราะผู้ให้บริการไม่ได้ให้คำอธิบาย)
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message, ...timing });\""
       emits: [error]
 
@@ -75,11 +84,11 @@ scenario:
       beat:
         title: "แชตขึ้นบล็อก error สีแดง"
         text: >-
-          แผงวาดบล็อก error ด้วยคำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ใช้ข้อความที่ model เขียน ถ้าไม่มีอีกก็ขึ้นข้อความสั้นๆ
-          ด้านล่าง
+          แผงวาดบล็อก error ด้วยข้อความของ error นั้น การ์ดข้างล่างคือบล็อกของการบันทึกนี้ ผู้ให้บริการไม่ได้ให้คำอธิบายมา
+          บล็อกจึงขึ้นข้อความที่ model เขียน ถ้าไม่มีทั้งคำอธิบายและข้อความของ model บล็อกจะขึ้นข้อความตั้งต้น "The model refused"
         from: panel
         to: you
-        sees: { kind: notice, text: The model refused, tone: error }
+        sees: { kind: notice, text: "I can’t help remove a license check.", tone: error }
       alongside: true
       do: >-
         `errorBlock` วาดบล็อก error สีแดงด้วยข้อความของ refusal ที่ขึ้นต้นด้วยตัวพิมพ์ใหญ่
@@ -92,7 +101,8 @@ scenario:
       beat:
         title: "Geno จบ turn"
         text: >-
-          Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn Stop hook ไม่ทำงาน เพราะ model ไม่ได้จบด้วยคำตอบ
+          Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn ถ้าคุณตั้ง Stop hook ไว้ (คำสั่ง shell ที่ Geno รันตอน model
+          จะจบ turn) มันไม่ทำงานในทางนี้ เพราะ model ไม่ได้จบด้วยคำตอบ
         from: engine
         to: engine
       do: >-
@@ -107,7 +117,8 @@ scenario:
       beat:
         title: "งานใน Tasks จบเป็น failed"
         text: >-
-          engine บอก VS Code ว่า turn จบเพราะ model ปฏิเสธ งานในแผง Tasks จบแบบ failed และ session พร้อมรับข้อความถัดไป
+          engine บอก VS Code ว่า turn จบเพราะ model ปฏิเสธ แผง Tasks (รายการงานของทุกแชตพร้อมสถานะ) ขึ้นงานนี้ว่า failed
+          และ session พร้อมรับข้อความถัดไป
         from: engine
         to: panel
       do: >-
@@ -139,19 +150,21 @@ scenario:
         sees: { kind: composer, state: idle }
       do: >-
         `missingReply` เห็นบล็อก error ที่ไม่ใช่ขีดจำกัด จึงไม่แสดงประกาศ "Geno stopped without a reply" และไม่มีปุ่ม Continue หรือ Retry
-      sees: หัวข้อ "failed after 4s" บล็อก error ค้างอยู่ และท้าย turn ขึ้น "Failed" ปุ่ม Send กลับมา
+      sees: หัวข้อ "failed after ..." บล็อก error ค้างอยู่ และท้าย turn ขึ้น "Failed" ปุ่ม Send กลับมา
       ref: packages/extension/src/chat/rail.ts#missingReply
       end: { turn: failed, reason: refusal }
 ---
 
 refusal เป็นการหยุดเพียงแบบเดียวของ model ที่ Geno ตัด prompt ทิ้ง
 `KEEPS_PENDING_PROMPT.refusal` เป็น `false` เมื่อ `replayMessages` ประกอบคำขอครั้งถัดไป prompt ที่ถูกปฏิเสธจะไม่ถูกส่งซ้ำ
-ข้อความถัดไปของผู้ใช้จึงเริ่มใหม่ ไม่ได้ต่อท้าย prompt เดิมเหมือนหลัง Stop หรือหลังชนขีดจำกัด
+ข้อความถัดไปของผู้ใช้จึงเริ่มใหม่ ไม่ได้ต่อท้าย prompt เดิมเหมือนหลัง Stop
+ถ้า model ปฏิเสธหลังจากตอบไปแล้วใน turn เดียวกัน prompt ที่พิมพ์อยู่ในประวัติแล้ว สิ่งที่ถูกตัดคือข้อความที่ยังรอคำตอบหลังคำตอบล่าสุดของ model เช่น prompt ผลของ tool ยังอยู่
 
 สิ่งที่ควรสังเกต
 
-- **ข้อความที่ stream มาแล้วหายเมื่อ reload** ถ้า model เขียนอะไรก่อนปฏิเสธ แผงเห็นข้อความนั้นทันที
-  แต่ log มีแค่ error `refusal` การเปิดแชตนี้ใหม่จึงเห็นแค่บล็อก error
+- **ข้อความที่ stream มาแล้วไม่อยู่เป็นคำตอบเมื่อ reload** ถ้า model เขียนอะไรก่อนปฏิเสธ แผงเห็นข้อความนั้นทันที
+  แต่ log มีแค่ error `refusal` การเปิดแชตนี้ใหม่จึงเห็นแค่บล็อก error ถ้าผู้ให้บริการให้คำอธิบาย ข้อความของ model จะหายไป
+  ถ้าไม่ให้ ข้อความนั้นกลายเป็นเหตุผลในบล็อก error
 - **wire แบบ OpenAI ใช้ทางเดียวกัน** `chatStream` แปลง `finish_reason: content_filter` เป็น `refusal`
   ผู้ให้บริการแบบ OpenAI-compatible จึงได้ผลเหมือนกันทุกขั้น
 - **ไม่มีปุ่ม Continue หรือ Retry** ประกาศ "Geno stopped without a reply" ไม่แสดงเมื่อ turn มีบล็อก error ที่ไม่ใช่ขีดจำกัด

@@ -17,10 +17,18 @@ scenario:
       beat:
         title: "Model ขอรัน `pnpm add zod`"
         text: >-
-          model ตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
-          Geno จดคำขอนี้ไว้ในบันทึกของ turn
+          model จบคำตอบด้วย `stop_reason: tool_use` แปลว่ายังไม่จบ มันขอให้ Geno รันคำสั่ง `pnpm add zod`
+          บนเครื่องของคุณก่อน Geno จดคำขอนี้ไว้ใน session log การ์ดข้างล่างเป็นคำตอบจริงจากการรันอื่นในโหมด Ask
+          ที่ model ขอรัน `rm -rf build` ซึ่งต้องขออนุญาตแบบเดียวกัน ดู `input` ที่ไฮไลต์ในบล็อก `tool_use`
+          ซึ่งเก็บคำสั่งที่ model อยากรัน
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B01-ask-allow/1/session-6107e07a-1ae7-45a7-80c5-9349b64dbbf9.jsonl#seq=10
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
       do: >-
         model ขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -51,7 +59,8 @@ scenario:
       beat:
         title: "Geno ตรวจคำสั่งกับกฎของคุณ"
         text: >-
-          ก่อนรันอะไร Geno เทียบคำสั่งกับกฎของ workspace และรายการคำสั่งปลอดภัย
+          ก่อนรันอะไร Geno เทียบคำสั่งกับกฎของ workspace (กฎที่คุณตั้งว่าคำสั่งไหนอนุญาต ถาม หรือห้าม)
+          และ safe list (รายการคำสั่งที่ Geno ถือว่าไม่เสี่ยงและรันได้โดยไม่ถาม)
           `pnpm add zod` ไม่อยู่ในทั้งสองที่ และโหมด Ask บอกว่าเรื่องแบบนี้ต้องถามคุณ
         from: engine
         to: engine
@@ -67,12 +76,14 @@ scenario:
       beat:
         title: "Geno หยุด turn แล้วถามคุณ"
         text: >-
-          ไม่มีกฎหรือ hook ไหนตัดสินแทนได้ Geno จึงหยุด turn ไว้ตรงนี้และส่งคำถามไปที่แผงแชต
+          ไม่มีกฎ และไม่มี hook (คำสั่ง shell ที่คุณตั้งให้ตอบคำถามสิทธิ์แทนคุณได้) ตัดสินแทน
+          Geno จึงหยุด turn ไว้ตรงนี้และส่งคำถามไปที่แผงแชต
           งานในแผง Tasks ขึ้นว่ารอคุณ และถ้าหน้าต่างไม่ได้โฟกัสอยู่ ระบบจะแจ้งเตือน
         from: engine
         to: panel
       do: >-
-        `settle` ไม่ปฏิเสธเอง (ไม่ใช่ deny) และไม่ส่งให้ classifier (ไม่ใช่โหมด Auto)
+        `settle` ไม่ปฏิเสธเอง (ไม่ใช่ deny) และไม่ส่งให้ classifier เพราะคำตัดสินคือ `ask` ไม่ใช่ `classify`
+        (ในโหมด Auto กฎ `unlisted` ให้ `allow` คำสั่งนี้จึงรันใน sandbox เลยโดยไม่ถึง `settle`)
         ไม่มี PermissionRequest hook ตอบแทน จึงส่งคำถามต่อให้ผู้ใช้ผ่าน `approval.approve`
       ref: packages/engine/src/tools/agent.ts#settle
 
@@ -194,7 +205,7 @@ scenario:
                 beat:
                   title: "คุณกด Deny"
                   text: >-
-                    แผงแชตบอก Geno ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน และไม่มีข้อความอะไรส่งต่อให้ model
+                    แผงแชตบอก Geno ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน และไม่มีข้อความจากคุณส่งต่อให้ model
                   from: you
                   to: panel
                 do: >-
@@ -221,6 +232,8 @@ scenario:
                   title: "Geno หยุดส่วนที่เหลือของ turn"
                   text: >-
                     คำปฏิเสธเปล่าๆ แปลว่าคุณอยากเป็นคนพูดต่อ Geno จึงไม่เริ่มคำสั่งที่เหลือใน turn นี้
+                    ผลของคำสั่งที่ Geno บันทึกบอกว่าคุณปฏิเสธ และให้ model หยุดรอคุณ
+                    model ได้อ่านผลนี้เมื่อคุณสั่งให้ทำต่อ
                   from: engine
                   to: engine
                 do: >-
@@ -313,7 +326,7 @@ scenario:
                     คำสั่งไม่ได้รัน แต่ต่างจาก Deny ตรงที่ turn ไม่จบ Geno เก็บข้อความของคุณไว้ส่งให้ model
                     และคำสั่งอื่นใน turn เดียวกันยังรันต่อได้
                   from: engine
-                  to: model
+                  to: engine
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` และใส่ข้อความของผู้ใช้ไว้ใน `_meta` ใต้คีย์ `PERMISSION_COMMENT_META`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -368,10 +381,18 @@ scenario:
                 beat:
                   title: "Model อ่านข้อความของคุณ"
                   text: >-
-                    Geno เรียก model ต่อ ผลของคำสั่งบอกว่าไม่ได้รัน ตามด้วยข้อความของคุณ
-                    model จะหาทางอื่นตามที่คุณบอก
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ model จะหาทางอื่นตามที่คุณบอก
+                    การ์ดข้างล่างเป็นคำขอจริงจากการรันอื่นที่คุณปฏิเสธ `rm -rf dist` แล้วพิมพ์ให้ใช้ `mv` แทน
+                    ดูสองบล็อกที่ไฮไลต์ บล็อกแรกคือ `tool_use` ที่ model ขอรัน `rm -rf dist`
+                    บล็อกที่สองคือ `tool_result` ที่มี `is_error: true` บอกว่าคุณปฏิเสธ และมีข้อความของคุณต่อท้ายในบล็อกเดียวกัน
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/B-panel/1/wire.jsonl.gz#line=31
+                    select: messages
+                    collapse: ['[0]', '[1]', '[2]']
+                    highlight: ['[3].content[1]', '[4].content[0]']
                   end: Model หาทางอื่น
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดและไม่มีการปฏิเสธเปล่าจากผู้ใช้ จึงตัดสิน `call-model`
@@ -414,7 +435,7 @@ scenario:
                 beat:
                   title: "Geno ยกเลิกคำสั่งที่รออยู่"
                   text: >-
-                    Geno ยกเลิก turn ทันที คำสั่งไม่เคยเริ่มรัน แต่ข้อความที่ model จะได้อ่านบอกว่ามันอาจรันไปบางส่วน
+                    Geno ยกเลิก turn ทันที คำสั่งไม่เคยเริ่มรัน แต่ข้อความที่ model มักจะได้อ่านเมื่อคุณสั่งให้ทำต่อบอกว่ามันอาจรันไปบางส่วน (ขึ้นกับจังหวะ ดูท้ายหน้า)
                     ซึ่งไม่ตรงกับที่เกิดขึ้น
                   from: engine
                   to: engine
@@ -474,7 +495,8 @@ scenario:
       beat:
         title: "คำสั่งรันบนเครื่องของคุณ"
         text: >-
-          Geno รันคำสั่งใน sandbox การอนุญาตของคุณไม่ได้ปิด sandbox
+          Geno รันคำสั่งใน sandbox (กรอบของระบบปฏิบัติการที่ให้คำสั่งเขียนไฟล์ได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว
+          และต่อเครือข่ายได้แค่ host ที่อนุญาต) การอนุญาตของคุณไม่ได้ปิด sandbox
           ผลที่ได้ติดบันทึกไว้ว่าใครเป็นคนอนุญาต
         from: engine
         to: machine
@@ -497,23 +519,52 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: "Geno ส่งผลลัพธ์ให้ model"
+        title: "Geno เรียก model อีกครั้ง"
         text: >-
-          Geno เรียก model อีกรอบ คราวนี้ในคำขอมีผลของ `pnpm add zod` ให้ model อ่านด้วย
-          turn ยังเดินต่อจน model ตอบคุณ
+          Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ข้อความสุดท้ายของคำขอคือผลของคำสั่ง
+          model จึงรู้ว่าคำสั่งรันแล้ว การ์ดข้างล่างเป็นข้อความนั้นจากคำขอจริงของการรันอื่นในโหมด Ask
+          ที่คุณกด Allow ให้ `rm -rf build` ดูบล็อก `tool_result` ที่ไฮไลต์ `ls` ตอบว่าไม่มีโฟลเดอร์ `build` แล้ว
         from: engine
         to: model
-        end: Model อ่านผลลัพธ์
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B-panel/1/wire.jsonl.gz#line=17
+          select: messages[6]
+          highlight: ['content[0]']
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model จะได้อ่านผลของคำสั่งในคำขอถัดไป
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
-      end: { turn: continues, reason: call-model }
+
+    - id: reply
+      lane: model
+      beat:
+        title: "Model ตอบหลังเห็นผล"
+        text: >-
+          model ตอบหลังได้คำขอนี้เท่านั้น ในการรันจริงนี้ model เห็นว่าโฟลเดอร์หายไปแล้ว
+          จึงขอรัน `bash` อีกตัวเพื่อดู `git status` ให้แน่ใจ ดู `input` ที่ไฮไลต์ turn ยังเดินต่อจน model ตอบคุณ
+        from: model
+        to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/B01-ask-allow/1/session-6107e07a-1ae7-45a7-80c5-9349b64dbbf9.jsonl#seq=13
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[1].input']
+        end: Model อ่านผลลัพธ์
+      do: >-
+        model อ่าน `tool_result` ของ `bash` แล้วตอบด้วยคำขอใหม่ ในการรันนี้คือ `bash` อีกตัว
+        และจบคำตอบด้วย `stop_reason: tool_use`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [tool_use]
+      end: { turn: continues, reason: run-tools }
 ---
 
-การ์ดนี้คือจุดเดียวในโหมด Ask ที่ Geno หยุดรอคนระหว่างที่ turn ยังไม่จบ
-ทางแยกทั้งห้าต่างกันที่ผลต่อ turn
+การ์ดขออนุญาตเป็นจุดหนึ่งที่ Geno หยุดรอคนระหว่างที่ turn ยังไม่จบ
+จุดอื่นคือ tool `ask_user` ที่ถามคุณเป็นฟอร์ม `remember` ที่ขอให้คุณอนุมัติโน้ต และการ์ดอนุมัติงานตั้งเวลา
+ทางเลือกทั้งห้า คือสี่ปุ่มบนการ์ดกับการกด Stop ต่างกันที่ผลต่อ turn
+คำอย่าง permission, hook และ sandbox ดูความหมายได้ที่ [คำศัพท์](/start/glossary/)
 
 | ปุ่ม | ผลต่อคำสั่ง | ผลต่อ turn |
 | --- | --- | --- |

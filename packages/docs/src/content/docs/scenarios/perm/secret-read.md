@@ -16,9 +16,17 @@ scenario:
       beat:
         title: "Model ขออ่าน .env"
         text: >-
-          model ขอ `read` ไฟล์ `.env` ไม่มีกฎของ workspace ตรงกับ path นี้ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          model ขอ `read` ไฟล์ `.env` ซึ่งมักเก็บรหัสอย่าง API key ไม่มีกฎของ workspace ตรงกับ path นี้ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          การ์ดข้างล่างเป็นคำตอบจริงของ model ในการรันโหมด Auto ที่ใช้ทั้งหน้านี้ model ขออ่าน `.env` คู่กับ `package.json`
+          ดู `input` ที่ไฮไลต์
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=14
+          select: content
+          collapse: ['[0].thinking']
+          highlight: ['[2].input']
       do: >-
         model ขอ `read` ไฟล์ `.env` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -41,7 +49,8 @@ scenario:
       beat:
         title: "read ตรวจว่าเป็นไฟล์ลับก่อนเปิด"
         text: >-
-          การอ่านไฟล์ที่ดูเป็นไฟล์ลับรันตัวเดียวในชุด เพราะอาจต้องถาม read ตรวจทั้งชื่อที่ขอและไฟล์ที่ชื่อนั้นชี้ไปจริง
+          model ขอหลาย call ในคำตอบเดียวได้ แต่การอ่านไฟล์ที่ดูเป็นไฟล์ลับรันตัวเดียว ไม่รันพร้อม call อื่น เพราะอาจต้องถามคุณ
+          `read` ตรวจทั้งชื่อที่ขอและไฟล์ที่ชื่อนั้นชี้ไปจริง
           ลิงก์ที่ชี้ไป `.env` จึงผ่านด่านเดียวกัน
         from: engine
         to: engine
@@ -57,8 +66,10 @@ scenario:
       beat:
         title: "Geno ใช้กฎของไฟล์ลับ"
         text: >-
-          กฎของไฟล์เก็บรหัสตัดสินตามโหมด และ hook ที่อนุญาต call นี้ข้ามด่านนี้ไม่ได้ บันทึกจาก run จริงในโหมด Auto
-          ด้านล่างเป็นตอนที่ classifier ปฏิเสธ ลองเลือกโหมด
+          กฎของไฟล์เก็บรหัสตัดสินตามโหมด PreToolUse hook (คำสั่ง shell ที่รันก่อน tool และตอบว่าอนุญาตได้) ที่อนุญาต call นี้ไว้แล้วข้ามด่านนี้ไม่ได้
+          แต่ถ้าคำตัดสินคือถาม PermissionRequest hook (hook ที่ตอบคำถามขออนุญาตแทนคุณ) ยังตอบแทนคุณได้
+          การ์ดเป็นบันทึกจาก run จริงในโหมด Auto ตอนที่ classifier (การเรียก model แยกที่ตัดสินแทนคุณในโหมด Auto) ปฏิเสธ
+          ดู `rule` ที่เป็น `secret-path` และ `reason` ลองเลือกโหมด
         from: engine
         to: engine
         ask: "โหมดไหน"
@@ -156,7 +167,7 @@ scenario:
                           beat:
                             title: "คุณกด Deny"
                             text: >-
-                              ไฟล์ไม่ถูกเปิด turn จบรอคุณเหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อ
+                              ไฟล์ไม่ถูกเปิด และ turn จบรอคุณ เหมือนกด Deny ให้คำสั่งในโหมด Ask
                             from: you
                             to: panel
                             end: "คุณปฏิเสธ turn จบ"
@@ -186,13 +197,15 @@ scenario:
                 beat:
                   title: "โหมด Auto ให้ classifier ตัดสิน"
                   text: >-
-                    classifier ได้บริบทของ turn แล้วอนุญาต เช่นงานต้องรู้ชื่อตัวแปรใน `.env` ถ้ามันปฏิเสธหรือไม่แน่ใจ
-                    ทางเป็นแบบเดียวกับคำสั่งในโหมด Auto
+                    classifier ได้บริบทของ turn แล้วอนุญาต เช่นงานต้องรู้ชื่อตัวแปรใน `.env` ถ้ามันปฏิเสธหรือไม่แน่ใจ `read` ไม่เปิดไฟล์
+                    เหตุผลกลับไปหา model และ turn ทำต่อโดยไม่มีการ์ด การ์ดถามคุณขึ้นเมื่อ Auto ปฏิเสธมาแล้วติดกัน 3 ครั้งหรือรวม 20 ครั้งใน session
+                    หรือเมื่อ classifier ใช้ไม่ได้เลย
                   from: engine
                   to: engine
                 do: >-
                   `settle` ส่งคำขอให้ classifier พร้อมบริบทของ turn classifier ตอบว่าอนุญาต (เช่น งานต้องรู้ชื่อตัวแปรใน `.env`)
-                  ถ้า classifier ปฏิเสธหรือไม่แน่ใจ ทางจะเป็นแบบเดียวกับคำสั่งในโหมด Auto
+                  ถ้า classifier ปฏิเสธหรือไม่แน่ใจ `settle` คืน `decidedBy: classifier, verdict: deny` และ `askSecret` โยน `ToolDenied`
+                  ทางเดียวกับคำสั่งในโหมด Auto รวมทั้งการนับ block ด้วย `autoBlocksOf`
                 ref: packages/engine/src/classifier.ts#commandClassifier
                 emits: [classifier]
                 phase: running-tools
@@ -220,10 +233,21 @@ scenario:
                 beat:
                   title: "Model ทำต่อโดยไม่ได้อ่านไฟล์"
                   text: >-
-                    Geno เรียก model ต่อ model ทำแผนต่อโดยไม่ได้อ่าน `.env`
+                    Geno ส่งบทสนทนาทั้งหมดไปให้ model อีกครั้งในคำขอใหม่ ท้ายคำขอคือคำขออ่าน `.env` และผลปฏิเสธ
+                    model ทำแผนต่อโดยไม่ได้อ่าน `.env` การ์ดข้างล่างเป็นข้อความท้ายสุดของคำขอจริงจากการรันโหมด Auto
+                    เดียวกับการ์ดก่อนหน้า บทสนทนาก่อนหน้ายาวเกินกว่าจะแสดงทั้งหมด ในรอบนั้น classifier เป็นผู้ปฏิเสธ
+                    ไม่ใช่โหมด Plan แต่ model ได้ผลปฏิเสธที่บอกว่าอย่าลองซ้ำแบบเดียวกัน ผลชิ้นที่สองคือคำปฏิเสธนั้น
+                    engine วันนี้เขียนคำปฏิเสธของ classifier ต่างจากการ์ด เป็น "Auto mode's safety classifier refused ..." ตามด้วยคำแนะนำให้หาทางอื่นหรือหยุดถามคุณ
+                    ส่วนคำปฏิเสธของโหมด Plan ยังจบด้วย "Do not retry it; find another way." แบบในการ์ด
                   from: engine
                   to: model
                   end: "Plan ปฏิเสธ turn ทำต่อ"
+                  sees:
+                    kind: payload
+                    source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=18
+                    select: messages[-1]
+                    highlight: ['content[1]']
+                    quote: Do not retry it; find another way.
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model`
                 ref: packages/core/src/loop.ts#loopStep
@@ -256,8 +280,14 @@ scenario:
         title: "ค่าในไฟล์ไปถึง model"
         text: >-
           Geno เรียก model ต่อ ค่าใน `.env` อยู่ในบันทึกของ session และในคำขอถัดไปที่ส่งให้ผู้ให้บริการ
+          การ์ดข้างล่างเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ค่าในไฟล์เป็นค่าปลอม การ์ดคือข้อความท้ายของคำขอถัดไป ดู `content` ทุกค่าใน `.env` ไปครบ ไม่มีอะไรถูกปิดบัง
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/perm-secret-read.jsonl#line=5
+          select: messages[-1].content
+          highlight: ['[0].content']
         end: "อ่านไฟล์ลับแล้ว turn ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ค่าในไฟล์อยู่ใน log และในคำขอถัดไป
@@ -268,13 +298,14 @@ scenario:
 ---
 
 ด่านไฟล์ลับอยู่ใน `read` เอง ไม่ใช่ในกฎของคำสั่ง จึงทำงานแม้ path ชี้ผ่านลิงก์ และแม้ PreToolUse hook อนุญาต call ไว้แล้ว
+คำอย่าง Ask, Auto, Plan, non-interactive และ hook ดูความหมายได้ที่ [คำศัพท์](/start/glossary/)
 
 | โหมด | `read .env` |
 | --- | --- |
 | Ask | ถามผู้ใช้ ไม่มีปุ่มอนุญาตถาวร |
-| Auto | classifier ตัดสิน |
+| Auto | classifier ตัดสิน ไม่อนุญาตก็ปฏิเสธ (การ์ดขึ้นหลัง block ติดกัน 3 ครั้งหรือรวม 20 ครั้ง) |
 | Plan | ปฏิเสธ |
-| ไม่มีคนดู | ปฏิเสธ |
+| ไม่มีคนดู (ไม่มีใครตอบการ์ด เช่น `gcode agent --non-interactive`) | ปฏิเสธ |
 
 สิ่งที่ควรสังเกต
 

@@ -15,7 +15,9 @@ scenario:
       beat:
         title: Model ขอ fork subagent ชื่อ plan
         text: >-
-          schema ของ tool `agent` มี `fork` ที่บอกว่า "Start from a copy of this conversation" (แท็บแรก)
+          subagent (ลูก) คือ session ใหม่ที่ model ของแม่เปิดให้ทำงานย่อยแล้วส่งรายงานกลับ ปกติลูกเริ่มจากหน้าว่าง
+          plan คือ subagent ในตัว Geno ที่อ่านโค้ดแล้วเขียนแผน โดยไม่แก้ไฟล์
+          schema ของ tool `agent` มี `fork` ที่บอกว่า "Start from a copy of this conversation" (แท็บแรก ดูที่ไฮไลต์)
           model ส่ง `tool_use` ที่มี `agent: "plan"`, `fork: true` และ `task` สั้นๆ ที่อ้าง "the change we just discussed" (แท็บสอง)
           task สั้นได้เพราะลูกแบบ fork เห็นบทสนทนานี้ทั้งหมด
         from: model
@@ -28,7 +30,7 @@ scenario:
           - kind: payload
             source: packages/docs/src/data/recorded/fork.jsonl#line=10
             select: messages[3].content
-            highlight: ['[1].input']
+            highlight: ['[0].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "plan"`, `fork: true` และ `task` สั้นๆ ว่า "Plan the change we just discussed"
@@ -49,7 +51,9 @@ scenario:
     - id: launch
       beat:
         title: Geno เปิด plan พร้อมงบของมัน
-        text: plan อ่านอย่างเดียว จึงรันพร้อมลูกอ่านอย่างเดียวตัวอื่นได้ งบของมันไม่เกิน 12 รอบและ $0.05 และไม่เกินงบที่รอบของแม่ยังเหลือ
+        text: >-
+          plan อ่านอย่างเดียว จึงรันพร้อมลูกอ่านอย่างเดียวตัวอื่นได้ งบของมันไม่เกิน 12 รอบ (เรียก model 12 ครั้ง) และ $0.05
+          และไม่เกินงบที่ turn ของแม่ยังเหลือ
         from: engine
         to: engine
       lane: loop
@@ -66,7 +70,9 @@ scenario:
         text: >-
           request แรกของ plan มีทุกข้อความของแม่: prompt ของคุณ การอ่าน `src/version.ts` และ call ที่ขอ fork
           call นั้นได้ผลว่า "This call started you, a forked subagent" แล้วต่อด้วยคำสั่งของ plan
-          Geno ใช้ model เดียวกับแม่เสมอ เพื่อให้ใช้ cache ร่วมกันได้
+          Geno ใช้ model เดียวกับแม่เสมอ (ยกเว้นลูกที่รันบน agent ภายนอกอย่าง Claude Code ซึ่งใช้ model ของมันเอง) เพื่อให้ใช้ prompt cache ร่วมกันได้ prompt cache คือการที่ผู้ให้บริการจำส่วนต้นของ request
+          ที่เพิ่งเห็น request ถัดไปที่ขึ้นต้นด้วยไบต์เดิมจึงอ่านส่วนนั้นเร็วและถูกกว่า และใช้ได้เฉพาะ model เดียวกัน
+          ในการ์ด ดูสองข้อความที่ไฮไลต์ คำตอบของแม่ที่ขอ fork และผลของ call นั้น
         from: engine
         to: model
         sees:
@@ -77,7 +83,7 @@ scenario:
       lane: child@plan
       at: loop
       do: >-
-        `openSpawn` เปิด log ของลูก model ของลูกคือ model ของแม่เสมอ (cache ใช้ร่วมกันได้เฉพาะ model เดียวกัน)
+        `openSpawn` เปิด log ของลูก model ของลูกคือ model ของแม่เสมอ ยกเว้นลูกบน agent ภายนอก (`childModel`) (cache ใช้ร่วมกันได้เฉพาะ model เดียวกัน)
         `forkOpening` คัดลอกบทสนทนาของแม่จนถึงคำตอบที่ขอ fork แล้วตอบ call ที่ค้างทุกตัว: call นี้ได้
         "This call started you, a forked subagent. Your task follows." ส่วน call อื่นในชุดเดียวกันได้ว่ามันรันนอก fork
       ref: packages/core/src/subagent.ts#forkOpening
@@ -127,7 +133,7 @@ scenario:
           role ของ plan ไม่ได้อยู่ใน system prompt แต่อยู่ในโน้ต `[Geno] You are now plan` ท้ายข้อความล่าสุด (แท็บแรก):
           ใช้ได้แค่ glob, grep, list, read ห้ามส่งงานต่อ และข้อความสุดท้ายคือรายงาน ตามด้วย role ของ plan จากนิยามในตัว Geno
           และ `Task:` รายการ tool ใน request ยังเป็นของแม่ทั้งชุด รวม `agent` (แท็บสอง) เพื่อให้ prefix ตรงกับ cache
-          แต่ Geno รันได้เฉพาะ tool ของ plan มันไม่มี tool `report` และไม่ถูกเตือนให้รายงาน
+          แต่ Geno รันได้เฉพาะ tool ของ plan กับ `web_fetch` และ `web_search` มันไม่มี tool `report` และไม่ถูกเตือนให้รายงาน
         from: engine
         to: model
         sees:
@@ -135,6 +141,7 @@ scenario:
             source: packages/docs/src/data/recorded/fork.jsonl#line=6
             select: messages[4]
             highlight: ['content[1].text']
+            quote: "[Geno] You are now plan, a subagent working on a task from the conversation above. Use only these tools: glob, grep, list, read. Execute the task directly; do not hand it to another subagent."
           - kind: payload
             source: packages/docs/src/data/recorded/fork.jsonl#line=6
             select: tools[9]
@@ -143,21 +150,23 @@ scenario:
       at: loop
       do: >-
         ลูกแบบ fork ใช้ system prompt และรายการ tool ของแม่ทั้งชุดเพื่อให้ prefix ตรงกับ cache ของแม่
-        แต่มี executor เฉพาะ tool ของ `plan` ไม่มี tool `report` ไม่มี MCP และไม่ถูกเตือนให้รายงาน
+        แต่มี executor เฉพาะ tool ของ `plan` กับ `web_fetch` และ `web_search` ไม่มี tool `report` ไม่มี MCP และไม่ถูกเตือนให้รายงาน
         คำสั่งของลูกอยู่ในข้อความแรกแทน (`forkTask`): ตอนนี้คุณคือ plan ใช้ได้แค่ tool เหล่านี้ และข้อความสุดท้ายคือรายงาน
       ref: packages/core/src/subagent.ts#forkTask
 
     - id: works
       beat:
         title: plan อ่านไฟล์แล้วเขียนแผน
-        text: คำขอของ plan อ่านส่วนต้นจาก cache มัน `grep` หาที่เรียก `parseVersion` แล้วเขียนแผนเป็นข้อความสุดท้าย
+        text: >-
+          คำขอของ plan อ่านส่วนต้นจาก cache มัน `grep` หาที่เรียก `parseVersion` (การ์ดไฮไลต์ `input` ของ call นั้น)
+          แล้วเขียนแผนเป็นข้อความสุดท้าย
         from: model
         to: engine
         sees:
           kind: payload
           source: packages/docs/src/data/recorded/fork.jsonl#line=8
           select: messages[5].content
-          highlight: ['[1].input']
+          highlight: ['[0].input']
       lane: child@plan
       at: model
       do: >-
@@ -196,7 +205,7 @@ scenario:
         text: >-
           ใน request ถัดไปของแม่ ผลของ call `agent` ไม่ใช่ข้อความ "This call started you" อีกแล้ว แต่เป็นแผนของ plan
           ใน `<subagent_report agent="plan" ...>` ทุกบรรทัดเยื้องสองช่อง ตามด้วยคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ
-          บทสนทนาของแม่ไม่มีการ grep ของ plan มีแค่ผลนี้
+          บทสนทนาของแม่ไม่มีการ grep ของ plan มีแค่ผลนี้ ดู `content` ที่ไฮไลต์ แผนเริ่มหลังแท็กเปิด เป็นข้อๆ ที่อ้าง `src/version.ts`
         from: engine
         to: model
         sees:
@@ -218,9 +227,15 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าแผนให้คุณฟัง
-        text: model ของแม่อ่านแผนแล้วเล่าให้คุณฟังด้วยคำของตัวเอง
+        text: >-
+          model ของแม่อ่านแผนแล้วเล่าให้คุณฟังด้วยคำของตัวเอง แล้วจบคำตอบด้วย `stop_reason: end_turn` การ์ดข้างล่างคือท้าย stream ของคำตอบนั้น
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/fork.jsonl#line=11
+          select: '[-2]'
+          highlight: [data.delta.stop_reason]
         end: Turn จบ
       lane: model
       do: >-
@@ -237,13 +252,13 @@ scenario:
 | --- | --- | --- |
 | บทสนทนาตอนเริ่ม | ว่าง มีแค่ task | สำเนาของแม่ |
 | system prompt และรายการ tool | ของลูกเอง | ของแม่ (เพื่อ cache) |
-| model | ตามนิยามของลูก | ของแม่เสมอ |
+| model | ตามนิยามของลูก | ของแม่เสมอ ยกเว้นลูกที่รันบน agent ภายนอก |
 | รายงาน | เรียก tool `report` | ข้อความสุดท้าย |
-| MCP | ตามที่นิยามให้ | ไม่มี |
+| tool ของ [MCP](/start/glossary/) | ตามที่นิยามให้ | ไม่มี |
 
 สิ่งที่ควรสังเกต
 
-- **เห็น tool มากกว่าที่ใช้ได้** ลูกแบบ fork ได้รายการ tool ของแม่ทั้งหมดเพื่อให้ cache ตรง แต่ executor มีแค่ของ `plan`
+- **เห็น tool มากกว่าที่ใช้ได้** ลูกแบบ fork ได้รายการ tool ของแม่ทั้งหมดเพื่อให้ cache ตรง แต่ executor มีแค่ของ `plan` กับ `web_fetch` และ `web_search` (โน้ต `forkTask` ยังบอก model ให้ใช้แค่ glob, grep, list, read)
   ถ้า model ของลูกเรียก tool ที่ไม่มี call นั้นได้ error แทน `forkTask` บอกไว้ก่อนว่าใช้ได้เฉพาะตัวไหน
 - **ลูกเรียกลูกต่อไม่ได้** แม้ `agent` อยู่ในรายการ tool ที่ลูกเห็น ลูกไม่มี executor ของมัน
 - **ลูกที่จบโดยไม่เขียนอะไร** ส่งรายงานว่างกลับ ลูกแบบ fork ไม่มีการเตือนให้รายงานแบบที่ลูกปกติได้

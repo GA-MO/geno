@@ -16,11 +16,23 @@ scenario:
       beat:
         title: "Geno ให้ model สรุปบทสนทนาเก่า"
         text: >-
-          context ถึง 80% ของหน้าต่าง Geno จึงส่งส่วนเก่าของบทสนทนาให้ model สรุปก่อนเรียกรอบถัดไป แชตขึ้นแถว Compacting
-          the context พร้อมไอคอนหมุน
+          บทสนทนายาวจนถึง 80% ของ context window (จำนวน token สูงสุดที่ model อ่านได้ในคำขอเดียว) ก่อนเรียก model
+          รอบถัดไป Geno จึงทำ compaction คือส่งส่วนเก่าของบทสนทนาให้ model สรุป แล้วใช้สรุปแทนส่วนนั้น
+          แชตขึ้นแถว Compacting the context พร้อมไอคอนหมุน
+          การ์ดที่สองเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน การบันทึกตั้ง `GCODE_COMPACT_AT`
+          (เกณฑ์การสรุปเป็นจำนวน token) ไว้ที่ 21,100 แทน 80% ของ context window เพื่อให้บทสนทนาสั้นๆ ถึงเกณฑ์ ดูสองส่วนที่ไฮไลต์:
+          `system` เป็นคำสั่งของงานสรุป ไม่ใช่ system prompt ของ Geno ตามปกติ และข้อความเดียวใน `messages` คือบทสนทนาเก่าที่ Geno
+          เขียนเป็นข้อความใน `<conversation>` แล้วต่อท้ายด้วยคำสั่งให้สรุป ข้อความนี้ยาวมาก การ์ดจึงแสดงเฉพาะช่วงที่บทสนทนาจบด้วย
+          `</conversation>` และคำสั่ง "Summarize the conversation above" เริ่มต้น คำขอนี้ไม่มี `tools` เพราะ model แค่เขียนสรุป
+          คำขอนี้ถูกยกเลิกโดยไม่ได้คำตอบ เพราะในการบันทึก คุณกด Stop ก่อน model ตอบ (ขั้นถัดไป)
         from: engine
         to: model
-        sees: { kind: notice, text: Compacting the context, tone: info }
+        sees:
+          - { kind: notice, text: Compacting the context, tone: info }
+          - kind: payload
+            source: packages/docs/src/data/recorded/ctl-stop-during-compaction.jsonl#line=8
+            highlight: [system, 'messages[0]']
+            quote: Summarize the conversation above
       do: >-
         `compactContext` ส่งส่วนเก่าของบทสนทนาไปให้ model สรุป การเรียกนี้ใช้ signal เดียวกับ turn
       ref: packages/engine/src/compact.ts#compactContext
@@ -51,8 +63,8 @@ scenario:
       beat:
         title: "Geno ยกเลิกการสรุป"
         text: >-
-          engine ยกเลิก turn การเรียกเพื่อสรุปใช้สัญญาณเดียวกับ turn จึงจบทันที ไม่มีอะไรถูกบันทึก context
-          ยังเหมือนเดิมทุกอย่าง
+          engine ยกเลิก turn การเรียกเพื่อสรุปใช้สัญญาณหยุดเดียวกับ turn จึงจบทันที ไม่มีสรุปถูกบันทึก
+          บทสนทนาที่จะส่งให้ model ยังเหมือนเดิมทุกอย่าง
         from: engine
         to: engine
       do: >-
@@ -74,7 +86,8 @@ scenario:
       beat:
         title: "Geno ยังเตรียมการเรียกถัดไป"
         text: >-
-          ระหว่างทาง Geno ไม่ได้ดูสัญญาณหยุด มันยังบันทึก checkpoint ของ workspace ตามปกติ แล้วส่งคำขอต่อ
+          การสรุปถูกยกเลิกแล้ว แต่ Geno ยังเดินขั้นเตรียมการเรียก model ต่อ เพราะระหว่างทางไม่ได้ดูสัญญาณหยุด
+          มันยังบันทึก checkpoint ตามปกติ checkpoint คือภาพถ่ายไฟล์ใน workspace ที่ใช้ย้อนไฟล์กลับด้วย Rewind แล้วส่งคำขอต่อ
         from: engine
         to: engine
       do: >-
@@ -89,7 +102,8 @@ scenario:
       beat:
         title: "คำขอไม่ได้ออกไปถึงผู้ให้บริการ"
         text: >-
-          ทางส่งคำขอเห็นว่า turn ถูกหยุดแล้ว จึงคืนผลว่าคุณเป็นคนหยุดทันที Geno บันทึกเหตุนั้นแล้วจบ turn
+          gateway ส่วนที่ส่งคำขอไปหาผู้ให้บริการ เห็นว่า turn ถูกหยุดแล้ว จึงคืนผลว่าคุณเป็นคนหยุดทันที
+          Geno บันทึกเหตุนั้นลง session log (ไฟล์ที่เก็บทุก event ของแชต) แล้วจบ turn
         from: engine
         to: engine
       do: >-
@@ -113,7 +127,8 @@ scenario:
       beat:
         title: "Engine ตอบว่า turn ถูกยกเลิก"
         text: >-
-          engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped การหยุดไม่ขึ้นเป็นแถบ error
+          engine บอก VS Code ว่า turn ถูกยกเลิก งานของแชตนี้ในแผง Tasks (รายการงานที่กำลังทำของ Geno) จบแบบ stopped
+          การหยุดไม่ขึ้นเป็นแถบ error
         from: engine
         to: panel
       do: >-
@@ -145,7 +160,7 @@ scenario:
         reducer ของ `turn-end` ล้างแถวประกาศ "Compacting the context" ไม่มีเส้นคั่นการสรุปเพราะไม่มีอะไรถูกสรุป
         turn ไม่มีข้อความหลังขั้นสุดท้าย `missingReply` จึงแสดงประกาศพร้อมปุ่มให้ทำต่อ
       sees: >-
-        แถวประกาศหายไป หัวข้อ "stopped after 4m 2s" กล่อง "Geno stopped without a reply · You stopped it before it answered."
+        แถวประกาศหายไป หัวข้อ "stopped after" ตามด้วยเวลาที่ใช้ กล่อง "Geno stopped without a reply · You stopped it before it answered."
         พร้อมปุ่ม [Continue] [Retry] และท้าย turn ขึ้น "Stopped by you"
       ref: packages/extension/src/chat/rail.ts#missingReply
       end: { turn: stopped, reason: cancelled }
@@ -161,6 +176,6 @@ scenario:
 - **ยังมี checkpoint หนึ่งจุดหลัง Stop** `callModel` บันทึก `checkpoint` ก่อนรู้ว่าการเรียกจะไม่ออกไป
   Rewind และ Undo จึงเห็นจุดนี้เพิ่มขึ้นหนึ่งจุดโดยไม่มีการเรียก model ตามมา
 - **`/compact` ที่ผู้ใช้สั่งเองต่างออกไป** ทางนั้นไม่ใช่ turn ของ loop Stop ได้คำตอบ "Stopped. The context is as it was."
-  และหัวข้อเป็น "worked for ..." ดู [คุณสั่ง /compact ระหว่าง turn](/scenarios/ctx/compaction-manual/)
+  และหัวข้อเป็น "worked for ..." ดู [คุณสั่ง /compact ระหว่างสอง turn](/scenarios/ctx/compaction-manual/)
 
 การสรุปที่ไม่ถูกขัดเดินต่ออย่างไร ดู [Compaction อัตโนมัติก่อนเรียก model](/scenarios/ctx/compaction-auto/)

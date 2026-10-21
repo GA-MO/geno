@@ -14,9 +14,18 @@ scenario:
     - id: wants
       beat:
         title: Model เสนองานแยก
-        text: ระหว่างแก้ bug ใน `src/date.ts` model เห็นว่า `src/time.ts` มีปัญหาแบบเดียวกัน แทนที่จะขยายงาน มันเรียก `spawn_task` พร้อมหัวข้อ สรุป และ prompt ที่ครบในตัว
+        text: >-
+          ระหว่างแก้ bug ใน `src/date.ts` model เห็นว่า `src/time.ts` มีปัญหาแบบเดียวกัน แทนที่จะขยายงาน มันเรียก tool `spawn_task`
+          ซึ่งเสนองานแยกให้คุณ พร้อมหัวข้อ สรุป และ prompt ที่ครบในตัวจนคนอื่นทำต่อได้โดยไม่ต้องอ่านแชตนี้
+          `spawn_task` เป็น deferred tool คือ Geno ส่งแค่ชื่อไปก่อน model จึงโหลดนิยามด้วย `tool_search` ก่อนเรียก
+          การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน ดู `input` ที่ไฮไลต์ มี `title` `tldr` (สรุปสั้น) และ `prompt`
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/wf-spinoff.jsonl#line=10
+          select: messages[7].content
+          highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `spawn_task` ด้วยหัวข้อ "Fix the same leap-year bug in src/time.ts", สรุปสั้น และ prompt ที่เขียนให้ครบในตัว
@@ -30,13 +39,15 @@ scenario:
     - id: offer
       beat:
         title: Geno ไม่เริ่มอะไร แค่เก็บข้อเสนอ
-        text: Geno ตรวจว่าไม่มีข้อเสนอหัวข้อเดียวกันเปิดอยู่ และข้อเสนอที่เปิดอยู่ไม่เกิน 10 แล้วตอบ model พร้อมข้อเสนอนั้น
+        text: >-
+          Geno ตรวจว่าไม่มีข้อเสนอหัวข้อเดียวกันเปิดอยู่ และข้อเสนอที่เปิดอยู่ยังไม่ถึง 10 แล้วเขียนข้อความผลพร้อมข้อเสนอนั้นไว้ใน log
+          ผลนี้ถึง model ตอนเรียกครั้งถัดไป ระหว่างนี้ model ไม่ได้ตอบอะไร
         from: engine
-        to: model
+        to: engine
       lane: tool
       at: executor
       do: >-
-        `spawn_task` ไม่เริ่มอะไร `offerOf` ตรวจว่าไม่มีข้อเสนอที่เปิดอยู่หัวข้อเดียวกัน และข้อเสนอที่เปิดอยู่ไม่เกิน 10
+        `spawn_task` ไม่เริ่มอะไร `offerOf` ตรวจว่าไม่มีข้อเสนอที่เปิดอยู่หัวข้อเดียวกัน และข้อเสนอที่เปิดอยู่ยังไม่ถึง 10
         แล้วคืนผลที่มีข้อเสนอติดไปด้วย ข้อความถึง model ขึ้นต้นด้วย `Suggested task_<8 หลัก> "Fix the same leap-year bug in src/time.ts".` และบอกว่า "nothing was started. Go on with the current task."
       ref: packages/core/src/spinoff.ts#offerOf
       emits: [offered]
@@ -44,7 +55,8 @@ scenario:
     - use: tool-result-returns
       beat:
         title: แชตขึ้นการ์ดข้อเสนอ
-        text: ขั้นของ `spawn_task` วาดเป็นการ์ดในบทสนทนา การ์ดเดียวกันขึ้นในแผง Tasks ใต้ "Suggested in this chat"
+        text: >-
+          ขั้นของ `spawn_task` วาดเป็นการ์ดในบทสนทนา การ์ดเดียวกันขึ้นในแผง Tasks (แผงที่แสดงงานของทุกแชต) ใต้ "Suggested in this chat"
         from: panel
         to: you
         sees: การ์ด "Suggested task" หัวข้อ สรุป prompt ที่พับไว้ และปุ่ม [Start] [Dismiss]
@@ -64,9 +76,21 @@ scenario:
     - id: goes-on
       beat:
         title: Model ทำงานเดิมต่อ
-        text: model แก้ `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่เข้ามาในบทสนทนานี้
+        text: >-
+          model แก้ `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่เข้ามาในบทสนทนานี้
+          การ์ดเป็นการบันทึกที่รัน Geno จริงกับ model จำลองที่ตอบตามบทที่เขียนไว้ก่อน แท็บแรกคือ call ถัดไปของ model หลังได้ผลของ `spawn_task` ดู `input` ที่ไฮไลต์ model แก้ `src/date.ts` ไม่ใช่ `src/time.ts`
+          แท็บสองคือ event ท้าย stream ของคำตอบสุดท้าย `stop_reason: end_turn` คือ model จบ turn
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/wf-spinoff.jsonl#line=12
+            select: messages[9].content
+            highlight: ['[1].input']
+          - kind: payload
+            source: packages/docs/src/data/recorded/wf-spinoff.jsonl#line=13
+            select: '[-2]'
+            highlight: [data.delta.stop_reason]
       lane: model
       do: >-
         model ทำ bug ใน `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่ได้เข้ามาในบทสนทนานี้
@@ -95,7 +119,7 @@ scenario:
               - lane: editor
                 beat:
                   title: คุณกด Dismiss
-                  text: Geno จดว่าคุณปฏิเสธลง log ของแชตทันที model อ่านได้ในคำขอครั้งถัดไป การ์ดหายไป และเสนอหัวข้อเดิมใหม่ได้
+                  text: Geno จดว่าคุณปฏิเสธลง log ของแชตทันที บรรทัดนี้อยู่นอกบทสนทนา คำขอครั้งถัดไปของ model จึงไม่มีมัน model รู้ก็ต่อเมื่อเรียก `dismiss_task` กับข้อเสนอนี้ แล้วได้คำตอบว่าคุณปฏิเสธไปแล้ว การ์ดหายไป และ model เสนอหัวข้อเดิมใหม่ได้
                   from: you
                   to: panel
                   end: ข้อเสนอหายไป
@@ -107,7 +131,9 @@ scenario:
               - lane: server
                 at: sessions
                 do: >-
-                  engine บันทึกการตัดสิน `dismissed` ลง log ของแชตทันที ไม่ว่าจะมี turn รันหรือไม่ คำขอ model ครั้งถัดไปอ่านได้
+                  engine บันทึกการตัดสิน `dismissed` ลง log ของแชตทันที ไม่ว่าจะมี turn รันหรือไม่ event `spinoff` อยู่นอกบทสนทนา
+                  (`IN_CONVERSATION.spinoff = false`) คำขอ model จึงไม่มีมัน tool ของข้อเสนออ่าน log ใหม่ทุกครั้งที่ถูกเรียก
+                  `dismiss_task` กับ id นี้จึงได้ "the user already dismissed it"
                   การ์ดหายไป และ `spawn_task` หัวข้อเดิมเสนอใหม่ได้
                 ref: "packages/engine/src/serve.ts#\"const decideSpinoff = async (sessionId: string\""
                 emits: [spinoff, dismissed]
@@ -129,7 +155,10 @@ scenario:
     - id: lane
       beat:
         title: Geno เปิด lane และ session ใหม่
-        text: Geno กันการกด Start ซ้ำ สร้าง lane ใหม่ชื่อตามหัวข้อ แล้วเปิด session ใน lane นั้นด้วย prompt ของข้อเสนอ session ใหม่ไม่ใช่ subagent ของแชตนี้
+        text: >-
+          Geno กันการกด Start ซ้ำ แล้วสร้าง lane ใหม่ชื่อตามหัวข้อ lane คือสำเนาของ repo ในโฟลเดอร์แยก (git worktree) บน branch
+          ของตัวเอง งานใหม่จึงไม่แตะไฟล์ที่แชตนี้กำลังแก้ Geno เปิด session ใน lane นั้นด้วย prompt ของข้อเสนอ session ใหม่เป็นแชตแยก
+          ไม่ใช่ subagent (session ลูกที่รายงานกลับหาแม่) ผลของมันจึงไม่กลับมาที่แชตนี้
         from: engine
         to: engine
       lane: server
@@ -143,7 +172,7 @@ scenario:
     - id: logged
       beat:
         title: การ์ดย่อเหลือ Started
-        text: Geno จดลง log ของแชตว่างานเริ่มแล้ว model ของแชตจึงรู้ งานใหม่ขึ้นใน Working ของแผง Tasks
+        text: Geno จดลง log ของแชตว่างานเริ่มแล้ว บรรทัดนี้อยู่นอกบทสนทนา model ของแชตจึงไม่เห็นมันในคำขอถัดไป จะรู้ก็ต่อเมื่อเรียก `dismiss_task` กับข้อเสนอนี้ แล้วได้คำตอบว่าคุณเริ่มงานไปแล้ว งานใหม่ขึ้นใน Working ของแผง Tasks
         from: engine
         to: panel
         sees: บรรทัด "Started Fix the same leap-year bug in src/time.ts" และงานใหม่ใน Tasks ที่บอก "Lane fix-the-same-leap-year..."
@@ -151,7 +180,7 @@ scenario:
       lane: server
       at: sessions
       do: >-
-        engine บันทึกการตัดสิน `started` พร้อม session id และชื่อ lane ลง log ของแชต ครั้งหน้า model ของแชตรู้ว่างานนี้เริ่มแล้ว
+        engine บันทึกการตัดสิน `started` พร้อม session id และชื่อ lane ลง log ของแชต event นี้ไม่เข้าบทสนทนา tool ของข้อเสนออ่าน log นี้ทุกครั้งที่ถูกเรียก `dismiss_task` กับ id นี้จึงได้ "the user already started it as a task in lane ..."
       ref: "packages/engine/src/serve.ts#\"const decideSpinoff = async (sessionId: string\""
       emits: [spinoff, started]
 
