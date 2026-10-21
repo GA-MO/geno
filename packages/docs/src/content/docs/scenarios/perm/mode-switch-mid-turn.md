@@ -87,14 +87,15 @@ scenario:
       beat:
         title: "Call ถัดไปใช้โหมดใหม่"
         text: >-
-          Geno อ่านโหมดทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม คำสั่งนอกรายการปลอดภัยตัวถัดไปจึงไปที่
-          classifier (การเรียก model แยกที่ตัดสินแทนคุณว่า allow ask หรือ deny) แทนการ์ด
-          ส่วน `pnpm test` ที่รันอยู่ไม่ได้รับผลใดๆ
+          Geno อ่านโหมดทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม คำสั่งที่กฎติดธงตัวถัดไปจึงไปที่
+          classifier (การเรียก model แยกที่ตัดสินแทนคุณว่า allow ask หรือ deny) แทนการ์ด หรือรันใน sandbox เลยถ้ามีแค่กฎ `unlisted`
+          (กฎของคำสั่งที่แค่ไม่อยู่ในรายการปลอดภัย) ติดธง ส่วน `pnpm test` ที่รันอยู่ไม่ได้รับผลใดๆ
         from: engine
         to: engine
       do: >-
         `Approval` ของ turn นี้อ่านโหมดผ่าน `mode()` ทุกครั้งที่ตัดสิน call ไม่ได้จำโหมดตอน turn เริ่ม
-        คำสั่งนอก safe list ตัวถัดไปใน turn นี้จึงไปที่ classifier แทนการ์ด ส่วน `pnpm test` ที่รันอยู่แล้วไม่ได้รับผลใดๆ
+        คำสั่งที่กฎติดธงตัวถัดไปใน turn นี้จึงไปที่ classifier แทนการ์ด (คำสั่งใน sandbox ที่มีแค่กฎ `unlisted` ติดธงรันเลย)
+        ส่วน `pnpm test` ที่รันอยู่แล้วไม่ได้รับผลใดๆ
       ref: "packages/engine/src/serve.ts#\"const approval: Approval = {\""
 
     - use: tool-result-returns

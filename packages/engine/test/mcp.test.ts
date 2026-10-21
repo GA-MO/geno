@@ -421,7 +421,7 @@ describe('MCP approval', () => {
     expect(await executors['mcp__fake__echo']!.run({ text: 'x' }, ctx(workspace))).toBe('echo: x');
     expect(auto.classified).toEqual([]);
 
-    await expect(executors['mcp__fake__env']!.run({}, ctx(workspace))).rejects.toThrow(/refused by the safety classifier/);
+    await expect(executors['mcp__fake__env']!.run({}, ctx(workspace))).rejects.toThrow(/safety classifier refused `mcp__fake__env`/);
     expect(auto.classified).toEqual([
       expect.objectContaining({ request: 'use the fake server', flagged: expect.objectContaining({ rule: 'mcp-tool' }), mcp: { server: 'fake', tool: 'env', arguments: '{}' } }),
     ]);

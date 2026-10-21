@@ -197,13 +197,15 @@ scenario:
                 beat:
                   title: "โหมด Auto ให้ classifier ตัดสิน"
                   text: >-
-                    classifier ได้บริบทของ turn แล้วอนุญาต เช่นงานต้องรู้ชื่อตัวแปรใน `.env` ถ้ามันปฏิเสธ `read` ไม่เปิดไฟล์และ turn ทำต่อ
-                    ถ้ามันไม่แน่ใจ คุณเห็นการ์ดถามแบบเดียวกับโหมด Ask
+                    classifier ได้บริบทของ turn แล้วอนุญาต เช่นงานต้องรู้ชื่อตัวแปรใน `.env` ถ้ามันปฏิเสธหรือไม่แน่ใจ `read` ไม่เปิดไฟล์
+                    เหตุผลกลับไปหา model และ turn ทำต่อโดยไม่มีการ์ด การ์ดถามคุณขึ้นเมื่อ Auto ปฏิเสธมาแล้วติดกัน 3 ครั้งหรือรวม 20 ครั้งใน session
+                    หรือเมื่อ classifier ใช้ไม่ได้เลย
                   from: engine
                   to: engine
                 do: >-
                   `settle` ส่งคำขอให้ classifier พร้อมบริบทของ turn classifier ตอบว่าอนุญาต (เช่น งานต้องรู้ชื่อตัวแปรใน `.env`)
-                  ถ้า classifier ปฏิเสธหรือไม่แน่ใจ ทางจะเป็นแบบเดียวกับคำสั่งในโหมด Auto
+                  ถ้า classifier ปฏิเสธหรือไม่แน่ใจ `settle` คืน `decidedBy: classifier, verdict: deny` และ `askSecret` โยน `ToolDenied`
+                  ทางเดียวกับคำสั่งในโหมด Auto รวมทั้งการนับ block ด้วย `autoBlocksOf`
                 ref: packages/engine/src/classifier.ts#commandClassifier
                 emits: [classifier]
                 phase: running-tools
@@ -235,6 +237,8 @@ scenario:
                     model ทำแผนต่อโดยไม่ได้อ่าน `.env` การ์ดข้างล่างเป็นข้อความท้ายสุดของคำขอจริงจากการรันโหมด Auto
                     เดียวกับการ์ดก่อนหน้า บทสนทนาก่อนหน้ายาวเกินกว่าจะแสดงทั้งหมด ในรอบนั้น classifier เป็นผู้ปฏิเสธ
                     ไม่ใช่โหมด Plan แต่ model ได้ผลปฏิเสธที่บอกว่าอย่าลองซ้ำแบบเดียวกัน ผลชิ้นที่สองคือคำปฏิเสธนั้น
+                    engine วันนี้เขียนคำปฏิเสธของ classifier ต่างจากการ์ด เป็น "Auto mode's safety classifier refused ..." ตามด้วยคำแนะนำให้หาทางอื่นหรือหยุดถามคุณ
+                    ส่วนคำปฏิเสธของโหมด Plan ยังจบด้วย "Do not retry it; find another way." แบบในการ์ด
                   from: engine
                   to: model
                   end: "Plan ปฏิเสธ turn ทำต่อ"
@@ -299,7 +303,7 @@ scenario:
 | โหมด | `read .env` |
 | --- | --- |
 | Ask | ถามผู้ใช้ ไม่มีปุ่มอนุญาตถาวร |
-| Auto | classifier ตัดสิน |
+| Auto | classifier ตัดสิน ไม่อนุญาตก็ปฏิเสธ (การ์ดขึ้นหลัง block ติดกัน 3 ครั้งหรือรวม 20 ครั้ง) |
 | Plan | ปฏิเสธ |
 | ไม่มีคนดู (ไม่มีใครตอบการ์ด เช่น `gcode agent --non-interactive`) | ปฏิเสธ |
 

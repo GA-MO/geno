@@ -1,33 +1,33 @@
 ---
 title: "โหมด Auto ยังขึ้นการ์ดถามคุณ"
-description: สามทางที่โหมด Auto ถามผู้ใช้ เมื่อ classifier ไม่แน่ใจ เมื่อคำสั่ง rm -rf แตะ workspace หรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
+description: สามทางที่โหมด Auto ถามผู้ใช้ เมื่อ classifier ปฏิเสธครบ 3 ครั้งติดกันหรือ 20 ครั้งใน session เมื่อคำสั่ง rm -rf แตะ workspace ทั้งก้อนหรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
 scenario:
   surface: vscode
   given:
     - session อยู่ในโหมด Auto
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    model ขอเรียก `bash` ด้วยคำสั่งที่ไม่อยู่ใน safe list
+    model ขอเรียก `bash` ด้วยคำสั่งที่กฎติดธง
   covers: [perm.auto-classifier-asks-user, perm.auto-hard-ask, perm.workspace-ask-rule]
   related: [perm.classifier-unavailable, perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-rule]
   steps:
     - id: asks
       lane: model
       beat:
-        title: "Model ขอรันคำสั่งนอก safe list"
+        title: "Model ขอรันคำสั่งที่กฎติดธง"
         text: >-
           session อยู่ในโหมด Auto model ขอรันคำสั่งด้วย `bash` แชตขึ้นขั้นใหม่พร้อมจุดหมุน
-          ปกติโหมด Auto ส่งคำสั่งนอก safe list (รายการคำสั่งที่รันได้โดยไม่ถาม) ให้ classifier ตัดสินแทนคุณ
+          ปกติโหมด Auto ส่งคำสั่งที่กฎติดธง เช่น `rm -rf` ของโฟลเดอร์ใน workspace ให้ classifier ตัดสินแทนคุณ
+          (คำสั่งที่แค่ไม่อยู่ใน safe list ซึ่งเป็นรายการคำสั่งที่รันได้โดยไม่ถาม รันใน sandbox เลยโดยไม่ถึง classifier)
           classifier คือการเรียก model แยกอีกครั้งที่ตอบว่า allow ask หรือ deny
-          การ์ดข้างล่างเป็นคำตอบจริงจากการรันอื่นในโหมด Auto ที่ model ขอรัน `ps aux` ซึ่งไม่อยู่ใน safe list
-          ดู `input` ที่ไฮไลต์
+          การ์ดข้างล่างมาจากการบันทึกที่รัน Geno จริงกับ model จำลองของทางแรก คือ model ขอรัน `rm -rf dist` เป็นครั้งที่สี่
+          Geno ส่งข้อความนี้กลับไปในคำขอถัดไป ดู `input` ของบล็อก `tool_use` ที่ไฮไลต์
         from: model
         to: engine
         sees:
           kind: payload
-          source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=18
-          select: content
-          collapse: ['[0].thinking']
+          source: packages/docs/src/data/recorded/perm-auto-classifier-fallback.jsonl#line=29
+          select: messages[-2].content
           highlight: ['[1].input']
       do: >-
         model ขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -44,7 +44,7 @@ scenario:
         title: "Geno ตรวจกฎตามลำดับ"
         text: >-
           Geno ดูกฎห้ามและกฎถามของ workspace ก่อน แล้วจึงดูกฎในตัวของ Geno (กฎที่มากับ Geno เช่น safe list และกฎของ `rm -rf`) ปกติโหมด Auto ส่งให้ classifier
-          แต่มีสามทางที่คำสั่งไปถึงคุณ ลองเลือกดู
+          และคำปฏิเสธของมันกลับไปหา model แต่มีสามทางที่คำสั่งไปถึงคุณ ลองเลือกดู
         from: engine
         to: engine
         ask: "ทำไมถึงถามคุณ"
@@ -55,31 +55,41 @@ scenario:
         ask: ทำไมคำสั่งนี้ไปถึงผู้ใช้
         options:
           - id: unsure
-            label: classifier ไม่แน่ใจ (node scripts/build-icons.mjs)
+            label: classifier ปฏิเสธครบ 3 ครั้งติดกัน (rm -rf dist)
             then: ask
             steps:
               - lane: policy
                 at: rules
                 beat:
-                  title: "Classifier ไม่แน่ใจ คำถามจึงไปถึงคุณ"
+                  title: "Block ครบ 3 ครั้งติดกัน ครั้งที่สี่จึงถามคุณ"
                   text: >-
-                    `node scripts/build-icons.mjs` ไปที่ classifier ซึ่งไม่แน่ใจ ความไม่แน่ใจจึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier
+                    session นี้มี block มาแล้ว 3 ครั้งติดกัน block คือ call ที่ classifier ตอบ `deny` หรือ `ask` หรือประเมินไม่ได้ แล้ว Geno ปฏิเสธ
+                    และคำปฏิเสธกลับไปหา model ทุกครั้ง `rm -rf dist` ไปที่ classifier อีก และยังไม่ผ่าน ครั้งนี้จึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier
+                    ในการบันทึกนี้ classifier คือ `claude-sonnet-5-5` (ตั้ง `GCODE_CLASSIFIER_PROVIDER=anthropic`) ซึ่งตอบเป็นข้อความโดยไม่เรียก `verdict` ทุกครั้ง
+                    ทั้ง 3 block จึงเป็นแบบประเมินไม่ได้ (model ลองซ้ำเองสองครั้ง แล้วคุณพิมพ์ "Try again.")
+                    การ์ดคือคำขออนุญาตที่ Geno ส่งไปที่แผงแชต (`session/request_permission`) ดู `title` ที่ไฮไลต์ ซึ่งมีเหตุผลของ classifier ต่อท้าย
                   from: engine
                   to: engine
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/perm-auto-classifier-fallback.jsonl#line=28
+                    highlight: [params.toolCall.title]
                 do: >-
-                  คำสั่งติดกฎ `unlisted` ซึ่งในโหมด Auto คือ `classify` `ruledDenial` แนบรูปแบบ `node scripts/build-icons.mjs` ไว้ให้บันทึกเป็นกฎ
+                  คำสั่งติดกฎ `rm-rf-in-workspace` ซึ่งในโหมด Auto คือ `classify`
                 ref: packages/core/src/permission-rules.ts#ruledDenial
-                emits: [unlisted, classify]
+                emits: [rm-rf-in-workspace, classify]
               - lane: policy
                 at: classifier
                 do: >-
-                  classifier ไม่แน่ใจ ตอบ `ask` ว่า "Runs a script whose effects are not visible in the conversation"
+                  classifier ไม่ผ่านคำสั่งอีก ตอบ `ask` หรือ `deny` หรือประเมินไม่ได้ (ในการบันทึกนี้ไม่มีคำตัดสินทั้งสองครั้ง)
                 ref: packages/engine/src/classifier.ts#commandClassifier
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` ส่งคำตอบ `ask` ของ classifier ให้ผู้ใช้พร้อมเหตุผลของ classifier
-                ref: packages/engine/src/tools/agent.ts#settle
+                  `autoBlocksOf` อ่าน log ของ session ได้ block ติดกัน 3 ครั้ง `autoFallsBack` จึงจริง
+                  `settle` ไม่ปฏิเสธเอง ให้ PermissionRequest hook ตอบก่อน แล้วส่งให้ผู้ใช้พร้อมเหตุผลของ classifier
+                  (รวมครบ 20 ครั้งใน session ก็เช่นกัน และ classifier ที่ใช้ไม่ได้เลยขึ้นการ์ดทุกครั้ง)
+                ref: packages/core/src/classifier.ts#autoFallsBack
                 emits: [ask-user]
           - id: hard
             label: rm -rf นอก workspace (rm -rf ../old-build)
@@ -301,13 +311,14 @@ scenario:
 
 | ทาง | classifier ถูกเรียกไหม | หลังผู้ใช้อนุญาต |
 | --- | --- | --- |
-| classifier ไม่แน่ใจ หรือใช้ไม่ได้ | เรียก และได้ `ask` | ครั้งหน้า classifier ตัดสินใหม่ |
+| classifier ปฏิเสธหรือไม่แน่ใจ หลัง block ติดกัน 3 ครั้งหรือรวม 20 ครั้ง หรือ classifier ใช้ไม่ได้เลย | เรียก | คำสั่งรัน แถว block ที่ติดกันเริ่มนับใหม่ ครั้งหน้า classifier ตัดสินใหม่ |
 | `rm -rf` ของ workspace, `.git` หรือนอก workspace | ไม่ | ครั้งหน้าถามอีก กฎ allow ครอบไม่ได้ |
 | กฎ ask ของ workspace | ไม่ | ครั้งหน้าถามอีก จนกว่าผู้ใช้ลบกฎ |
 
 สิ่งที่ควรสังเกต
 
-- **มีแค่ `ask` ที่ไปถึงคุณ** คำตอบ `allow` และ `deny` ของ classifier มีผลโดยไม่ถาม
+- **ปกติคำปฏิเสธของ classifier ไม่ถึงคุณ** คำตอบ `deny` หรือ `ask` และคำสั่งที่ classifier ประเมินไม่ได้ กลับไปหา model เป็นคำปฏิเสธ
+  การ์ดขึ้นเมื่อ block ครบ 3 ครั้งติดกันหรือ 20 ครั้งใน session และ PermissionRequest hook ได้ตอบก่อนเหมือนการ์ดอื่น
 - **`rm -rf` ภายใน workspace ต่างออกไป** กฎ `rm-rf-in-workspace` ให้ classifier ตัดสินในโหมด Auto
   เฉพาะการลบ workspace ทั้งก้อน `.git` หรือนอก workspace ที่ถามผู้ใช้เสมอ
 

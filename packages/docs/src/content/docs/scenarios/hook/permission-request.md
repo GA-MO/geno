@@ -353,7 +353,9 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **ในโหมด Auto hook ถูกถามหลัง [classifier](/start/glossary/)** ถ้า classifier อนุญาตหรือบล็อกเอง hook ไม่ถูกถาม hook ตอบได้เฉพาะเมื่อ Auto จะส่งคำถามไปหาผู้ใช้ ยกเว้นคำสั่งที่ขอรันนอก sandbox ซึ่ง classifier ตัดสิน และถ้าส่งต่อถึงผู้ใช้ก็ยังไม่ถาม hook
+- **ในโหมด Auto hook ถูกถามหลัง [classifier](/start/glossary/)** ถ้า classifier อนุญาต หรือตอบ `deny` หรือ `ask` แล้ว Geno ปฏิเสธและส่งเหตุผลกลับไปหา model hook ไม่ถูกถาม
+  hook ตอบได้เฉพาะเมื่อ Auto จะขึ้นการ์ดถามผู้ใช้ คือหลัง block (call ที่ classifier ทำให้ถูกปฏิเสธ) ติดกันครบ 3 ครั้งหรือรวมครบ 20 ครั้งใน session หรือเมื่อ classifier ใช้ไม่ได้เลย
+  ยกเว้นคำสั่งที่ขอรันนอก sandbox ซึ่งถ้าส่งต่อถึงผู้ใช้ก็ยังไม่ถาม hook
 - **ใน run ที่ไม่มีใครตอบ** ([non-interactive](/start/glossary/) เช่น `gcode agent --non-interactive`) hook ตอบแทนได้เฉพาะคำถามที่ถูกปฏิเสธเพราะไม่มีใครตอบ
 - **การอนุญาตของ hook ไม่บันทึกกฎ** `permission_suggestions` บอก hook ว่าการ์ดเสนอกฎอะไร แต่ Geno ไม่บันทึกกฎตามคำตอบของ hook
 - **แผงแชตไม่บอกว่า hook อนุญาต** ขั้นของคำสั่งดูเหมือนคำสั่งที่รันโดยไม่ต้องถาม บันทึก `decidedBy: hook` อยู่ใน log

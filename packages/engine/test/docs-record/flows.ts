@@ -6,6 +6,7 @@ import { TOOLS } from './flows-tools.js';
 import { ERRORS } from './flows-errors.js';
 import { MISC } from './flows-misc.js';
 import { EXT } from './flows-ext.js';
+import { AUTO } from './flows-auto.js';
 
 // A new batch of flows is a new flows-<name>.ts file that imports only from kit.ts, added to this list.
-export const FLOWS = [...BASE, ...HOOKS, ...BG, ...TOOLS, ...ERRORS, ...MISC, ...EXT];
+export const FLOWS = [...BASE, ...HOOKS, ...BG, ...TOOLS, ...ERRORS, ...MISC, ...EXT, ...AUTO];

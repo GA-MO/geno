@@ -14,8 +14,11 @@ export const FOLLOW_UP = 'Go ahead with the plan.';
 
 export const COMMANDS = {
   removeBuild: 'rm -rf build',
-  script: "node -e \"require('fs').rmSync('a.ts')\"",
+  script: 'rm -rf a.ts',
   removeDist: 'rm -rf dist',
+  removeCoverage: 'rm -rf coverage',
+  // The fourth refusal in a row, which Auto puts to the user as a card.
+  removeDistFile: 'rm -rf dist/out.js',
   removeAgain: 'rm -rf build',
 } as const;
 

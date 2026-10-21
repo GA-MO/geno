@@ -372,4 +372,6 @@ scenario:
 - **hook ของ workspace ไม่รัน** บรรทัดคำสั่งไม่มี editor ที่ยืนยันว่าผู้ใช้เชื่อถือโฟลเดอร์ จึงรันเฉพาะ hook ของผู้ใช้
 - **non-interactive ไม่ได้ปฏิเสธทุกอย่าง** คำสั่งที่ไม่อยู่ใน safe list แต่ไม่มีกฎจับ (`unlisted`) รันได้ใน sandbox
   กฎ allow ของ workspace ไม่มีผลในโหมดนี้ และ `--mode` ใช้คู่กับ `--non-interactive` ไม่ได้
-- **Auto บนเทอร์มินัล** เมื่อ classifier ตัดสิน เทอร์มินัลพิมพ์ `auto: the classifier ...` พร้อมเหตุผลใต้บรรทัดของ call
+- **Auto บนเทอร์มินัล** เมื่อ classifier ตัดสิน เทอร์มินัลพิมพ์ `auto: the classifier allowed it: ...` หรือ `auto: the classifier denied it: ...` พร้อมเหตุผลใต้บรรทัดของ call
+  คำปฏิเสธไม่ถามคุณ model ได้เหตุผลแล้วทำต่อ คำถาม y/n ขึ้นเมื่อ classifier ปฏิเสธมาแล้วติดกัน 3 ครั้งหรือรวม 20 ครั้งใน session
+  หรือเมื่อ classifier ใช้ไม่ได้เลย ซึ่งถ้าเป็นเพราะตั้งค่าไม่ครบหรือ key ถูกปฏิเสธ เทอร์มินัลบอกทาง stderr ครั้งเดียว

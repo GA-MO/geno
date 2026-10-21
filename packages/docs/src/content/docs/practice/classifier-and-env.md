@@ -108,7 +108,8 @@ scenario:
         text: >-
           classifier ใช้ model เดียวกันกับ agent แต่เห็นแค่คำขอของคุณ ข้อความล่าสุดของ model กฎที่จับ และคำสั่ง
           มันตอบด้วย tool `verdict` คำตอบคือ deny ใช้เวลา 1.35 วินาที ค่าใช้จ่าย $0.00024 การ์ดข้างล่างคือผลของ tool ดู `verdict` และ `reason` ของ classifier
-          คำปฏิเสธนี้ไม่จบ turn ผลของ tool บอก model ว่าห้ามลองซ้ำ ให้หาทางอื่น
+          คำปฏิเสธนี้ไม่จบ turn ในรอบนี้ผลของ tool บอก model ว่าห้ามลองซ้ำ ให้หาทางอื่น
+          engine ปัจจุบันเขียนผลนี้ต่างไป คือบอกว่า classifier ของ Auto ปฏิเสธพร้อมเหตุผล ตามด้วยถ้อยคำแบบ dontAsk ของ Claude Code
         from: engine
         to: model
         sees:
@@ -127,6 +128,7 @@ scenario:
       at: settle
       do: >-
         `settle` คืนคำปฏิเสธของ classifier แล้ว `refusalOf` คืน `ToolDenied` ซึ่งไม่จบ turn
+        ไม่มีการ์ด และเป็น block แรกของ session ถ้า block ติดกันครบ 3 ครั้ง ครั้งถัดไปจะขึ้นการ์ดถามผู้ใช้แทน
       ref: packages/engine/src/tools/agent.ts#settle
       emits: [tool-result]
 
@@ -254,21 +256,18 @@ scenario:
       beat:
         title: "Classifier อนุญาต เพราะคำสั่งพิมพ์แค่ PORT"
         text: >-
-          `node` ไม่อยู่ในรายการปลอดภัย กฎ "คำสั่งนอกรายการ" จึงส่งให้ classifier อีกรอบ เหตุผลของมันแยกคำขอออกจากคำสั่ง:
+          `node` ไม่อยู่ในรายการปลอดภัย ใน engine ของรอบนี้กฎ "คำสั่งนอกรายการ" จึงส่งให้ classifier อีกรอบ เหตุผลของมันแยกคำขอออกจากคำสั่ง:
           คำขอยังเป็นการพิมพ์ค่าทั้งหมด แต่คำสั่งนี้พิมพ์แค่ PORT และเปิดเซิร์ฟเวอร์ในเครื่อง
           engine ปัจจุบันไม่ส่งบรรทัดนี้ถึง classifier เพราะ `node src/server.js` เปิด server แบบ foreground
           ซึ่งจะค้าง call ไว้จนหมดเวลา Geno จึงปฏิเสธก่อนรัน และบอก model ให้รันด้วย `run_in_background` แทน (ตั้งแต่ commit 17ab5443 ซึ่งมาหลัง run นี้)
+          และถ้ารันแบบ background โหมด Auto ปัจจุบันก็รันใน sandbox เลยโดยไม่ถาม classifier เพราะมีแค่กฎนี้ติดธง
         from: engine
         to: machine
-        sees:
-          kind: payload
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=22
-          highlight: [approval.classifier.verdict, approval.classifier.reason, output]
-          collapse: [timing]
       do: >-
-        `ruledDenial` พบกฎ `unlisted` ซึ่งให้ `classify` ในโหมด Auto และ classifier ตอบ allow
+        ในรอบนี้ `ruledDenial` พบกฎ `unlisted` ซึ่งตอนนั้นให้ `classify` ในโหมด Auto และ classifier ตอบ allow
         วันนี้ `bash` เรียก `serverStartOf` ก่อน `approveCommand` เมื่อ session มีงานเบื้องหลังให้ใช้ ซึ่ง session หลักของ `gcode agent` มี
         กับบรรทัดนี้มันได้ `node src/server.js` แบบไม่ background จึงโยน `serverRefusal` และ classifier ไม่ได้เห็นบรรทัดนี้
+        ส่วนกฎ `unlisted` วันนี้ให้ `allow` ในโหมด Auto คำสั่งที่มีแค่กฎนี้ติดธงจึงรันใน sandbox โดยไม่มี classifier
       ref: "packages/core/src/approval.ts#\"unlisted: {\""
 
     - id: port-run
@@ -316,7 +315,7 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง
+        `loopStep` ตัดสิน `done(end_turn)` ทั้ง turn เรียก model หกครั้ง และ classifier สองครั้ง (ตอนนี้จะเหลือครั้งเดียว)
       ref: packages/core/src/loop.ts#loopStep
       emits: [end_turn]
       phase: ending
@@ -356,8 +355,10 @@ ISSUES.md บันทึกไว้เป็น M-01 รอบ fix-b2 นี�
   ข้อความที่ agent เขียนเป็นข้อมูล ไม่ใช่คำสั่ง และการพิมพ์ environment หรืออ่าน `.env` ต้อง deny แม้จะเพื่อหาสาเหตุ (`classifierSystem`)
 - **คำปฏิเสธของ classifier ไม่จบ turn** `refusalOf` จบ turn เฉพาะเมื่อผู้ใช้ปฏิเสธเอง ส่วนคำปฏิเสธอื่นเป็น `ToolDenied`
   model จึงหาทางอื่นได้ ในรอบนี้ทางอื่นคืออ่านโค้ด ซึ่งให้คำตอบที่ถูกกว่าการพิมพ์ค่าทั้งหมด
+  ใน engine ปัจจุบันคำปฏิเสธของ classifier ไม่ขึ้นการ์ด จนกว่า block (call ที่ classifier ทำให้ถูกปฏิเสธ) จะติดกันครบ 3 ครั้งหรือรวมครบ 20 ครั้งใน session
 - **กฎจับก่อน classifier ตัดสิน** classifier ไม่ได้ดูทุกคำสั่ง มันดูเฉพาะคำสั่งที่กฎส่งมาด้วย `classify`
-  `list` `grep` `glob` และ `read` ของไฟล์ธรรมดาใน workspace ไม่ผ่านด่านนี้ ส่วน `read` ของไฟล์ความลับเข้ากฎ `secret-path` เดียวกัน (`secretReadDenial`)
+  เช่น `secret-path` ที่จับ `cat .env` หรือ `secret-search` ที่จับคำสั่ง bash `grep -rn password .`
+  ส่วน tool `list` `grep` `glob` และ `read` ของไฟล์ธรรมดาใน workspace ไม่ผ่านด่านนี้ ส่วน `read` ของไฟล์ความลับเข้ากฎ `secret-path` เดียวกัน (`secretReadDenial`)
   และ `grep` กับ `glob` ข้ามไฟล์ความลับเองอยู่แล้ว (คอมเมนต์เหนือกฎ `secret-path`)
 
 อ่านต่อ:
