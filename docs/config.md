@@ -88,7 +88,7 @@ Geno's built-in dollar caps are sized for `qwen3.8-flash` and scaled to the mode
 | The Arena's review | $0.05 | $0.245 | $0.436 |
 | A workflow run's total | $0.50 | $2.455 | $4.362 |
 
-A prompt you send (the first row) on Claude Sonnet 5.5 or Opus 5.5, or any model of the principles tier, gets five times both of its defaults: 200 model calls instead of 40, and $9.82 on Sonnet or $17.45 on Opus. Claude Code caps neither, and on real tasks those models run 60 calls and more in one prompt; 40 calls stopped them halfway. Children, schedules, the Arena and workflows keep the caps in the table.
+A prompt you send to the agent (`gcode agent`, `serve` and the editor panel) on Claude Sonnet 5.5 or Opus 5.5, or any priced model of the principles tier, gets five times its default model calls, 200 instead of 40, and, when you set no `--max-cost`, five times its default dollars: $9.82 on Sonnet or $17.45 on Opus. A model Geno has no price for, such as Claude on Bedrock or Vertex, keeps 40 calls, since nothing else stops it. Claude Code caps neither, and on real tasks those models run 60 calls and more in one prompt; 40 calls stopped them halfway. Children, schedules, the Arena and workflows keep the caps in the table.
 
 The factors are 4.91 for Claude Sonnet 5.5 and 8.725 for Claude Opus 5.5, on Anthropic's list prices. A cap you set stays as you set it: `--max-cost`, a schedule's `max_cost_usd`, an agent definition's `maxCost`, a workflow file's `maxCostUsd`, and the `agent` tool's `max_cost_usd`. The upper bounds on what you may set, such as a schedule's $1, do not scale.
 

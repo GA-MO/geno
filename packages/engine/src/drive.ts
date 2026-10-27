@@ -50,6 +50,8 @@ export type Mode = {
   readonly afterCompact?: () => Promise<TurnEvent | undefined>;
   /** A subagent's run, which hands its report back through the report tool (`handback.ts`). */
   readonly handback?: true | undefined;
+  /** A fork's run: it ends with its last text as its report, so it is not reminded to check a change first. */
+  readonly fork?: true | undefined;
   /** The user's tool event hooks: every call's PreToolUse verdict, settled before the first call of a turn runs, and the after-tool events. */
   readonly toolHooks?: ToolHooks | undefined;
   /** The user's UserPromptSubmit hooks, on the prompt this run answers: they may block it or add to it. */
@@ -81,7 +83,7 @@ export type DefaultTurns = { readonly referenceTurns: number };
 
 /**
  * A run's limits before its model is known: a cap a user set, or a default that scales to the model: dollars by its
- * price (`capUsd`), and a prompt's calls and dollars both by `runScaleOf` when neither was set.
+ * price (`capUsd`), and a prompt's default calls by `runScaleOf`, with its default dollars too when those are unset.
  */
 export type LimitsSpec = Omit<Limits, 'maxCostUsd' | 'maxTurns'> & { readonly maxCostUsd: UsdCap; readonly maxTurns: number | DefaultTurns };
 
@@ -253,7 +255,7 @@ export async function drive(
     );
     return written;
   };
-  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback, ...(mode.forced === undefined && mode.tools.some((tool) => tool.name === TODO_TOOL) ? { todo: true as const } : {}), ...(mode.forced === undefined && mode.handback !== true && capabilitiesOf(session.provider, session.model).promptTier === 'principles' && mode.tools.some((tool) => tool.name === 'bash') ? { checkChanges: true as const } : {}) };
+  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback, ...(mode.forced === undefined && mode.tools.some((tool) => tool.name === TODO_TOOL) ? { todo: true as const } : {}), ...(mode.forced === undefined && mode.handback !== true && mode.fork !== true && capabilitiesOf(session.provider, session.model).promptTier === 'principles' && mode.tools.some((tool) => tool.name === 'bash') ? { checkChanges: true as const } : {}) };
   if (prompt !== '') {
     await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });
     await submitted(events, mode, record, io);

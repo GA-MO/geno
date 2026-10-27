@@ -644,7 +644,7 @@ export function subagents(env: SubagentEnv): Subagents {
     const mcp = start === 'fork' || session.backend !== undefined || !grantsMcp(agent.mcp) ? undefined : await env.mcp?.(childApproval, agent.mcp);
     const mode: Mode =
       start === 'fork'
-        ? { ...env.parentMode(), executors, readRoots: env.readRoots, writeRoots: env.writeRoots, arrivals, toolHooks, stop }
+        ? { ...env.parentMode(), fork: true, executors, readRoots: env.readRoots, writeRoots: env.writeRoots, arrivals, toolHooks, stop }
         : {
             toolHooks,
             stop,
