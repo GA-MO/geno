@@ -38,11 +38,19 @@ if (a === 'repo' && b === 'create') {
   }
   process.exit(0);
 }
-if (a === 'repo' && b === 'view') { const name = (args[2] ?? 'repo').replace(/^.*\//, ''); out({ name, url: `https://github.com/dev/${name}`, visibility: 'PUBLIC', owner: { login: 'dev' } }); process.exit(0); }
+const exists = (name) => name !== undefined && existsSync(path.join(home, '.hp/github/dev', `${name}.git`));
+const missing = (name) => { console.error(`GraphQL: Could not resolve to a Repository with the name 'dev/${name}'. (repository)`); process.exit(1); };
+if (a === 'repo' && b === 'view') {
+  const name = (args[2] && !args[2].startsWith('-') ? args[2] : '').replace(/^.*\//, '') || undefined;
+  if (!exists(name)) missing(name ?? '');
+  out({ name, url: `https://github.com/dev/${name}`, visibility: 'PUBLIC', owner: { login: 'dev' } });
+  process.exit(0);
+}
 if (a === 'api') {
   const target = args.slice(1).find((x) => !x.startsWith('-') && /\//.test(x) || x === 'user') ?? '';
   if (target === 'user') { out({ login: 'dev', html_url: 'https://github.com/dev' }); process.exit(0); }
   const name = repoOf(target);
+  if (name !== undefined && !exists(name)) { console.error('gh: Not Found (HTTP 404)'); process.exit(1); }
   if (/\/pages\/builds/.test(target)) { out({ url: `https://api.github.com/repos/dev/${name}/pages/builds/latest`, status: 'built', error: { message: null } }); process.exit(0); }
   if (/\/pages/.test(target)) { out({ url: `https://api.github.com/repos/dev/${name}/pages`, status: 'built', cname: null, html_url: `https://dev.github.io/${name}/`, source: { branch: 'main', path: '/' }, public: true }); process.exit(0); }
   out({}); process.exit(0);
