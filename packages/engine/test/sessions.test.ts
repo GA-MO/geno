@@ -93,6 +93,21 @@ describe('session log', () => {
     expect((await readSessionLog(file)).events).toEqual([start, denied]);
   });
 
+  it("reads back a web tool's result with the spend of the model call it made", async () => {
+    const searched: TurnEvent = {
+      kind: 'tool-result',
+      seq: 1,
+      at,
+      toolUseId: 'tu_1',
+      name: 'web_search',
+      status: 'ok',
+      output: 'results',
+      helper: { model: 'claude-opus-5-5', usage: { input: 14100, cacheRead: 0, cacheWrite: 0, output: 787 }, costUsd: 0.08214, searches: 1 },
+    };
+    const file = await logWith([start, searched]);
+    expect((await readSessionLog(file)).events).toEqual([start, searched]);
+  });
+
   it('fails on a schema violation even on the last line', async () => {
     const file = await logWith([start]);
     await appendFile(file, `${JSON.stringify({ kind: 'user', seq: 0, at, content: 'x' })}\n`);
