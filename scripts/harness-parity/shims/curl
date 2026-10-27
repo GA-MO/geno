@@ -1,15 +1,19 @@
 #!/bin/sh
-# Answers for the deploy tasks' fake GitHub: github.com/dev and dev.github.io pages exist; every other URL goes to the real curl.
+# The deploy tasks' fake GitHub: https://dev.github.io/<repo>/ serves the index.html pushed to that repo, and
+# https://github.com/dev/<repo> answers when the repo exists. Where the pushed repo cannot be read, as inside a
+# sandbox that blocks the host, it fails to connect. Every other URL goes to the real curl.
 for a in "$@"; do
   case "$a" in
-    https://dev.github.io/*|https://github.com/dev/*|http://dev.github.io/*)
+    https://dev.github.io/*|http://dev.github.io/*|https://github.com/dev/*)
+      repo=$(printf '%s' "$a" | sed -E 's#^https?://(dev\.github\.io|github\.com/dev)/([^/?#]+).*#\2#; s#\.git$##')
+      bare="$HOME/.hp/github/dev/$repo.git"
+      body=$(git --git-dir="$bare" show HEAD:index.html 2>/dev/null) || { echo "curl: (7) Failed to connect to ${a#*//} port 443" >&2; exit 7; }
       want_code=0; head_only=0; out=""; prev=""
       for b in "$@"; do
         case "$prev" in -w|--write-out) want_code=1;; -o|--output) out="$b";; esac
-        case "$b" in -I|--head|-sI|-Is) head_only=1;; esac
+        case "$b" in -I|--head|-sI|-Is|-fsI|-sSI) head_only=1;; esac
         prev="$b"
       done
-      body='<!doctype html><html><head><title>Chengdu trip</title></head><body>ok</body></html>'
       if [ "$head_only" = 1 ]; then printf 'HTTP/2 200\r\ncontent-type: text/html; charset=utf-8\r\nserver: GitHub.com\r\n\r\n'; exit 0; fi
       if [ -n "$out" ] && [ "$out" != "/dev/null" ]; then printf '%s' "$body" > "$out"; elif [ -z "$out" ]; then printf '%s' "$body"; fi
       if [ "$want_code" = 1 ]; then printf '200\n'; fi

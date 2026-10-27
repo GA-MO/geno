@@ -98,8 +98,11 @@ const harnesses = {
     const r = await sh(path.join(REPO, 'node_modules/.bin/tsx'), args, { cwd: ws, env }, path.join(job, 'geno.out'));
     state.session ??= /session: ([0-9a-f-]{36})/.exec(r.out)?.[1];
     state.texts.push(text);
+    writeFileSync(path.join(job, 'geno.err'), r.err, { flag: 'a' });
     const stop = /stopped after .*|budget.*|Reached the turn limit.*/i.exec(`${r.out}\n${r.err}`)?.[0];
-    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : undefined, err: r.err };
+    // A run that could not start, such as a session log the engine cannot read, is the harness failing, not the model.
+    const failed = r.code !== 0 && r.code !== 3 ? `engine exited ${r.code}: ${r.err.trim().split('\n').at(-1)?.slice(0, 200)}` : undefined;
+    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : failed, err: r.err };
   },
 };
 
