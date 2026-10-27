@@ -234,6 +234,7 @@ const toolResultFields = {
   status: z.enum(TOOL_STATUSES),
   change: fileChangeSchema.optional(),
   approval: approvalSchema.optional(),
+  helper: z.strictObject({ model: z.string().min(1), usage: usageSchema, costUsd: z.number().nonnegative().nullable(), searches: count.optional() }).optional(),
   images: z.array(imageAttachmentSchema).optional(),
   widget: widgetRefSchema.optional(),
   editorAction: editorActionSchema.optional(),
