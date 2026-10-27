@@ -253,7 +253,7 @@ export async function drive(
     );
     return written;
   };
-  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback, ...(mode.forced === undefined && mode.tools.some((tool) => tool.name === TODO_TOOL) ? { todo: true as const } : {}) };
+  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback, ...(mode.forced === undefined && mode.tools.some((tool) => tool.name === TODO_TOOL) ? { todo: true as const } : {}), ...(mode.forced === undefined && mode.handback !== true && capabilitiesOf(session.provider, session.model).promptTier === 'principles' && mode.tools.some((tool) => tool.name === 'bash') ? { checkChanges: true as const } : {}) };
   if (prompt !== '') {
     await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });
     await submitted(events, mode, record, io);
@@ -575,6 +575,8 @@ export async function drive(
       await record({ kind: 'report-nudge', seq: nextSeq(events), at: new Date().toISOString(), ...(step.empty === true ? { empty: true as const } : {}) });
     } else if (step.kind === 'remind-todo') {
       await record({ kind: 'notice', seq: nextSeq(events), at: new Date().toISOString(), todo: step.todo });
+    } else if (step.kind === 'remind-check') {
+      await record({ kind: 'notice', seq: nextSeq(events), at: new Date().toISOString(), unchecked: step.unchecked });
     } else if (step.kind === 'answer-tools') {
       const at = new Date().toISOString();
       for (const answer of step.answers) {
