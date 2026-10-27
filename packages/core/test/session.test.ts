@@ -293,7 +293,7 @@ describe('buildRequest', () => {
   it('offers mermaid diagrams in the fixed system prompt and in both agent tiers', () => {
     const line = "- When a flow, architecture or process is clearer drawn than written, you may add a small mermaid diagram as a fenced code block with the language mermaid; the chat draws it.";
     expect(SYSTEM_PROMPT.split('\n')).toContain(line);
-    expect(AGENT_PROMPTS.principles.startsWith(SYSTEM_PROMPT)).toBe(true);
+    expect(AGENT_PROMPTS.principles.split('\n')).toContain(` ${line}`);
     expect(AGENT_PROMPTS.rules.split('\n')).toContain(line);
   });
 });

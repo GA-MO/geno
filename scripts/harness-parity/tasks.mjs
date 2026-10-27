@@ -131,7 +131,11 @@ export const TASKS = [
     sha: '9c1b5f26df',
     homeFiles: { '.claude/skills/baton/SKILL.md': BATON_SKILL },
     prompt: 'ดึง skill ของ baton (อยู่ที่ ~/.claude/skills/baton) มาไว้ในโปรเจกต์นี้ด้วยได้ไหม',
-    check: ({ ws, home }) => ok(read(ws, '.claude/skills/baton/SKILL.md') === read(home, '.claude/skills/baton/SKILL.md'), 'no copy of the skill at .claude/skills/baton/SKILL.md'),
+    // The planted skill, or the user's real one at the same place in the real home, which a run can also reach.
+    check: ({ ws, home }) => {
+      const copy = read(ws, '.claude/skills/baton/SKILL.md');
+      return ok(copy !== '' && [read(home, '.claude/skills/baton/SKILL.md'), read(os.homedir(), '.claude/skills/baton/SKILL.md')].includes(copy), 'no copy of the skill at .claude/skills/baton/SKILL.md');
+    },
   },
   {
     id: 'outside-tokens',
