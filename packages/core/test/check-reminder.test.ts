@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, loopStep, noticeTexts, type Run, type Session, type TurnEvent } from '../src/index.js';
+import { asSessionId, loopStep, noticeTexts, replayMessages, type Run, type Session, type TurnEvent } from '../src/index.js';
 
 const at = '2026-10-28T00:00:01.000Z';
 const session: Session = { id: asSessionId('s1'), createdAt: at, workspace: '/ws', provider: 'anthropic', model: 'claude-sonnet-5-5', effort: 'medium' };
@@ -38,6 +38,14 @@ describe('the check reminder', () => {
     expect(notice.kind === 'notice' && noticeTexts(notice).join('\n')).toMatch(/after changing index\.html, sw\.js, and nothing ran or opened the result since/);
     s.edit().end();
     expect(loopStep(s.events, run), 'once a run').toEqual({ kind: 'done', reason: 'end_turn' });
+  });
+
+  it('goes to the model as the next user message, so the request does not end on its own answer', () => {
+    const s = log().edit().end();
+    s.remind();
+    const last = replayMessages(s.events).at(-1)!;
+    expect(last.role).toBe('user');
+    expect(JSON.stringify(last.content)).toContain('nothing ran or opened the result since');
   });
 
   it('stays quiet when a command, the browser or a dev server ran after the last change', () => {
