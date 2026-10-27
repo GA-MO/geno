@@ -26,7 +26,7 @@ import { usage } from './usage.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
-  gcode agent [--session <id>] [--workspace <dir>] [--effort low|medium|high|xhigh|max] [--max-turns 40] [--max-cost <usd>] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] [--browser] [--append-system-prompt "<text>"] <task...>
+  gcode agent [--session <id>] [--workspace <dir>] [--effort low|medium|high|xhigh|max] [--max-turns <n>] [--max-cost <usd>] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] [--browser] [--append-system-prompt "<text>"] <task...>
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost <usd>] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
@@ -35,8 +35,8 @@ export const USAGE = `usage:
   gcode session list [--all]
   gcode rewind --session <id> --to <turn>
   gcode usage --session <id> [--json] [--baht-per-usd 33]
-  gcode serve --stdio [--max-turns 40] [--max-cost <usd>]
-  gcode serve --socket <path> [--idle-ms 10000] [--max-turns 40] [--max-cost <usd>]
+  gcode serve --stdio [--max-turns <n>] [--max-cost <usd>]
+  gcode serve --socket <path> [--idle-ms 10000] [--max-turns <n>] [--max-cost <usd>]
   gcode lane new <name> [--from head|main] [--approve-setup] [--workspace <dir>]
   gcode lane list [--json] [--workspace <dir>]
   gcode lane apply <name> [--dry-run] [--workspace <dir>]

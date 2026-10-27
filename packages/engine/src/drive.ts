@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { capUsd, type Session, type UsdCap } from '@g-code/core';
+import { capUsd, runScaleOf, type Session, type UsdCap } from '@g-code/core';
 import { budgetReminder, compactionStuck, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue, TODO_TOOL, todoReminder } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
@@ -76,11 +76,24 @@ export function issuedOnce(turn: AssistantTurn): Director {
  */
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number; readonly countFrom?: number | undefined };
 
-/** A run's limits before its model is known: a cost cap a user set, or a default that scales to the model (`capUsd`). */
-export type LimitsSpec = Omit<Limits, 'maxCostUsd'> & { readonly maxCostUsd: UsdCap };
+/** A prompt's call cap when the user set none: `referenceTurns` on a cheap model, more on a strong one (`runScaleOf`). */
+export type DefaultTurns = { readonly referenceTurns: number };
+
+/**
+ * A run's limits before its model is known: a cap a user set, or a default that scales to the model: dollars by its
+ * price (`capUsd`), and a prompt's calls and dollars both by `runScaleOf` when neither was set.
+ */
+export type LimitsSpec = Omit<Limits, 'maxCostUsd' | 'maxTurns'> & { readonly maxCostUsd: UsdCap; readonly maxTurns: number | DefaultTurns };
 
 /** The limits of a run on this session's model. */
-export const limitsOn = (spec: LimitsSpec, { provider, model }: Pick<Session, 'provider' | 'model'>): Limits => ({ ...spec, maxCostUsd: capUsd(spec.maxCostUsd, provider, model) });
+export const limitsOn = (spec: LimitsSpec, { provider, model }: Pick<Session, 'provider' | 'model'>): Limits => {
+  const scale = typeof spec.maxTurns === 'number' ? 1 : runScaleOf(provider, model);
+  return {
+    ...spec,
+    maxTurns: typeof spec.maxTurns === 'number' ? spec.maxTurns : spec.maxTurns.referenceTurns * scale,
+    maxCostUsd: typeof spec.maxCostUsd === 'number' ? spec.maxCostUsd : capUsd(spec.maxCostUsd, provider, model) * scale,
+  };
+};
 
 /** How a run shows what it does as it happens. */
 export type Watcher = {

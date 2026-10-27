@@ -165,3 +165,11 @@ export const UNKNOWN_MODEL: ModelCapabilities = {
 
 export const capabilitiesOf = (provider: ProviderName, model: string): ModelCapabilities =>
   Object.hasOwn(MODEL_CAPABILITIES[provider], model) ? MODEL_CAPABILITIES[provider][model]! : UNKNOWN_MODEL;
+
+/**
+ * How many times a prompt's default limits (its model calls and its scaled dollar cap) a model gets. Claude Code caps
+ * neither, and on the user's own tasks Claude Opus 5.5 ran up to 58 calls in one prompt, so a model of the principles
+ * tier gets five times the 40 calls sized for qwen3.8-flash, which loops when it runs long (docs/claude-code-parity.md
+ * A/A-11).
+ */
+export const runScaleOf = (provider: ProviderName, model: string): number => (capabilitiesOf(provider, model).promptTier === 'principles' ? 5 : 1);

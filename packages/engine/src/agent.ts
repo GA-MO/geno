@@ -69,7 +69,7 @@ import { addedDirectories, settingDirectories, workingDirectories } from './dire
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { pstackMap, writeGenoTools } from './geno-tools.js';
-import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, limitsOn, type LimitsSpec, type Mode, type Surface } from './drive.js';
+import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type DefaultTurns, type Director, type DriveResult, limitsOn, type LimitsSpec, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
@@ -482,14 +482,17 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
  */
 export const DEFAULT_TURN_USD = defaultUsd(0.4);
 
+/** A prompt's model calls without --max-turns: 40 on qwen3.8-flash, scaled to the session's model by `runScaleOf`. */
+export const DEFAULT_TURNS: DefaultTurns = { referenceTurns: 40 };
+
 /** The per-run limit flags of every command that runs the agent. */
 export const LIMIT_FLAGS = {
-  'max-turns': { type: 'string', default: '40' },
+  'max-turns': { type: 'string' },
   'max-cost': { type: 'string' },
 } as const;
 
-export const limitsOf = (values: { readonly 'max-turns': string; readonly 'max-cost'?: string | undefined }): LimitsSpec => ({
-  maxTurns: positiveNumber('max-turns', values['max-turns'], true),
+export const limitsOf = (values: { readonly 'max-turns'?: string | undefined; readonly 'max-cost'?: string | undefined }): LimitsSpec => ({
+  maxTurns: values['max-turns'] === undefined ? DEFAULT_TURNS : positiveNumber('max-turns', values['max-turns'], true),
   maxCostUsd: values['max-cost'] === undefined ? DEFAULT_TURN_USD : positiveNumber('max-cost', values['max-cost'], false),
 });
 
