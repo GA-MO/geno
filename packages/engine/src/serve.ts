@@ -270,6 +270,7 @@ import {
   DRAFT_METHOD,
   type WakeTrigger,
   subagentModelsOf,
+  INLINE_EDIT_MAX_TURNS,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -1760,7 +1761,7 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
                   },
                 }),
               })
-            : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limitsOn(limits, opened.log.session).maxCostUsd, surface: shown.surface, diagnostics });
+            : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limitsOn({ ...limits, maxTurns: INLINE_EDIT_MAX_TURNS }, opened.log.session).maxCostUsd, surface: shown.surface, diagnostics });
         await shown.updates.flush();
         return { reason: result.reason, spent: shown.usage() };
       });

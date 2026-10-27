@@ -1,3 +1,4 @@
+import { isPriced } from './cost.js';
 import type { ProviderName } from './providers.js';
 
 /**
@@ -168,8 +169,10 @@ export const capabilitiesOf = (provider: ProviderName, model: string): ModelCapa
 
 /**
  * How many times a prompt's default limits (its model calls and its scaled dollar cap) a model gets. Claude Code caps
- * neither, and on the user's own tasks Claude Opus 5.5 ran up to 58 calls in one prompt, so a model of the principles
- * tier gets five times the 40 calls sized for qwen3.8-flash, which loops when it runs long (docs/claude-code-parity.md
- * A/A-11).
+ * neither, and on the user's own tasks Claude Opus 5.5 ran up to 58 calls in one prompt, so a priced model of the
+ * principles tier gets five times the 40 calls sized for qwen3.8-flash, which loops when it runs long
+ * (docs/claude-code-parity.md A/A-11). An unpriced one, such as Claude on Bedrock, keeps 40: its calls count as free,
+ * so the call cap is the only thing that stops it.
  */
-export const runScaleOf = (provider: ProviderName, model: string): number => (capabilitiesOf(provider, model).promptTier === 'principles' ? 5 : 1);
+export const runScaleOf = (provider: ProviderName, model: string): number =>
+  capabilitiesOf(provider, model).promptTier === 'principles' && isPriced(provider, model) ? 5 : 1;

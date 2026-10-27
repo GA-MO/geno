@@ -12,6 +12,10 @@ describe("a prompt's default limits", () => {
     expect(limitsOn(limitsOf({}), sonnet)).toEqual({ maxTurns: 200, maxCostUsd: capUsd(DEFAULT_TURN_USD, sonnet.provider, sonnet.model) * 5 });
   });
 
+  it('keep 40 calls on a strong model Geno has no price for, whose calls count as free', () => {
+    expect(limitsOn(limitsOf({}), { provider: 'bedrock', model: 'claude-opus-5-5' }).maxTurns).toBe(40);
+  });
+
   it('keep the limits the user set as they are', () => {
     expect(limitsOn(limitsOf({ 'max-turns': '30', 'max-cost': '2' }), sonnet)).toEqual({ maxTurns: 30, maxCostUsd: 2 });
     expect(limitsOn(limitsOf({ 'max-turns': '30' }), sonnet)).toEqual({ maxTurns: 30, maxCostUsd: capUsd(DEFAULT_TURN_USD, sonnet.provider, sonnet.model) });
