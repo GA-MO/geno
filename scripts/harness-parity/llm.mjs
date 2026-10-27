@@ -1,10 +1,33 @@
 // The two model readers of a run: whether its last words handed work back to the user, and which of two blind
 // transcripts served the user better. Both call the Messages API with the campaign's key.
+import { spawnSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { campaignEnv } from '../real-usecases/env.mjs';
 
 const env = campaignEnv();
 
+/**
+ * The same call through the Claude Code CLI on the user's own sign-in, for when the API key has no credit
+ * (HP_LLM=claude-cli): the system prompt replaced, no tools, no settings, no session kept.
+ */
+function askCli(model, system, user) {
+  const cwd = path.join(os.homedir(), 'Development/hp-runs/.judge-cwd');
+  mkdirSync(cwd, { recursive: true });
+  const env = { ...process.env };
+  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']) delete env[k];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = spawnSync('claude', ['-p', '--model', model, '--system-prompt', system, '--tools', '', '--setting-sources', '', '--no-session-persistence', '--output-format', 'json'], { cwd, env, input: user, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 600_000 });
+    const text = r.status === 0 ? JSON.parse(r.stdout).result ?? '' : '';
+    const json = /\{[\s\S]*\}/.exec(text)?.[0];
+    if (json !== undefined) return JSON.parse(json);
+  }
+  throw new Error('the Claude Code CLI gave no JSON answer');
+}
+
 async function ask(model, system, user, maxTokens = 2000) {
+  if (process.env.HP_LLM === 'claude-cli') return askCli(model, system, user);
   for (let attempt = 0; ; attempt++) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
