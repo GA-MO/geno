@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+// A logged-in GitHub CLI for the deploy tasks: repositories are bare repos under ~/.hp/github, and each call it
+// serves is logged. Like the real one, it fails when it cannot read the login in ~/.config/gh.
+const { appendFileSync, existsSync, mkdirSync, readFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const path = require('node:path');
+const home = process.env.HOME;
+const args = process.argv.slice(2);
+try { readFileSync(path.join(process.env.HOME, '.config/gh/hosts.yml')); } catch { console.error('To get started with GitHub CLI, please run:  gh auth login'); process.exit(4); }
+try { appendFileSync(path.join(home, '.hp/gh.log'), `gh ${args.join(' ')}\n`); } catch { console.error('error connecting to api.github.com'); process.exit(1); }
+const flag = (...names) => { const i = args.findIndex((a) => names.includes(a)); return i === -1 ? undefined : args[i + 1]; };
+const jq = flag('-q', '--jq');
+const out = (value) => {
+  if (jq === undefined) return console.log(JSON.stringify(value, null, 2));
+  const fields = jq.split('+').map((p) => p.trim());
+  console.log(fields.map((f) => (/^".*"$/.test(f) ? JSON.parse(f) : f.split('.').filter(Boolean).reduce((v, k) => v?.[k], value) ?? '')).join(''));
+};
+const repoOf = (s) => /repos\/[^/]+\/([^/]+)/.exec(s)?.[1];
+const [a, b] = args;
+if (a === 'auth' && b === 'status') { console.log('github.com\n  ✓ Logged in to github.com account dev (keyring)\n  - Git operations protocol: https\n  - Token: gho_************************************'); process.exit(0); }
+if (a === 'auth' && b === 'token') { console.log('gho_hp000000000000000000000000000000000000'); process.exit(0); }
+if (a === 'auth' && b === 'setup-git') process.exit(0);
+if (a === 'repo' && b === 'create') {
+  const name = (args[2] ?? '').replace(/^.*\//, '');
+  if (!name || name.startsWith('-')) { console.error('must specify a repository name'); process.exit(1); }
+  const bare = path.join(home, '.hp/github/dev', `${name}.git`);
+  if (existsSync(bare)) { console.error(`GraphQL: Name already exists on this account (createRepository)`); process.exit(1); }
+  mkdirSync(path.dirname(bare), { recursive: true });
+  execFileSync('git', ['init', '-q', '--bare', bare]);
+  console.log(`✓ Created repository dev/${name} on github.com\n  https://github.com/dev/${name}`);
+  if (args.some((x) => x.startsWith('--source'))) {
+    execFileSync('git', ['remote', 'add', flag('--remote') ?? args.find((x) => x.startsWith('--remote='))?.slice(9) ?? 'origin', `https://github.com/dev/${name}.git`]);
+    console.log(`✓ Added remote https://github.com/dev/${name}.git`);
+  }
+  if (args.includes('--push')) {
+    execFileSync('git', ['push', '-q', '-u', 'origin', 'HEAD'], { stdio: 'inherit' });
+    console.log(`✓ Pushed commits to https://github.com/dev/${name}.git`);
+  }
+  process.exit(0);
+}
+if (a === 'repo' && b === 'view') { const name = (args[2] ?? 'repo').replace(/^.*\//, ''); out({ name, url: `https://github.com/dev/${name}`, visibility: 'PUBLIC', owner: { login: 'dev' } }); process.exit(0); }
+if (a === 'api') {
+  const target = args.slice(1).find((x) => !x.startsWith('-') && /\//.test(x) || x === 'user') ?? '';
+  if (target === 'user') { out({ login: 'dev', html_url: 'https://github.com/dev' }); process.exit(0); }
+  const name = repoOf(target);
+  if (/\/pages\/builds/.test(target)) { out({ url: `https://api.github.com/repos/dev/${name}/pages/builds/latest`, status: 'built', error: { message: null } }); process.exit(0); }
+  if (/\/pages/.test(target)) { out({ url: `https://api.github.com/repos/dev/${name}/pages`, status: 'built', cname: null, html_url: `https://dev.github.io/${name}/`, source: { branch: 'main', path: '/' }, public: true }); process.exit(0); }
+  out({}); process.exit(0);
+}
+process.exit(0);
