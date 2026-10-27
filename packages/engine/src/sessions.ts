@@ -402,6 +402,7 @@ const turnEventSchema = z.union([
         })
         .optional(),
       todo: z.strictObject({ why: z.enum(['idle', 'ending', 'stopped', 'earlier']), list: todoSchema }).optional(),
+      unchecked: z.strictObject({ files: z.array(z.string().min(1)).min(1) }).optional(),
       budget: z.strictObject({ calls: count, maxCalls: z.number().int().positive(), costUsd: z.number(), maxCostUsd: z.number().positive(), perCallUsd: z.number().positive().optional() }).optional(),
       last: z.literal(true).optional(),
     }),

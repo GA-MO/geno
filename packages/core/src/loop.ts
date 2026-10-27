@@ -1,6 +1,6 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { REPORT_TOOL, reportMessageOf, STRUCTURED_OUTPUT_TOOL } from './handback.js';
-import { BUDGET_REMINDER_SHARE, TODO_REMINDER_CALLS, type BudgetLeft, type TodoReminder } from './notice.js';
+import { BUDGET_REMINDER_SHARE, TODO_REMINDER_CALLS, type BudgetLeft, type TodoReminder, type UncheckedChange } from './notice.js';
 import { sideCostOf, IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
 import { todoOf, TODO_TOOL } from './todo.js';
 
@@ -18,6 +18,8 @@ export type LoopStep =
   | { readonly kind: 'nudge'; readonly empty?: true | undefined }
   /** The model ended its turn with its todo list unfinished: log the reminder, then call the model again. */
   | { readonly kind: 'remind-todo'; readonly todo: TodoReminder }
+  /** The model ended its turn right after changing files, with nothing run or opened since: log the reminder, then call the model again. */
+  | { readonly kind: 'remind-check'; readonly unchecked: UncheckedChange }
   | { readonly kind: 'done'; readonly reason: DoneReason };
 
 /** What a call the user turned down tells the model, as Claude Code's rejection does. */
@@ -58,6 +60,8 @@ export type Run = {
   readonly handback?: true | undefined;
   /** The model can call the todo tool, so an end with the list unfinished is shown the list once. */
   readonly todo?: true | undefined;
+  /** An end right after a file change with nothing run or opened since is reminded once to check it (a strong model's run). */
+  readonly checkChanges?: true | undefined;
 };
 
 const CALL: LoopStep = { kind: 'call-model' };
@@ -273,6 +277,25 @@ function endingReminder(events: readonly TurnEvent[], run: Run): TodoReminder | 
   return underway ? { why: 'ending', list } : undefined;
 }
 
+/** Calls that run or look at what a change did: a command, the check, a subagent, the browser or a dev server. */
+const CHECK_TOOLS: ReadonlySet<string> = new Set(['bash', 'check', 'agent']);
+const checks = (event: TurnEvent): boolean => event.kind === 'tool-result' && (CHECK_TOOLS.has(event.name) || event.name.startsWith('mcp__browser__') || event.name.startsWith('preview_'));
+const isCheckReminder = (event: TurnEvent): boolean => event.kind === 'notice' && event.unchecked !== undefined;
+
+/**
+ * The model ended its turn on its own right after this run changed files, with nothing run or opened since: Claude
+ * Code reports only what it checked, and Geno's users found unopened pages the most common thing they had to ask for.
+ * Once a run, and only while the next call is not the last, which goes out with the tools off.
+ */
+function checkReminder(events: readonly TurnEvent[], run: Run): UncheckedChange | undefined {
+  if (run.checkChanges !== true || limitReached(events, run) !== undefined || lastCallDue(events, run)) return undefined;
+  const ran = thisRun(events, run);
+  if (ran.some(isCheckReminder)) return undefined;
+  const changed = ran.findLastIndex((e) => e.kind === 'tool-result' && e.change !== undefined);
+  if (changed === -1 || ran.slice(changed + 1).some(checks)) return undefined;
+  return { files: [...new Set(ran.flatMap((e) => (e.kind === 'tool-result' && e.change !== undefined ? [e.change.path] : [])))] };
+}
+
 export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   const last = lastLiveEvent(events, run);
   if (last.kind === 'error') return after(last);
@@ -296,9 +319,11 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
     return limitReached(events, run) ?? { kind: 'nudge', empty: true };
   }
   if (last.kind === 'assistant' && last.seq >= run.firstSeq && step.kind === 'done' && step.reason === 'end_turn') {
-    if (newestTurn(events)!.after.some(isEndingReminder)) return CALL;
+    if (newestTurn(events)!.after.some((e) => isEndingReminder(e) || isCheckReminder(e))) return CALL;
     const todo = endingReminder(events, run);
     if (todo !== undefined) return { kind: 'remind-todo', todo };
+    const unchecked = checkReminder(events, run);
+    if (unchecked !== undefined) return { kind: 'remind-check', unchecked };
   }
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);

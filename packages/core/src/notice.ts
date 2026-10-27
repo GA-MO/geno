@@ -18,6 +18,7 @@ export type Notice = {
   readonly mcp?: McpDelta | undefined;
   readonly budget?: BudgetLeft | undefined;
   readonly todo?: TodoReminder | undefined;
+  readonly unchecked?: UncheckedChange | undefined;
   /** The next model call is the last the run's limits allow, and it goes out with the tools off. */
   readonly last?: true | undefined;
 };
@@ -83,6 +84,17 @@ export function renderTodoReminder({ why, list }: TodoReminder): string {
   return [`${GENO_NOTE} ${opening}`, ...todoLines(list), closing].join('\n');
 }
 
+/** The files a run changed, told once when the model ends its turn without running or opening anything after them. */
+export type UncheckedChange = { readonly files: readonly string[] };
+
+const MAX_NAMED_FILES = 5;
+
+export function renderUncheckedChange({ files }: UncheckedChange): string {
+  const names = files.slice(0, MAX_NAMED_FILES).map((file) => file.split('/').at(-1) ?? file);
+  const more = files.length > MAX_NAMED_FILES ? ` and ${files.length - MAX_NAMED_FILES} more` : '';
+  return `${GENO_NOTE} You ended your turn after changing ${names.join(', ')}${more}, and nothing ran or opened the result since. Check it on the real thing now: run it, or open a page you changed in the browser and look at it. Fix what you find, then end with your report. If it cannot be checked here, say why in one line. Do not mention this note to the user.`;
+}
+
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
  * the tools a mode leaves out are refused when called.
@@ -139,6 +151,7 @@ export const noticeTexts = (notice: Notice): string[] => [
   ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
   ...(notice.mcp === undefined ? [] : [renderMcpDelta(notice.mcp)]),
   ...(notice.todo === undefined ? [] : [renderTodoReminder(notice.todo)]),
+  ...(notice.unchecked === undefined ? [] : [renderUncheckedChange(notice.unchecked)]),
   ...(notice.budget === undefined ? [] : [renderBudgetLeft(notice.budget)]),
   ...(notice.last === true ? [LAST_CALL_NOTE] : []),
 ];
