@@ -74,6 +74,7 @@ import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
 import { recordedScratchpad, reopenScratchpad } from './environment.js';
+import { browserLauncherOf } from './mcp/browser.js';
 import { openMcpHub, type McpTools } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
@@ -508,6 +509,7 @@ export const agent: Command = async (args, { io, store }) => {
       'non-interactive': { type: 'boolean', default: false },
       mode: { type: 'string' },
       mcp: { type: 'boolean' },
+      browser: { type: 'boolean', default: false },
       'allow-worker': { type: 'boolean', default: false },
       'append-system-prompt': { type: 'string' },
     },
@@ -520,7 +522,7 @@ export const agent: Command = async (args, { io, store }) => {
   const log = chosen === undefined ? opened.log : await logMode(opened.log, chosen);
   const mode = sessionModeOf(log.events);
   const approval: Approval = values['non-interactive']
-    ? { kind: 'non-interactive', mcp: values.mcp === true }
+    ? { kind: 'non-interactive', mcp: values.mcp === true || values.browser }
     : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: terminalClassifier(io) };
   const appendSystemPrompt = values['append-system-prompt'];
   if (appendSystemPrompt?.trim() === '') throw new UsageError('--append-system-prompt needs text');
@@ -528,9 +530,11 @@ export const agent: Command = async (args, { io, store }) => {
   const hooks = new HookSessions();
   const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'], hooks, appendSystemPrompt };
   try {
-    // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
-    if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
-    const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });
+    // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp or --browser.
+    if (!values.browser && !(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
+    // --browser gives the session the built-in headless browser the editor's setting turns on.
+    const browser = values.browser ? { settings: { enabled: true, headless: true }, launcher: browserLauncherOf(io.env), home: homeOf(store), scratchpad: recordedScratchpad(log.events) } : undefined;
+    const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [], browser });
     try {
       // A one-shot run has only this turn, so it waits for its servers.
       await hub.start();
