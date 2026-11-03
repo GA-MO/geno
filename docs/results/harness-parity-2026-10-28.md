@@ -88,7 +88,7 @@ Commit 59d88b65, the extension's 0.18.13 code with the Claude prompt that ships:
 
 ### Layer A on Sonnet 5.5
 
-36 of 39 pass (`node scripts/real-usecases/run.mjs --model claude-sonnet-5-5 --cost-scale 4.91`, $2.60). A07 and A28, which the first Claude prompt broke, pass. A09 (repeats a secret it read) and A26 also fail on main. A17 fails because Sonnet finishes the 108-function job in one script within 4 calls, so the budget notice it checks for never fires. Main fails it the same way (1 of 2), and the model's calls were the same under every prompt tried.
+36 of 39 pass (`node scripts/real-usecases/run.mjs --model claude-sonnet-5-5 --cost-scale 4.91`, $2.60). A07 and A28, which the first Claude prompt broke, pass. A09 (repeats a secret it read) and A26 also fail on main. A17 passes 1 of 6 on the shipped prompt, 3 of 3 with the short restored rules and 1 of 2 on main. On Sonnet its checks do not separate good work from bad. One passing run (short rules) changed no file: Geno refused its bulk edit because the same line also read a file with `sed -n`, and the budget ran out. Two others did all 108 functions with a `node` script, which the edit check does not see. The failing runs did the whole job too. In the reported run the script was `perl -pi` on the shop files, which the edit check flags. In four reruns the job took 4 calls, so the budget notice, which goes out after the 4th of 5, never fired.
 
 | case | main | short restored rules | shipped prompt |
 |---|---|---|---|
