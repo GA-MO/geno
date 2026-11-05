@@ -212,13 +212,30 @@ async function desktopSession(tab, shots, out) {
   out.vitals1280 = await tab.run(vitals);
   out.tiles1280 = await tiles(tab, shots, 'desktop', DESKTOP.height);
   if (out.layout1280.cards) await tab.shotClip(path.join(shots, 'cards-1280.jpg'), { x: 0, y: out.layout1280.cards.top - 16, width: DESKTOP.width, height: out.layout1280.cards.bottom - out.layout1280.cards.top + 32 });
-  if (rect) {
-    tab.log.phase = 'lost-context';
-    const before = await heroPixels(tab, [rect]);
-    const lost = await tab.run(loseContext);
-    const after = await heroPixels(tab, [rect]);
-    out.restore = { ...lost, before: stats(before), after: stats(after) };
+}
+
+/**
+ * Loses the hero's WebGL context and asks for it back, in a session of its own: a page may recover by reloading
+ * itself, which ends whatever else the session was measuring. A reload that brings the hero back is a recovery.
+ */
+async function restoreSession(tab, _shots, out) {
+  await tab.open(DESKTOP);
+  await wait(2500);
+  const rect = await tab.run(findHero);
+  if (!rect) return;
+  tab.log.phase = 'lost-context';
+  const before = await heroPixels(tab, [rect]);
+  let lost;
+  try {
+    lost = await tab.run(loseContext);
+  } catch (error) {
+    if (!/navigated or closed|Execution context was destroyed|Cannot find context/.test(error.message)) throw error;
+    await wait(3000);
+    const again = await tab.run(findHero);
+    lost = { tried: true, lostSeen: true, restored: again !== undefined, reloaded: true };
   }
+  const after = await heroPixels(tab, [rect]);
+  out.restore = { ...lost, before: stats(before), after: stats(after) };
 }
 
 /** The motion strip for the judge: two frames of the load, two of the pointer on the hero, three of the scroll. */
@@ -297,7 +314,7 @@ export async function measure(dir, shots) {
   const near = mkdtempSync(path.join(shots, '.chrome-'));
   const out = { errors: {} };
   const logs = [];
-  const sessions = { desktop: desktopSession, motion: motionSession, reduced: reducedSession, phone: phoneSession };
+  const sessions = { desktop: desktopSession, restore: restoreSession, motion: motionSession, reduced: reducedSession, phone: phoneSession };
   try {
     // A fresh browser for each session, so a page that hung one session cannot hang the next.
     for (const [name, session] of Object.entries(sessions)) {
