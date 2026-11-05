@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { McpToolInfo, TurnEvent } from '@g-code/core';
 import { browserExecutor, lastUrlOf, newBrowserState } from '../src/mcp/browser.js';
 import type { McpServerHandle } from '../src/mcp/server.js';
+import type { Approval } from '../src/tools/agent.js';
 import { ToolError, type ToolContext } from '../src/tools/context.js';
 
 const WORKSPACE = '/w';
@@ -10,15 +11,26 @@ const SCREENSHOT = { server: 'browser', tool: 'take_screenshot', readOnly: true 
 
 /**
  * A browser server whose pages are `pages`; a call to a page it does not have answers as chrome-devtools-mcp does, and
- * `fail` makes a call to a page it has fail with the page's own words.
+ * `fail` makes a call to a page it has fail with the page's own words. new_page opens the next id and selects it.
  */
-function setup(pages: { id: number; url: string }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, fail?: (args: Record<string, unknown>) => string | undefined) {
-  const handle = { state: { status: 'ready' }, call: async () => ({ structured: { pages } }) } as unknown as McpServerHandle;
+function setup(pages: { id: number; url: string; selected?: boolean }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, fail?: (args: Record<string, unknown>) => string | undefined, state = newBrowserState(), approval: Approval = { kind: 'non-interactive', mcp: true }) {
+  const opened: string[] = [];
+  const handle = {
+    state: { status: 'ready' },
+    call: async (tool: string, args: Record<string, unknown>) => {
+      if (tool === 'new_page') {
+        opened.push(String(args['url']));
+        for (const page of pages) page.selected = false;
+        pages.push({ id: Math.max(0, ...pages.map((p) => p.id)) + 1, url: String(args['url']), selected: true });
+      }
+      return { structured: { pages }, content: [], isError: false };
+    },
+  } as unknown as McpServerHandle;
   const calls: Record<string, unknown>[] = [];
   const executor = browserExecutor(`mcp__browser__${info.tool}`, info, {
     handle,
-    approval: { kind: 'non-interactive', mcp: true },
-    state: newBrowserState(),
+    approval,
+    state,
     allowed: new Set([`mcp__browser__${info.tool}`]),
     call: async (args) => {
       calls.push(args);
@@ -29,7 +41,7 @@ function setup(pages: { id: number; url: string }[], events: TurnEvent[] = [], i
     },
   });
   const ctx = { workspace: WORKSPACE, signal: new AbortController().signal, events: () => events, permissions: undefined } as unknown as ToolContext;
-  return { run: (args: Record<string, unknown>) => executor.run(args, ctx), calls };
+  return { run: (args: Record<string, unknown>) => executor.run(args, ctx), calls, opened };
 }
 
 const listing = (id: number, url: string): TurnEvent =>
@@ -43,10 +55,11 @@ describe('a browser call to a page that is gone', () => {
     expect(typeof reply === 'string' ? reply : reply.text).toContain(`[Geno] Page 2 is not open, so this ran on page 3 (${PAGE}), the only page open.`);
   });
 
-  it('lists the open pages and the URL the missing page showed when only a blank page is left', async () => {
-    const { run, calls } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)]);
-    await expect(run({ pageId: 2 })).rejects.toThrow(`Page 2 is not open: the browser starts fresh in each run, and pages can close. Open pages: 1: about:blank. Page 2 showed ${PAGE}; open it again with new_page.`);
+  it('lists the open pages and the URL the missing page showed when it may not open that URL again itself', async () => {
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, 'https://unapproved.example/')]);
+    await expect(run({ pageId: 2 })).rejects.toThrow('Page 2 is not open: the browser starts fresh in each run, and pages can close. Open pages: 1: about:blank. Page 2 showed https://unapproved.example/; open it again with new_page.');
     expect(calls).toHaveLength(1);
+    expect(opened).toEqual([]);
   });
 
   it('does not choose between two real pages', async () => {
@@ -90,6 +103,58 @@ describe('a browser call to a page that is gone', () => {
     const { run } = setup([{ id: 3, url: PAGE }]);
     await expect(run({})).rejects.toThrow('Error: No page found');
     await expect(run({ pageId: 'two' })).rejects.toThrow('Error: No page found');
+  });
+});
+
+describe('a browser call after the run started again with a blank browser', () => {
+  const EMULATE = { server: 'browser', tool: 'emulate', readOnly: false } as McpToolInfo;
+  const text = (reply: Awaited<ReturnType<ReturnType<typeof setup>['run']>>) => (typeof reply === 'string' ? reply : reply.text);
+
+  it('opens the local page the id showed again and runs a read-only call there, in one call', async () => {
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)]);
+    const reply = await run({ pageId: 2 });
+    expect(opened).toEqual([PAGE]);
+    expect(calls.map((c) => c['pageId'])).toEqual([2, 2]);
+    expect(text(reply)).toContain(`shot of page 2\n\n[Geno] Page 2 is not open: the browser starts fresh in each run, and pages can close. Geno opened ${PAGE}, which page 2 showed, again as page 2, and this ran there.`);
+  });
+
+  it('opens a page on a host the user approved this session again', async () => {
+    const state = newBrowserState();
+    state.approvedHosts.add('approved.example');
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(4, 'https://approved.example/pricing')], SCREENSHOT, undefined, state);
+    const reply = await run({ pageId: 4 });
+    expect(opened).toEqual(['https://approved.example/pricing']);
+    expect(calls.map((c) => c['pageId'])).toEqual([4, 2]);
+    expect(text(reply)).toContain('again as page 2, and this ran there.');
+  });
+
+  it('opens the page again for a call that changes it, but leaves running that call to the model', async () => {
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)], EMULATE);
+    await expect(run({ pageId: 2, viewport: '375x800x1' })).rejects.toThrow(`Geno opened ${PAGE}, which page 2 showed, again as page 2; call emulate on page 2.`);
+    expect(opened).toEqual([PAGE]);
+    expect(calls.map((c) => c['pageId'])).toEqual([2]);
+  });
+
+  it('points to a page that already shows the URL instead of opening another', async () => {
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }, { id: 3, url: PAGE }, { id: 4, url: `file://${WORKSPACE}/other.html` }], [listing(2, PAGE)]);
+    const reply = await run({ pageId: 2 });
+    expect(opened).toEqual([]);
+    expect(calls.map((c) => c['pageId'])).toEqual([2, 3]);
+    expect(text(reply)).toContain(`[Geno] Page 2 is not open: the browser starts fresh in each run, and pages can close. Page 3 shows ${PAGE}, which page 2 showed, and this ran there.`);
+  });
+
+  it('opens nothing for a page that showed only about:blank, a file outside the workspace, or no URL at all', async () => {
+    for (const events of [[listing(2, 'about:blank')], [listing(2, 'file:///etc/hosts')], []]) {
+      const { run, opened } = setup([{ id: 1, url: 'about:blank' }], events);
+      await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
+      expect(opened).toEqual([]);
+    }
+  });
+
+  it('does not open the page again in Plan mode, where the browser may not open a page', async () => {
+    const { run, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)], SCREENSHOT, undefined, newBrowserState(), { kind: 'interactive', mode: () => 'plan' } as unknown as Approval);
+    await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
+    expect(opened).toEqual([]);
   });
 });
 
