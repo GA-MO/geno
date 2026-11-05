@@ -246,16 +246,18 @@ describe('a browser call in a new run of the same session', () => {
   };
 
   it('opens a lost page again on a host the browser opened earlier in the session, and runs a read-only call there, asking nobody', async () => {
-    const { asked, approval } = asking();
-    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], opening(PRICING), SCREENSHOT, { approval });
-    expect(text(await run({ pageId: 4 }))).toContain(`Geno opened ${PRICING}, which page 4 showed, again as page 2, and this ran there.`);
-    expect(opened).toEqual([PRICING]);
-    expect(calls.map((c) => c['pageId'])).toEqual([4, 2]);
-    expect(asked).toEqual([]);
+    for (const status of ['ok', 'error']) {
+      const { asked, approval } = asking();
+      const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], opening(PRICING, status), SCREENSHOT, { approval });
+      expect(text(await run({ pageId: 4 }))).toContain(`Geno opened ${PRICING}, which page 4 showed, again as page 2, and this ran there.`);
+      expect(opened).toEqual([PRICING]);
+      expect(calls.map((c) => c['pageId'])).toEqual([4, 2]);
+      expect(asked).toEqual([]);
+    }
   });
 
   it('does not count a host whose opening was refused or rejected, or a call it cannot read', async () => {
-    for (const events of [opening(PRICING, 'denied'), opening(PRICING, 'rejected'), opening(PRICING, 'ok', PRICING), opening(PRICING, 'ok', { url: 7 })]) {
+    for (const events of [opening(PRICING, 'denied'), opening(PRICING, 'rejected'), opening(PRICING, 'ok', PRICING), opening(PRICING, 'ok', { url: 7 }), opening(PRICING, 'ok', { url: 'approved.example/pricing' })]) {
       const { run, opened } = setup([{ id: 1, url: 'about:blank' }], events, SCREENSHOT, { approval: asking().approval });
       await expect(run({ pageId: 4 })).rejects.toThrow(`Page 4 showed ${PRICING}; open it again with new_page.`);
       expect(opened).toEqual([]);
@@ -280,7 +282,7 @@ describe('a browser call in a new run of the same session', () => {
       [{ verdict: 'allow', kept: 'workspace' }, 0],
       [{ verdict: 'allow' }, 1],
       [{ verdict: 'deny' }, 1],
-      [{ verdict: 'allow', kept: 'forever' }, 1],
+      [{ verdict: 'allow', kept: 'workspace', rule: 'browser-risky-tool' }, 1],
     ];
     for (const [record, asks] of cases) {
       const { asked, approval } = asking();

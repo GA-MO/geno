@@ -191,7 +191,8 @@ export async function settle(
   if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
   const allowed = typeof answer === 'string' && answer !== 'reject';
   const comment = typeof answer === 'string' ? {} : { comment: answer.comment };
-  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...comment };
+  const kept = answer === 'allow-session' ? { kept: 'session' as const } : answer === 'allow-workspace' ? { kept: 'workspace' as const } : {};
+  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...kept, ...comment };
 }
 
 export function denialText({ mode, rule, command, reason, classifier, decidedBy, message, interrupt, comment }: ApprovalRecord): string {

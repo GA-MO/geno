@@ -38,7 +38,7 @@ import type { Store } from '../store.js';
 import { laneAt } from '../lanes.js';
 import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
-import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, type BrowserOptions } from './browser.js';
+import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, recallAllowances, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import type { McpTokenSource } from './connection.js';
 import { McpServerHandle } from './server.js';
@@ -166,7 +166,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
   };
   // Once the session's servers are stopped, a start still on its way must not bring them back.
   let stopped = false;
-  // Tools the user allowed for the rest of the session, by model-facing name.
+  // Tools the user allowed for the rest of the session, by model-facing name; each call adds those the log has from earlier runs.
   const allowed = new Set<string>();
 
   const ready = () => [...handles.values()].filter((handle) => handle.state.status === 'ready');
@@ -201,6 +201,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
       input: argumentsSchema,
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
+        recallAllowances(ctx.events(), ctx.workspace, allowed, browserState);
         const mode = modeOf(approval);
         const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly, args };
         const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);

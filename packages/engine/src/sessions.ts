@@ -187,6 +187,8 @@ const approvalSchema = z.strictObject({
     .optional(),
   decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: verdict.exclude(['ask']),
+  // A kept answer the log cannot read is no answer, so the next call asks again rather than the session failing to open.
+  kept: z.enum(['session', 'workspace']).optional().catch(undefined),
   comment: z.string().optional(),
   message: z.string().optional(),
   interrupt: z.literal(true).optional(),

@@ -21,6 +21,8 @@ import {
   mcpToolRuleName,
   navigationTarget,
   NOTHING_LISTENS,
+  startsTurn,
+  toolUsesOf,
   type ApprovalMode,
   type ApprovalRecord,
   type BrowserPage,
@@ -222,6 +224,39 @@ async function reopen(handle: McpServerHandle, state: BrowserState, id: number, 
   return undefined;
 }
 
+const toolInput = z.record(z.string(), z.unknown());
+const BROWSER_PREFIX = `mcp__${BROWSER_SERVER}__`;
+
+/** The events of the session's own turns. A fork's log begins with the turns it copied, whose answers were given to its source. */
+function ownEvents(events: readonly TurnEvent[]): readonly TurnEvent[] {
+  const head = events[0];
+  if (head?.kind !== 'session-start' || head.fork === undefined) return events;
+  const { turnSeq } = head.fork;
+  const start = events.findIndex((event) => startsTurn(event) && event.seq > turnSeq);
+  return start === -1 ? [] : events.slice(start);
+}
+
+/**
+ * Adds what the user allowed earlier in the session, which a run that started since knows only from the log: the MCP
+ * tools allowed for the session or the workspace, and the hosts of the navigations that went ahead.
+ */
+export function recallAllowances(events: readonly TurnEvent[], workspace: string, allowed: Set<string>, state: BrowserState): void {
+  const own = ownEvents(events);
+  const ran = new Set<string>();
+  for (const event of own) {
+    if (event.kind !== 'tool-result') continue;
+    if (event.status === 'ok' || event.status === 'error') ran.add(event.toolUseId);
+    if (event.approval?.kept !== undefined && isMcpRule(event.approval.rule)) allowed.add(event.name);
+  }
+  for (const use of own.flatMap((event) => (event.kind === 'assistant' ? toolUsesOf(event.content) : []))) {
+    if (!ran.has(use.id) || !use.name.startsWith(BROWSER_PREFIX)) continue;
+    const input = toolInput.safeParse(use.input);
+    const target = input.success ? navigationTarget({ tool: use.name.slice(BROWSER_PREFIX.length), args: input.data }) : undefined;
+    const url = target === undefined ? undefined : browserUrlOf(target, workspace);
+    if (url?.kind === 'remote') state.approvedHosts.add(url.host);
+  }
+}
+
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
 export async function keepMcpAnswer(answer: KeptAnswer, call: Pick<McpCall, 'name' | 'server' | 'tool'>, allowed: Set<string>, ctx: ToolContext): Promise<void> {
   allowed.add(call.name);
@@ -249,6 +284,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
     input: z.record(z.string(), z.unknown()),
     describe: (args) => `${name} ${JSON.stringify(args)}`,
     async run(raw, ctx) {
+      recallAllowances(ctx.events(), ctx.workspace, allowed, state);
       const target = navigationTarget({ tool: info.tool, args: raw });
       const args = target === undefined ? await withWorkspacePaths(raw, ctx) : { ...raw, url: target };
       const judged = target === undefined ? args : { ...args, url: await canonical(target) };

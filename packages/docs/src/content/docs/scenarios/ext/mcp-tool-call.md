@@ -277,5 +277,6 @@ tool [MCP](/start/glossary/) ใช้ทางของ tool ทั่วไป
 - **ชุด tool เป็นภาพนิ่งของ turn** `runAgent` เอา tool ของ server ที่พร้อมตอนเริ่ม turn เท่านั้น server ที่พร้อมกลาง turn ได้ใช้ใน turn ถัดไป
 - **"อ่านอย่างเดียว" มาจาก server** server เป็นคนบอกว่า tool ไหนอ่านอย่างเดียว ซึ่ง Geno ตรวจไม่ได้ โหมด Ask จึงยังถาม
   การ์ดบอกเหตุผลว่า "a tool its MCP server calls read-only, which Geno cannot check" ส่วน Auto และ Plan รัน tool นั้นโดยไม่ถาม
-- **"Allow this tool for the session" อยู่ในหน่วยความจำ** ชุด `allowed` อยู่ใน hub ของ session ไม่ได้บันทึกลงไฟล์
+- **"Allow this tool for the session" อยู่กับ session ไม่ใช่กับ process** คำตอบถูกบันทึกเป็น `kept` บน approval record ใน session log
+  engine ตัวใหม่ที่เปิด session เดิมอ่านจาก log ก่อนทุก call จึงไม่ถามซ้ำ ส่วน session ใหม่และ fork ไม่ได้คำตอบนี้ไป และไม่มีอะไรถูกเขียนลง config
 - **ข้อความจาก server เป็นข้อมูล** คำแนะนำที่ server ส่งมาถูกล้อมใน `<mcp_instructions>` และบอก model ว่าไม่ได้มาจากผู้ใช้
