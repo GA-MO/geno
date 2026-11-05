@@ -7,8 +7,9 @@ import { parseVotes } from './agree.mjs';
 import { parsePort, resolvePage, revealOf } from './compare.mjs';
 import { CHECKS, contrastRatio, regressions, score } from './checks.mjs';
 import { decodePng } from './png.mjs';
-import { decide, pairVerdict, parseOptions } from './rules.mjs';
-import { roundsOf, spentBy } from './logs.mjs';
+import { budgetStep, decide, pairStep, pairVerdict, parseOptions } from './rules.mjs';
+import { genoCapped } from '../harness.mjs';
+import { priceUsage, roundsOf, spentBy } from './logs.mjs';
 import { behaviour } from './stats.mjs';
 import { FEEDBACK, PROMPT } from './task.mjs';
 
@@ -213,7 +214,7 @@ describe('roundsOf', () => {
 
 describe('the shipping check names every weekday', () => {
   const page = (body: string) => ({ errors: {}, brief: { text: 'x'.repeat(4000), headings: [{ text: 'Delivery', body }], blocks: [], subscribes: [], links: [] } });
-  it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false], ['Wednesday-roasted, shipped the same day.', true]])('%s', (body, pass) => {
+  it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false], ['Wednesday-roasted, shipped the same day.', true], ['Sun-grown beans, shipped fresh.', false], ['Ships Weds and Sundays.', true]])('%s', (body, pass) => {
     expect(score(page(body)).shipping.pass).toBe(pass);
   });
 });
@@ -250,5 +251,57 @@ describe('the compare server', () => {
   });
   it.each(['0', '-1', '65536', '80.5', 'abc', ''])('refuses port %j', (p) => {
     expect(() => parsePort(p)).toThrow(/--port/);
+  });
+});
+
+describe('budgetStep', () => {
+  it('starts a run the budget can pay for at its cap', () => {
+    expect(budgetStep({ spentUsd: 1, runningLeftUsd: [3, 3.5], capUsd: 4, budgetUsd: 15 }).step).toBe('start');
+  });
+  it('waits for a running run instead of dropping the queue when the next one does not fit yet', () => {
+    expect(budgetStep({ spentUsd: 2, runningLeftUsd: [4, 4, 4], capUsd: 4, budgetUsd: 15 })).toMatchObject({ step: 'wait', projected: 18 });
+  });
+  it('stops only when nothing is running and the next run still does not fit', () => {
+    expect(budgetStep({ spentUsd: 12, runningLeftUsd: [], capUsd: 4, budgetUsd: 15 }).step).toBe('stop');
+  });
+  it('reserves nothing for a run already past its cap', () => {
+    expect(budgetStep({ spentUsd: 10, runningLeftUsd: [-0.5], capUsd: 4, budgetUsd: 15 }).projected).toBe(14);
+  });
+});
+
+describe('a Claude Code segment killed before its result', () => {
+  it('is priced from the usage it streamed, the last event of each call counted once', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'landing-job-'));
+    const call = (id: string, output: number) => ({ type: 'assistant', message: { id, model: 'claude-sonnet-5-5', content: [], usage: { input_tokens: 1000, output_tokens: output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
+    writeFileSync(path.join(dir, 'claude.jsonl'), [{ type: 'hp-user', text: PROMPT }, { type: 'result', total_cost_usd: 0.2 }, { type: 'hp-user', text: FEEDBACK }, call('m1', 10), call('m1', 1000), call('m2', 500)].map((r) => JSON.stringify(r)).join('\n'));
+    const expected = 0.2 + (2000 * 2 + 1500 * 10) / 1e6;
+    expect(spentBy(dir, 'claude')).toBeCloseTo(expected, 9);
+    expect(roundsOf(dir, 'claude')[1].costUsd).toBeCloseTo(expected - 0.2, 9);
+  });
+  it('prices cache writes by their lifetime and an unknown model as Opus', () => {
+    expect(priceUsage('claude-sonnet-5-5', { cache_creation_input_tokens: 1e6, cache_creation: { ephemeral_1h_input_tokens: 1e6 } })).toBe(4);
+    expect(priceUsage('claude-sonnet-5-5', { cache_creation_input_tokens: 1e6 })).toBe(2.5);
+    expect(priceUsage('claude-new-1', { output_tokens: 1e6 })).toBe(20);
+  });
+});
+
+describe('pairStep', () => {
+  const page = (o = {}) => ({ label: 'p', shown: true, fatal: false, measured: true, error: undefined, ...o });
+  it('judges two shown pages and forfeits a page with no index.html', () => {
+    expect(pairStep([page(), page()]).step).toBe('judge');
+    expect(pairStep([page({ shown: false, fatal: true }), page()])).toEqual({ step: 'forfeit', winner: 'B' });
+    expect(pairStep([page({ shown: false, fatal: true }), page({ shown: false, fatal: true })]).winner).toBe('tie');
+  });
+  it('waits on a page the meter failed on and says to remeasure', () => {
+    expect(pairStep([page(), page({ label: 'geno 2 r2', shown: false, error: 'the page stopped answering' })])).toEqual({ step: 'wait', why: 'the meter could not show geno 2 r2 (the page stopped answering): run again with --remeasure' });
+    expect(pairStep([page({ label: 'claude 1 r1', shown: false, measured: false }), page()]).why).toBe('claude 1 r1 is not measured yet');
+  });
+});
+
+describe('genoCapped', () => {
+  it("reads the engine's own cap line on stderr, not budget words the model wrote", () => {
+    expect(genoCapped('budget: stopped at an estimated $3.012000, past --max-cost 3')).toBe(true);
+    expect(genoCapped('max-turns: stopped after 125 model calls (--max-turns 125)')).toBe(false);
+    expect(genoCapped('a plan for every budget: stopped at nothing')).toBe(false);
   });
 });

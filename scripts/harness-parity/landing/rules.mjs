@@ -49,3 +49,24 @@ export function decide(sides, pairs) {
   const cheaper = sides.claude.costUsd < sides.geno.costUsd ? 'claude' : sides.geno.costUsd < sides.claude.costUsd ? 'geno' : 'same';
   return { winner, cheaper };
 }
+
+/**
+ * Whether the next run may start: each running run may still spend what its cap leaves it, and a new one its whole
+ * cap. Over budget with runs going, wait for one to finish and ask again; with none going, stop.
+ */
+export function budgetStep({ spentUsd, runningLeftUsd, capUsd, budgetUsd }) {
+  const projected = spentUsd + runningLeftUsd.reduce((s, left) => s + Math.max(0, left), 0) + capUsd;
+  if (projected <= budgetUsd) return { step: 'start', projected };
+  return { step: runningLeftUsd.length > 0 ? 'wait' : 'stop', projected };
+}
+
+/**
+ * What to do with a judged pair, from each page's sheets and measures: judge it, forfeit it (a page with no
+ * index.html loses), or wait because the meter failed on a page, which only a remeasure fixes.
+ */
+export function pairStep(pages) {
+  if (pages.every((p) => p.shown)) return { step: 'judge' };
+  if (pages.every((p) => p.shown || p.fatal)) return { step: 'forfeit', winner: pages[0].fatal && pages[1].fatal ? 'tie' : pages[0].fatal ? 'B' : 'A' };
+  const stuck = pages.find((p) => !p.shown && !p.fatal);
+  return { step: 'wait', why: stuck.measured ? `the meter could not show ${stuck.label}${stuck.error ? ` (${stuck.error})` : ''}: run again with --remeasure` : `${stuck.label} is not measured yet` };
+}

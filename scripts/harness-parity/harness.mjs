@@ -85,9 +85,12 @@ export const harnesses = {
     const stop = /stopped after .*|budget.*|Reached the turn limit.*/i.exec(`${r.out}\n${r.err}`)?.[0];
     // A run that could not start, such as a session log the engine cannot read, is the harness failing, not the model.
     const failed = r.code !== 0 && r.code !== 3 ? `engine exited ${r.code}: ${r.err.trim().split('\n').at(-1)?.slice(0, 200)}` : undefined;
-    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : failed, capped: state.capUsd !== undefined && r.code === 3 && /cost|budget/i.test(stop ?? ''), err: r.err };
+    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : failed, capped: state.capUsd !== undefined && r.code === 3 && genoCapped(r.err), err: r.err };
   },
 };
+
+/** Whether Geno stopped at its --max-cost: the engine says so on stderr, not in the model's own words on stdout. */
+export const genoCapped = (stderr) => /^budget: stopped at/m.test(stderr);
 
 export function transcriptOf(name, { job, home }, state) {
   if (name === 'claude') return fromClaudeStream(path.join(job, 'claude.jsonl'));
@@ -108,7 +111,7 @@ export async function converse(name, paths, model, state, text, request, continu
     const t = transcriptOf(name, paths, state);
     const end = await classifyEnd(request, finalText(t.steps.slice(t.steps.findLastIndex((s) => s.kind === 'user') + 1)), stoppedBy);
     ends.push({ ...end, stoppedBy });
-    if (end.kind === 'done' || capped || segment >= continues) return { ends };
+    if (end.kind === 'done' || capped || segment >= continues) return { ends, capped: capped === true };
   }
 }
 
