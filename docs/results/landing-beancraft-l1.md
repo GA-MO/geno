@@ -43,6 +43,8 @@ An independent review after the first report found two counting errors, and both
 
 From this version on, each run has a $4 cap over both rounds on either harness: each segment gets what the run has left (`--max-budget-usd` for Claude Code, `--max-cost` for Geno), a run that hits it is not told to go on and gets no feedback round (its final page is its round 1 page, and the report says so), and a run starts only when the round can pay for what every running one may still spend; otherwise it waits for one to finish. A Claude Code segment killed before it reports its cost is priced from the usage it streamed. This round ran without a cap, and no run cost more than $1.05.
 
+The taste judge's own reasons point at a limit of the screenshots. On pair 1 it marks Geno's page down because its "scroll reveals leave whole sections blank in the motion frames". Those frames are taken one second after a jump, and a reveal that runs longer is caught half done. The owner, who picked Geno on that pair for its layout, watched the live pages, where the reveal finishes. A later meter should take the motion frames after the reveals settle, or hold a frame until it stops changing.
+
 ## The meter on its fixtures
 
 Checked before the runs. The reference page under `scripts/harness-parity/landing/fixtures/` does all the brief asks; the agents never see it.
@@ -198,6 +200,19 @@ The owner voted (`1B-2T-3B`). From the live pages on the compare page, after fee
 | 1 | Geno | Claude Code | no |
 | 2 | tie | Claude Code | no |
 | 3 | Claude Code | Claude Code | yes |
+
+## Judge calibrated on the owner
+
+The same screenshots of the final pages, judged again in both orders with the `taste` rubric in `scripts/harness-parity/landing/judge.mjs`: layout weighs 50, beauty 30 and brief 20, and layout is read the way the owner reads a page (one spacing rhythm, equal padding, true centring, a hierarchy that reads at a glance, nothing cluttered, a 375px page that holds; beauty means premium, not template or AI-made). No agent ran. The verdicts are in `docs/results/landing-beancraft-l1/judge-taste.json`, apart from the round's judge.json, and cost $1.58.
+
+| | rubric fixed before the run | taste rubric |
+|---|---|---|
+| agrees with the owner | 1 of 3 | 2 of 3 |
+| the 9 final pairs | Claude Code 7, Geno 0, tie 2 | Claude Code 6, Geno 0, tie 3 |
+
+Still apart from the owner: pair 1, where the owner picked Geno and the taste judge Claude Code.
+
+1 of the 9 pairs changed: C2-G2: claude → tie. 3 votes are too few to confirm a rubric: one pair more or less moves agreement by a third, so this says the taste rubric is worth testing on more votes, not that it matches the owner. The win rule above still uses the rubric fixed before the run.
 
 ## Compare the live pages
 
