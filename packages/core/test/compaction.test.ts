@@ -185,7 +185,7 @@ describe('what a compaction keeps verbatim', () => {
     expect(text).toContain(echoDefinition);
   });
 
-  it('keeps the definition of a tool a call loaded before any tool_search, and none from a call that failed', () => {
+  it('keeps the definition of a tool a call loaded before any tool_search, whether that call succeeded or failed', () => {
     const stop = { name: 'task_stop', description: 'Stop a background job.', input_schema: { type: 'object' as const, properties: { id: { type: 'string' } } } };
     const other = JSON.stringify({ name: 'mcp__fake__echo', note: 'a line of the tool output' });
     const called: TurnEvent[] = [
@@ -198,7 +198,7 @@ describe('what a compaction keeps verbatim', () => {
       user(6, 'Thanks.'),
       assistant(7, 'Done.', [], 2_200),
     ];
-    expect(plan(called, 100).kept.tools).toEqual([JSON.stringify(stop)]);
+    expect(plan(called, 100).kept.tools).toEqual([JSON.stringify(stop), echoDefinition]);
   });
 
   it('leaves loaded tools callable, since the log keeps the load', () => {

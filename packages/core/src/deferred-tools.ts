@@ -112,9 +112,15 @@ export function toolRoster(tools: readonly Tool[], mcp?: readonly Tool[], minSav
 /** True when the run offers tool_search: it defers some of its own tools, or it has MCP. */
 export const offersToolSearch = (roster: ToolRoster): boolean => roster.offered.at(-1)?.name === TOOL_SEARCH_TOOL;
 
+/**
+ * The tools a result loaded: one that ran, whether it succeeded or failed, since its result showed the definition. A
+ * refused or denied call ran nothing and loads nothing.
+ */
+export const loadedBy = (event: Extract<TurnEvent, { kind: 'tool-result' }>): readonly string[] => (event.status === 'ok' || event.status === 'error' ? (event.loaded ?? []) : []);
+
 /** The tools tool_search loaded so far, from the log, so a resumed or replayed session can call the same ones. */
 export const loadedTools = (events: readonly TurnEvent[]): ReadonlySet<string> =>
-  new Set(events.flatMap((event) => (event.kind === 'tool-result' && event.status === 'ok' ? (event.loaded ?? []) : [])));
+  new Set(events.flatMap((event) => (event.kind === 'tool-result' ? loadedBy(event) : [])));
 
 export type ToolSearchInput = { readonly select?: readonly string[] | undefined; readonly query?: string | undefined };
 
@@ -172,11 +178,23 @@ const unloadedOpening = (definition: Tool): string => `You called ${definition.n
  * definition comes first, one JSON line as tool_search shows it, so the model sees the schema and a compaction keeps it.
  */
 export const autoLoadedText = (definition: Tool, text: string): string =>
-  `${unloadedOpening(definition)} Geno loaded it for this call, and it stays callable once a call of it succeeds. Its definition:\n${shown(definition)}\nThe call's result:\n${text}`;
+  `${unloadedOpening(definition)} Geno loaded it for this call, and it stays loaded. Its definition:\n${shown(definition)}\nThe call's result:\n${text}`;
+
+/** The same for a call that ran and failed: the tool is loaded all the same, and the failure is the tool's own. */
+export const autoLoadedFailure = (definition: Tool, text: string): string =>
+  `${unloadedOpening(definition)} Geno loaded it and ran this call, which failed; it stays loaded, so call it directly. Its definition:\n${shown(definition)}\nThe call's error:\n${text}`;
 
 /** Why a deferred tool's call that came before any load did not run: its input does not match the schema shown. */
 export const unloadedInputError = (definition: Tool, problem: string): string =>
   `${unloadedOpening(definition)} Its input does not match the input_schema, so it did not run: ${problem}\nIts definition:\n${shown(definition)}\nCall ${definition.name} again with input that matches the input_schema.`;
+
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
 
 type Schema = { readonly type?: unknown; readonly properties?: Readonly<Record<string, Schema>>; readonly items?: Schema };
 
@@ -187,8 +205,8 @@ const SCALARS: Readonly<Record<string, (text: string) => unknown>> = {
 };
 
 /**
- * A deferred tool's schema reaches the model as text, not in `tools`, and Model Studio's Qwen then writes some numbers
- * and booleans as strings ("2", "False"; docs/u46.md). This turns such a string into the type its schema names, through
+ * A deferred tool's schema reaches the model as text, not in `tools`, and models then write some numbers and booleans
+ * as strings ("2", "False"; docs/u46.md), and arrays as their JSON text (Sonnet 5.5, the l1 landing bake-off). This turns such a string into the type its schema names, through
  * nested objects and arrays, and leaves everything else as the model wrote it for the tool to judge.
  */
 export function coerceToSchema(raw: unknown, value: unknown): unknown {
@@ -196,6 +214,12 @@ export function coerceToSchema(raw: unknown, value: unknown): unknown {
   const schema = raw as Schema;
   const type = typeof schema.type === 'string' ? schema.type : undefined;
   if (typeof value === 'string' && type !== undefined && type in SCALARS) return SCALARS[type]!(value);
+  // An array or object written as its JSON text, such as "[\"error\"]": parsed only when the text is that type.
+  if (typeof value === 'string' && (type === 'array' || type === 'object')) {
+    const parsed = parseJson(value);
+    if (type === 'array' ? Array.isArray(parsed) : typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return coerceToSchema(raw, parsed);
+    return value;
+  }
   if (Array.isArray(value)) return schema.items === undefined ? value : value.map((item) => coerceToSchema(schema.items, item));
   if (typeof value === 'object' && value !== null && schema.properties !== undefined) {
     const properties = schema.properties;

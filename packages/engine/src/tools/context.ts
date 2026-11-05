@@ -71,6 +71,16 @@ export class PermissionRerun extends Error {
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}
 
+/** A deferred tool's first call that ran and failed: an error result, though the call loaded the tool. */
+export class LoadedToolError extends ToolError {
+  constructor(
+    message: string,
+    readonly loaded: readonly string[],
+  ) {
+    super(message);
+  }
+}
+
 /** A call the user turned down before it ran. It becomes a `rejected` tool result, which ends the turn. */
 export class ToolRejected extends ToolError {
   constructor(

@@ -27,6 +27,7 @@ import {
   type McpCall,
   type McpServerConfig,
   type McpToolInfo,
+  type TurnEvent,
 } from '@g-code/core';
 import { denialText, modeOf, refusalOf, settle, type Approval, type KeptAnswer } from '../tools/agent.js';
 import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext } from '../tools/context.js';
@@ -146,6 +147,39 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
   });
 }
 
+/** The server's answer to a call whose pageId it does not have, as chrome-devtools-mcp words it. */
+const NO_PAGE = /No page found/;
+const BLANK = 'about:blank';
+
+/** The URL a page id last showed in this session's results, from the server's page listings ("2: Title (url)"). */
+export function lastUrlOf(events: readonly TurnEvent[], id: number): string | undefined {
+  const line = new RegExp(`^${id}: .*\\((\\S+)\\)(?: \\[selected\\])?$`, 'm');
+  for (const event of events.toReversed()) {
+    if (event.kind !== 'tool-result' || !event.name.startsWith(`mcp__${BROWSER_SERVER}__`)) continue;
+    const url = 'output' in event ? line.exec(event.output)?.[1] : undefined;
+    if (url !== undefined) return url;
+  }
+  return undefined;
+}
+
+/**
+ * A call to a page the browser no longer has: the browser starts again with each run, and a page can close. With one
+ * real page open the call goes there, and the reply says so; otherwise the error lists the open pages and the URL the
+ * missing one showed.
+ */
+function stalePage(state: BrowserState, workspace: string, id: number, events: readonly TurnEvent[]): { readonly retry: number; readonly note: string } | { readonly error: string } {
+  const open = [...state.pages].filter(([, page]) => page.url !== BLANK);
+  const only = open.length === 1 ? open[0]! : undefined;
+  // Only a page the rules let through without asking: a local page, or a host the user approved this session.
+  const page = only === undefined ? undefined : browserPage(state, only[1].url, workspace);
+  if (only !== undefined && page !== undefined && (page.url.kind === 'local' || page.approved)) {
+    return { retry: only[0], note: `[Geno] Page ${id} is not open, so this ran on page ${only[0]} (${only[1].url}), the only page open.` };
+  }
+  const listed = [...state.pages].map(([pid, p]) => `${pid}: ${p.url}`).join(', ') || 'none';
+  const was = lastUrlOf(events, id);
+  return { error: `Page ${id} is not open: the browser starts fresh in each run, and pages can close. Open pages: ${listed}.${was === undefined ? '' : ` Page ${id} showed ${was}; open it again with new_page.`}` };
+}
+
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
 export async function keepMcpAnswer(answer: KeptAnswer, call: Pick<McpCall, 'name' | 'server' | 'tool'>, allowed: Set<string>, ctx: ToolContext): Promise<void> {
   allowed.add(call.name);
@@ -211,16 +245,23 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
 
       const before = new Map([...state.pages].map(([id, page]) => [id, page.url]));
       let reply: Awaited<ReturnType<BrowserToolDeps['call']>>;
+      const notes: string[] = [];
       try {
         reply = await deps.call(args, ctx);
       } catch (error) {
         if (error instanceof ToolError && target !== undefined && NOTHING_LISTENS.test(error.message) && browserUrlOf(target, ctx.workspace).kind === 'local') {
           throw new ToolError(`${error.message}\n\n${devServerHint(target)}`);
         }
-        throw error;
+        const id = Number(args['pageId']);
+        if (!(error instanceof ToolError) || !NO_PAGE.test(error.message) || !Number.isInteger(id)) throw error;
+        await refreshPages(handle, state, ctx.signal);
+        const stale = stalePage(state, ctx.workspace, id, ctx.events());
+        if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
+        reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
+        notes.push(stale.note);
       }
       await refreshPages(handle, state, ctx.signal);
-      const notes = wandered(state, before, ctx.workspace);
+      notes.push(...wandered(state, before, ctx.workspace));
       const local = target !== undefined && browserUrlOf(target, ctx.workspace).kind === 'local';
       if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target));
       const text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;

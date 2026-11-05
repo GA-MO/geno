@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { GO_ON, transcriptOf } from '../harness.mjs';
 import { behaviour } from './stats.mjs';
-import { FEEDBACK, PROMPT } from './task.mjs';
+import { FEEDBACK, GO_ON_EN, PROMPT } from './task.mjs';
 
 /** A log's JSON lines; a line cut off by a crash mid-write is skipped, not fatal. */
 const lines = (file) =>
@@ -88,7 +88,7 @@ const sum = (xs) => xs.reduce((s, x) => s + x, 0);
 export function roundsOf(job, harness) {
   const session = harness === 'geno' ? genoSession(job) : undefined;
   const started = harness === 'geno' ? session !== undefined : existsSync(path.join(job, 'claude.jsonl'));
-  const steps = !started ? [] : transcriptOf(harness, { job, home: path.join(job, 'home') }, { session, texts: [PROMPT, FEEDBACK, GO_ON] }).steps;
+  const steps = !started ? [] : transcriptOf(harness, { job, home: path.join(job, 'home') }, { session, texts: [PROMPT, FEEDBACK, GO_ON, GO_ON_EN] }).steps;
   const cut = steps.findIndex((s) => s.kind === 'user' && s.text === FEEDBACK);
   const costs = harness === 'claude' ? claudeCosts(job) : session === undefined ? [0, 0] : genoCosts(genoLog(job, session));
   return [
