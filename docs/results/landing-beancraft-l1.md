@@ -2,7 +2,7 @@
 
 ## Verdict
 
-**Claude Code wins** by the rule below. Claude Code was cheaper ($2.14 against $2.21).
+**Claude Code wins** by the rule below. Claude Code was cheaper ($1.30 against $2.21).
 
 | | Claude Code | Geno | needed to win |
 |---|---|---|---|
@@ -10,9 +10,9 @@
 | ข quality checks passed (final) | 23/30 | 22/30 | at least the other's |
 | ค motion checks passed (final) | 24/27 | 24/27 | at least the other's |
 | judged pairs won (final) | 7/9 | 0/9 | 6 |
-| API cost, both rounds | $2.14 | $2.21 | tie-break |
+| API cost, both rounds | $1.30 | $2.21 | tie-break |
 
-API credit spent this round, judge and hand-back reader included: $9.74 of the $14.50 budget. Runner model: `claude-sonnet-5-5`.
+API credit spent this round, judge and hand-back reader included: $8.90 of the $14.50 budget. Runner model: `claude-sonnet-5-5`.
 
 ## Win rule (fixed before the run)
 
@@ -36,6 +36,10 @@ The first scoring had four checks failing the same way on all six pages, so the 
 - Price size, a supporting number only: it took the first price-like text in a card, which after a fix was sometimes "$36 per month". It now takes the card's largest number.
 
 Totals on the final pages at the first scoring, before these fixes: Claude Code brief 24, quality 18, motion 24. Geno brief 26, quality 16, motion 23. The judge's verdicts did not change, because it judges screenshots, not checks.
+
+An independent review after the first report found two counting errors, and both are fixed in this version. Claude Code reports a resumed session's cost as a running total, and the first report added those totals up. That put Claude Code's round 2 at $0.35 to $0.50 instead of $0.11 to $0.18, and its total at $2.14 instead of $1.30. Geno writes a new file with `edit` and `create: true`, which the first report counted as an edit and not as a write. Both now come from each run's own logs. Neither changes a check or a judged pair. Because the pages were measured again after the meter fixes, the screenshots on the vote page are newer than the ones the judge saw. They show the same pages.
+
+From this version on, each request segment on either harness has a $3 cap (`--max-budget-usd` for Claude Code, `--max-cost` for Geno). This round ran without the cap, and no segment cost more than $0.57.
 
 ## The meter on its fixtures
 
@@ -166,17 +170,17 @@ Per round (1 / 2). Shots are screenshots it took of its own work. Edits against 
 | C1 | 0 / 3 | 0/1 (0) · 0/0 (0) | 0 / 1 | 0 / 1 | 3 / 8 | 0 / 0 |
 | C2 | 4 / 1 | 0/1 (0) · 0/0 (0) | 2 / 1 | 0 / 0 | 9 / 11 | 0 / 0 |
 | C3 | 2 / 2 | 0/1 (0) · 0/0 (0) | 1 / 2 | 0 / 1 | 7 / 14 | 0 / 0 |
-| G1 | 8 / 2 | 1/0 (0) · 0/0 (0) | 1 / 2 | 5 / 0 | 24 / 12 | 3 / 0 |
-| G2 | 7 / 9 | 2/0 (0) · 15/0 (0) | 2 / 1 | 1 / 9 | 20 / 25 | 0 / 1 |
-| G3 | 4 / 1 | 1/0 (0) · 2/0 (0) | 1 / 1 | 0 / 2 | 10 / 6 | 0 / 0 |
+| G1 | 8 / 2 | 0/1 (0) · 0/0 (0) | 1 / 2 | 5 / 0 | 24 / 12 | 3 / 0 |
+| G2 | 7 / 9 | 1/1 (0) · 15/0 (0) | 2 / 1 | 1 / 9 | 20 / 25 | 0 / 1 |
+| G3 | 4 / 1 | 0/1 (0) · 2/0 (0) | 1 / 1 | 0 / 2 | 10 / 6 | 0 / 0 |
 
 ## Cost
 
 | page | round 1 | round 2 |
 |---|---|---|
-| C1 | $0.24 · 116s · 103k tokens | $0.35 · 60s · 332k tokens |
-| C2 | $0.33 · 155s · 366k tokens | $0.50 · 89s · 565k tokens |
-| C3 | $0.27 · 135s · 241k tokens | $0.45 · 99s · 641k tokens |
+| C1 | $0.24 · 116s · 103k tokens | $0.11 · 60s · 332k tokens |
+| C2 | $0.33 · 155s · 366k tokens | $0.17 · 89s · 565k tokens |
+| C3 | $0.27 · 135s · 241k tokens | $0.18 · 99s · 641k tokens |
 | G1 | $0.51 · 220s · 803k tokens | $0.26 · 86s · 632k tokens |
 | G2 | $0.48 · 169s · 671k tokens | $0.57 · 197s · 1575k tokens |
 | G3 | $0.28 · 111s · 247k tokens | $0.11 · 45s · 205k tokens |

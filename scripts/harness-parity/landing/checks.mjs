@@ -60,7 +60,7 @@ export const CHECKS = [
   { id: 'roaster', group: 'brief', session: 'desktop', label: 'a roaster profile section', test: (m) => when(findPart(m, (t) => /roaster|roastmaster|roast master/i.test(t) && t.length > 120) !== undefined, 'no section about the roaster') },
   {
     id: 'shipping', group: 'brief', session: 'desktop', label: 'a shipping schedule',
-    test: (m) => when(findPart(m, (t) => /ship|deliver|dispatch|arriv/i.test(t) && /\b(mon|tue|wed|thu|fri|sat|sun)(day|s)?\b|\bcut-?off\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/i.test(t)) !== undefined, 'no section on shipping that names days, dates or a cut-off'),
+    test: (m) => when(findPart(m, (t) => /ship|deliver|dispatch|arriv/i.test(t) && /\b(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?s?\b(?!-)|\bcut-?off\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/i.test(t)) !== undefined, 'no section on shipping that names days, dates or a cut-off'),
   },
   { id: 'pause', group: 'brief', session: 'desktop', label: 'a "Pause anytime" explainer', test: (m) => when(/pause[^.]{0,80}any ?time|any ?time[^.]{0,80}pause/i.test(m.brief.text), 'nothing says you can pause anytime') },
   {
@@ -204,10 +204,10 @@ export const regressions = (before, after) => Object.keys(before).filter((id) =>
 
 /** The supporting numbers for the three feedback asks: section gap spread at 375 and how the prices are set. */
 export function feedbackFacts(m) {
-  const gaps = m.layout375?.gaps ?? [];
+  const gaps = m?.layout375?.gaps ?? [];
   const mean = gaps.length ? gaps.reduce((s, g) => s + g, 0) / gaps.length : 0;
   const spread = gaps.length > 1 && mean > 0 ? Math.sqrt(gaps.reduce((s, g) => s + (g - mean) ** 2, 0) / gaps.length) / mean : null;
-  const prices = m.layout375?.prices ?? [];
+  const prices = m?.layout375?.prices ?? [];
   const ratios = prices.map((p) => (p.color && p.background ? contrastRatio(p.color, p.background) : null)).filter((r) => r !== null);
   return {
     gapSpread: spread === null ? null : Math.round(spread * 100) / 100,

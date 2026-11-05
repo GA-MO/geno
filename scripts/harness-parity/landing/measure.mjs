@@ -13,16 +13,32 @@ const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.mi
 const DESKTOP = { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false };
 const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 const CALL_MS = 30_000;
-const MAX_TILES = 14;
+const MAX_TILES = 18;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const cdnFiles = new Map();
 
+/** Removes a Chrome profile; Chrome's helper processes can still be writing into it for a moment after it exits. */
+export async function removeDir(dir) {
+  for (let i = 0; ; i++) {
+    try {
+      return rmSync(dir, { recursive: true, force: true });
+    } catch (error) {
+      if (i >= 25) throw error;
+      await wait(200);
+    }
+  }
+}
+
 async function fromCdn(url) {
   if (!cdnFiles.has(url)) {
-    cdnFiles.set(url, (async () => {
+    // Only a good copy is kept, so one failed fetch does not fail every later page that loads the file.
+    const file = (async () => {
       const res = await fetch(url);
+      if (!res.ok) throw new Error(`cdnjs answered ${res.status}`);
       return { status: res.status, type: res.headers.get('content-type') ?? 'text/javascript', body: Buffer.from(await res.arrayBuffer()).toString('base64') };
-    })());
+    })();
+    file.catch(() => cdnFiles.delete(url));
+    cdnFiles.set(url, file);
   }
   return cdnFiles.get(url);
 }
@@ -93,7 +109,7 @@ async function openTab(dir, profileNear) {
       chrome.kill();
       await exited;
       server.close();
-      rmSync(profile, { recursive: true, force: true });
+      await removeDir(profile);
     },
   };
   return tab;
@@ -272,8 +288,12 @@ async function phoneSession(tab, shots, out) {
  * (the page hangs, navigates away, throws in a probe) is recorded in `errors` and the next one still runs.
  */
 export async function measure(dir, shots) {
-  if (!existsSync(path.join(dir, 'index.html'))) return { fatal: 'there is no index.html' };
   mkdirSync(shots, { recursive: true });
+  if (!existsSync(path.join(dir, 'index.html'))) {
+    const out = { fatal: 'there is no index.html' };
+    writeFileSync(path.join(shots, 'measures.json'), `${JSON.stringify(out, null, 2)}\n`);
+    return out;
+  }
   const near = mkdtempSync(path.join(shots, '.chrome-'));
   const out = { errors: {} };
   const logs = [];
@@ -293,7 +313,7 @@ export async function measure(dir, shots) {
       }
     }
   } finally {
-    rmSync(near, { recursive: true, force: true });
+    await removeDir(near);
   }
   const all = (key) => logs.flatMap((l) => [...l[key]]);
   out.console = [...new Set(all('console').filter(([phase]) => phase !== 'lost-context').map(([, text]) => text))].slice(0, 20);

@@ -9,3 +9,7 @@ The first scoring had four checks failing the same way on all six pages, so the 
 - Price size, a supporting number only: it took the first price-like text in a card, which after a fix was sometimes "$36 per month". It now takes the card's largest number.
 
 Totals on the final pages at the first scoring, before these fixes: Claude Code brief 24, quality 18, motion 24. Geno brief 26, quality 16, motion 23. The judge's verdicts did not change, because it judges screenshots, not checks.
+
+An independent review after the first report found two counting errors, and both are fixed in this version. Claude Code reports a resumed session's cost as a running total, and the first report added those totals up. That put Claude Code's round 2 at $0.35 to $0.50 instead of $0.11 to $0.18, and its total at $2.14 instead of $1.30. Geno writes a new file with `edit` and `create: true`, which the first report counted as an edit and not as a write. Both now come from each run's own logs. Neither changes a check or a judged pair. Because the pages were measured again after the meter fixes, the screenshots on the vote page are newer than the ones the judge saw. They show the same pages.
+
+From this version on, each request segment on either harness has a $3 cap (`--max-budget-usd` for Claude Code, `--max-cost` for Geno). This round ran without the cap, and no segment cost more than $0.57.

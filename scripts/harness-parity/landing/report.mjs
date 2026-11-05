@@ -7,6 +7,7 @@ import { REPO } from '../../real-usecases/env.mjs';
 import { CHECKS, CLS_MAX, FRAME_P95_MS, GROUPS, LCP_MS, LONG_FRAMES_MAX, feedbackFacts, groupSize, passed, regressions, score } from './checks.mjs';
 import { ASKS, FEEDBACK, PROMPT } from './task.mjs';
 import { decide, minJudgeWins, pairVerdict } from './rules.mjs';
+import { roundsOf } from './logs.mjs';
 import { writeVotePage } from './vote.mjs';
 
 export const docPath = (round) => path.join(REPO, 'docs/results', `landing-beancraft-${round}.md`);
@@ -59,7 +60,11 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   const pages = jobs.map((job) => {
     const record = readJson(path.join(job.dir, 'record.json'));
     const m = { r1: readJson(path.join(job.dir, 'shots-r1', 'measures.json')), r2: readJson(path.join(job.dir, 'shots-r2', 'measures.json')) };
-    return { ...job, label: `${job.harness === 'claude' ? 'C' : 'G'}${job.n}`, record, m, scores: { r1: m.r1 && score(m.r1), r2: m.r2 && score(m.r2) } };
+    // A finished run whose page was never measured scores as all-fail, so it loses instead of stalling the verdict.
+    const scoreOf = (x) => (x ? score(x) : record ? score({ fatal: 'not measured' }) : undefined);
+    // Cost and working counts come from the run's logs, not the record, so a fix to their counting reaches old runs.
+    const rounds = record ? roundsOf(job.dir, job.harness).map((r, i) => ({ ...record.rounds[i], ...r })) : undefined;
+    return { ...job, label: `${job.harness === 'claude' ? 'C' : 'G'}${job.n}`, record: record && { ...record, rounds }, m, scores: { r1: scoreOf(m.r1), r2: scoreOf(m.r2) } };
   });
   const done = pages.filter((p) => p.record && p.scores.r2);
   const side = (h) => done.filter((p) => p.harness === h);
@@ -144,7 +149,9 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
     const broke = regressions(p.scores.r1, p.scores.r2);
     const fix = judged[`fix|${p.harness}${p.n}`];
     const [f1, f2] = [feedbackFacts(p.m.r1), feedbackFacts(p.m.r2)];
-    lines.push(`| ${p.label} | +${d.added} −${d.removed} (${d.share === null ? '-' : `${Math.round(d.share * 100)}%`}) | ${broke.length}${broke.length ? ` (${broke.join(', ')})` : ''} | ${fix ? Object.keys(ASKS).map((k) => fix[k]).join(', ') : '-'} | ${fix ? (fix.kept ? 'yes' : 'no') : '-'} | ${f1.gapSpread ?? '-'} → ${f2.gapSpread ?? '-'} | ${f1.priceFontPx ?? '-'}px ${f1.priceContrast ?? '-'}:1 → ${f2.priceFontPx ?? '-'}px ${f2.priceContrast ?? '-'}:1 |`);
+    const fixed = fix === undefined ? '-' : fix.forfeit ? 'no page' : Object.keys(ASKS).map((k) => fix[k]).join(', ');
+    const kept = fix === undefined || fix.forfeit ? '-' : fix.kept ? 'yes' : 'no';
+    lines.push(`| ${p.label} | +${d.added} −${d.removed} (${d.share === null ? '-' : `${Math.round(d.share * 100)}%`}) | ${broke.length}${broke.length ? ` (${broke.join(', ')})` : ''} | ${fixed} | ${kept} | ${f1.gapSpread ?? '-'} → ${f2.gapSpread ?? '-'} | ${f1.priceFontPx ?? '-'}px ${f1.priceContrast ?? '-'}:1 → ${f2.priceFontPx ?? '-'}px ${f2.priceContrast ?? '-'}:1 |`);
   }
   lines.push('');
 

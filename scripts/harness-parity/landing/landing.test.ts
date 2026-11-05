@@ -1,10 +1,15 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { parseVotes } from './agree.mjs';
 import { CHECKS, contrastRatio, regressions, score } from './checks.mjs';
 import { decodePng } from './png.mjs';
 import { decide, pairVerdict, parseOptions } from './rules.mjs';
+import { roundsOf, spentBy } from './logs.mjs';
 import { behaviour } from './stats.mjs';
+import { FEEDBACK, PROMPT } from './task.mjs';
 
 describe('parseOptions', () => {
   it('fills the defaults the results doc names', () => {
@@ -153,5 +158,50 @@ describe('behaviour', () => {
     expect(behaviour(steps, ['index.html'])).toEqual({ screenshots: 2, edits: 1, writes: 1, rewrites: 1, shellWrites: 1, toolErrors: 1, toolCalls: 5 });
     expect(behaviour(steps).rewrites).toBe(0);
     expect(behaviour([])).toMatchObject({ screenshots: 0, toolCalls: 0 });
+  });
+});
+
+describe('roundsOf', () => {
+  const job = () => mkdtempSync(path.join(tmpdir(), 'landing-job-'));
+  const jsonl = (rows: object[]) => `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
+  it("takes Claude Code's running session total apart into rounds instead of adding it up", () => {
+    const dir = job();
+    writeFileSync(path.join(dir, 'claude.jsonl'), jsonl([{ type: 'hp-user', text: PROMPT }, { type: 'result', total_cost_usd: 0.2373 }, { type: 'hp-user', text: FEEDBACK }, { type: 'result', total_cost_usd: 0.3513 }]));
+    const [a, b] = roundsOf(dir, 'claude');
+    expect([a.costUsd, b.costUsd].map((c) => Math.round(c * 1e4) / 1e4)).toEqual([0.2373, 0.114]);
+    expect(spentBy(dir, 'claude')).toBeCloseTo(0.3513, 6);
+  });
+  it('adds a total that went down, as a count that started again', () => {
+    const dir = job();
+    writeFileSync(path.join(dir, 'claude.jsonl'), jsonl([{ type: 'result', total_cost_usd: 0.3 }, { type: 'hp-user', text: FEEDBACK }, { type: 'result', total_cost_usd: 0.1 }]));
+    expect(roundsOf(dir, 'claude').map((r) => r.costUsd)).toEqual([0.3, 0.1]);
+  });
+  it("counts Geno's whole-file edit(create) as a write, and its cost per round", () => {
+    const dir = job();
+    const id = '7d719fc9-54b6-4d7b-b74d-7342baf1002f';
+    writeFileSync(path.join(dir, 'geno.out'), `session: ${id}\n`);
+    mkdirSync(path.join(dir, 'home/.gcode/sessions'), { recursive: true });
+    writeFileSync(path.join(dir, `home/.gcode/sessions/${id}.jsonl`), jsonl([
+      { kind: 'user', content: PROMPT },
+      { kind: 'assistant', costUsd: 0.5, content: [{ type: 'tool_use', id: 't1', name: 'edit', input: { path: 'index.html', create: true, new_str: '<html>' } }] },
+      { kind: 'user', content: FEEDBACK },
+      { kind: 'assistant', costUsd: 0.25, content: [{ type: 'tool_use', id: 't2', name: 'edit', input: { path: 'index.html', create: true, new_str: '<html>' } }, { type: 'tool_use', id: 't3', name: 'edit', input: { path: 'index.html', old_str: 'a', new_str: 'b' } }] },
+    ]));
+    const [a, b] = roundsOf(dir, 'geno');
+    expect([a.costUsd, b.costUsd]).toEqual([0.5, 0.25]);
+    expect([a.behaviour.writes, a.behaviour.edits, b.behaviour.writes, b.behaviour.rewrites, b.behaviour.edits]).toEqual([1, 0, 1, 1, 1]);
+  });
+  it('reads a run that never started as zero, not a crash', () => {
+    const dir = job();
+    expect(roundsOf(dir, 'claude').map((r) => r.costUsd)).toEqual([0, 0]);
+    expect(roundsOf(dir, 'geno').map((r) => r.behaviour.toolCalls)).toEqual([0, 0]);
+    expect(spentBy(dir, 'geno')).toBe(0);
+  });
+});
+
+describe('the shipping check names every weekday', () => {
+  const page = (body: string) => ({ errors: {}, brief: { text: 'x'.repeat(4000), headings: [{ text: 'Delivery', body }], blocks: [], subscribes: [], links: [] } });
+  it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false]])('%s', (body, pass) => {
+    expect(score(page(body)).shipping.pass).toBe(pass);
   });
 });

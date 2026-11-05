@@ -53,6 +53,15 @@ export function init() {
   new PerformanceObserver((list) => {
     for (const e of list.getEntries()) if (!e.hadRecentInput) hp.shifts.push([e.startTime, e.value]);
   }).observe({ type: 'layout-shift', buffered: true });
+  // Every ScrollTrigger seen, and those seen past their start: a `once` trigger leaves getAll() when it is done.
+  hp.triggers = new Set();
+  hp.fired = new Set();
+  setInterval(() => {
+    for (const t of window.ScrollTrigger?.getAll?.() ?? []) {
+      hp.triggers.add(t);
+      if (t.progress > 0 || t.isActive) hp.fired.add(t);
+    }
+  }, 50);
   hp.startFrames = () => {
     const frames = (hp.frames = []);
     let last;
@@ -295,13 +304,13 @@ export function webglFacts() {
 
 export function gsapFacts() {
   const st = window.ScrollTrigger;
-  const all = st?.getAll?.() ?? [];
+  const all = new Set([...window.__hp.triggers, ...(st?.getAll?.() ?? [])]);
   return {
     version: window.gsap?.version ?? null,
     scrollTrigger: typeof st === 'function',
-    triggers: all.length,
-    fired: all.filter((t) => t.progress > 0).length,
-    pinned: all.filter((t) => t.pin).length,
+    triggers: all.size,
+    fired: [...all].filter((t) => window.__hp.fired.has(t) || t.progress > 0).length,
+    pinned: [...all].filter((t) => t.pin).length,
     sources: [...document.scripts].map((s) => s.src).filter(Boolean),
   };
 }

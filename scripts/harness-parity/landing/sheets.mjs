@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { connect, launch } from '../page.mjs';
+import { removeDir } from './measure.mjs';
 
 const LAYOUTS = {
   desktop: { prefix: 'desktop-', cols: 3, tile: 640 },
@@ -48,8 +49,8 @@ export async function makeSheets(shots, measures) {
     const exited = new Promise((r) => chrome.once('exit', r));
     chrome.kill();
     await exited;
-    rmSync(profile, { recursive: true, force: true });
-    rmSync(near, { recursive: true, force: true });
+    await removeDir(profile);
+    await removeDir(near);
   }
   return out;
 }
