@@ -19,7 +19,7 @@ import { budgetStep, HARNESSES, pairStep, parseOptions } from './rules.mjs';
 import { makeSheets } from './sheets.mjs';
 import { roundsOf, spentBy } from './logs.mjs';
 import { lineDiff } from './stats.mjs';
-import { FEEDBACK, PROMPT, TASK_ID, WORKSPACE } from './task.mjs';
+import { FEEDBACK, GO_ON_EN, PROMPT, TASK_ID, WORKSPACE } from './task.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONTINUES = 2;
@@ -112,7 +112,7 @@ async function runJob(job) {
       rounds.push({ ms: 0, ends: [], modelCalls: 0, usage: {}, skipped: 'the run spent its cap in round 1, so it got no feedback round' });
       break;
     }
-    const { ends, error, capped } = await converse(job.harness, paths, opts.model, state, text, text, CONTINUES);
+    const { ends, error, capped } = await converse(job.harness, paths, opts.model, state, text, text, CONTINUES, GO_ON_EN);
     charge();
     if (error) {
       writeJson(path.join(job.dir, 'failed.json'), { round: i + 1, error });

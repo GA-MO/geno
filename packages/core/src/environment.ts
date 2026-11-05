@@ -59,7 +59,7 @@ export const KEY_PACKAGES = ['next', 'payload', 'react'] as const;
 const COMMAND_SHELL = 'bash';
 
 const PLATFORM_NOTES: Readonly<Record<string, string>> = {
-  darwin: ' (macOS). Commands use the BSD tools, so GNU-only flags may fail.',
+  darwin: " (macOS). Commands use the BSD tools, so GNU-only flags may fail: BSD sed -i takes a backup suffix, so in-place edits are sed -i '' 's/a/b/' file.",
 };
 
 function gitSection(git: GitSnapshot): string {

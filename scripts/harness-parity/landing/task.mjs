@@ -14,6 +14,12 @@ Use GSAP 3.12.5 and ScrollTrigger from cdnjs for section reveals and micro-inter
 Respect prefers-reduced-motion. No scroll pinning or scroll-jacking.
 No other external assets. It must look right at 375px and 1280px wide.`;
 
+/**
+ * The simulated user's "go on", in the brief's language. In l1 it was the Thai GO_ON of the trip-site tasks, and Geno
+ * answered the next segment in Thai, as its rule to answer in the language of the latest message says.
+ */
+export const GO_ON_EN = "Go on. Decide for yourself; you don't need to ask me.";
+
 export const FEEDBACK = 'The hero motion feels stiff. At 375px the spacing between sections is uneven. The prices on the plan cards are hard to read. Fix these three and keep everything else as it is.';
 
 /** The three feedback asks, as the judge of the second round names them. */

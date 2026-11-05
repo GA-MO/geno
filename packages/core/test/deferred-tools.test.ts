@@ -126,7 +126,7 @@ describe('tool_search', () => {
 });
 
 describe('loaded tools', () => {
-  const result = (seq: number, loaded: string[] | undefined, status: 'ok' | 'error' = 'ok'): TurnEvent => ({
+  const result = (seq: number, loaded: string[] | undefined, status: 'ok' | 'error' | 'denied' = 'ok'): TurnEvent => ({
     kind: 'tool-result',
     seq,
     at: '',
@@ -140,7 +140,8 @@ describe('loaded tools', () => {
   it.each([
     { case: 'no loads', events: [], loaded: [] },
     { case: 'two loads add up', events: [result(1, ['a']), result(2, ['b', 'a'])], loaded: ['a', 'b'] },
-    { case: 'a failed search loads nothing', events: [result(1, ['a'], 'error')], loaded: [] },
+    { case: 'a call that ran and failed loads its tool', events: [result(1, ['a'], 'error')], loaded: ['a'] },
+    { case: 'a denied call loads nothing', events: [result(1, ['a'], 'denied')], loaded: [] },
     { case: 'other results load nothing', events: [result(1, undefined)], loaded: [] },
   ])('$case', ({ events, loaded }) => {
     expect([...loadedTools(events)].sort()).toEqual(loaded);
@@ -184,7 +185,19 @@ describe("input typed by a deferred tool's schema", () => {
     { case: 'nested objects', input: { nested: { on: 'true' } }, typed: { nested: { on: true } } },
     { case: 'unknown fields stay', input: { other: '3' }, typed: { other: '3' } },
     { case: 'right types stay', input: { pageId: 2, verbose: true }, typed: { pageId: 2, verbose: true } },
+    { case: 'an array written as its JSON text', input: { ids: '["1", 2]' }, typed: { ids: [1, 2] } },
+    { case: 'an object written as its JSON text', input: { nested: '{"on": "true"}' }, typed: { nested: { on: true } } },
+    { case: 'JSON text of the wrong type stays as written', input: { ids: '{"a": 1}', nested: '[1]' }, typed: { ids: '{"a": 1}', nested: '[1]' } },
+    { case: 'text that is not JSON stays as written', input: { ids: '[error, warn', nested: 'on' }, typed: { ids: '[error, warn', nested: 'on' } },
+    { case: 'JSON null stays as written', input: { nested: 'null' }, typed: { nested: 'null' } },
   ])('$case', ({ input, typed }) => {
     expect(coerceToSchema(schema, input)).toEqual(typed);
+  });
+});
+
+describe('loadedTools counts a call that ran and failed', () => {
+  it('loads from ok and error results, never from a denied or rejected one', () => {
+    const result = (status: string, name: string) => ({ kind: 'tool-result', seq: 1, at: '', toolUseId: name, name, status, loaded: [name], output: '' }) as unknown as TurnEvent;
+    expect([...loadedTools([result('ok', 'a'), result('error', 'b'), result('denied', 'c'), result('rejected', 'd')])].sort()).toEqual(['a', 'b']);
   });
 });

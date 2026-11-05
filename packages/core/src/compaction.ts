@@ -22,6 +22,7 @@ import {
 } from './compact.js';
 import { renderContextItems } from './context.js';
 import { CHARS_PER_TOKEN, textTokens } from './context-window.js';
+import { loadedBy } from './deferred-tools.js';
 import { noticeTexts } from './notice.js';
 import { hookContextTexts } from './hooks.js';
 import { replayMessages, restoredNotice, toolResultText, toolUsesOf, type Session, type Spend, type TurnEvent, type TurnEventKind } from './session.js';
@@ -139,7 +140,7 @@ function withinBudget(messages: readonly KeptMessage[]): { readonly messages: Ke
  * tool's call that loaded it, whose result opens with its definition (`autoLoadedText`).
  */
 function loadedDefinitions(event: EventOf<'tool-result'>): [string, string][] {
-  const loaded = new Set(event.status === 'ok' ? (event.loaded ?? []) : []);
+  const loaded = new Set(loadedBy(event));
   if (loaded.size === 0) return [];
   const text = 'spill' in event ? event.spill.head : event.output;
   return text.split('\n').flatMap((line): [string, string][] => {

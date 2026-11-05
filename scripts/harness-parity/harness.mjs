@@ -101,12 +101,12 @@ export function transcriptOf(name, { job, home }, state) {
 /**
  * Sends `text` in the run's session, then "go on" while the agent hands work back, up to `continues` times. Returns
  * how each segment ended, or `error` when the harness never started a session. A run that hit the cost cap its
- * caller set (`state.capUsd`) is not told to go on.
+ * caller set (`state.capUsd`) is not told to go on. `goOn` is the simulated user's reply, in the request's language.
  */
-export async function converse(name, paths, model, state, text, request, continues) {
+export async function converse(name, paths, model, state, text, request, continues, goOn = GO_ON) {
   const ends = [];
   for (let segment = 0; ; segment++) {
-    const { stoppedBy, capped, err } = await harnesses[name](paths, model, segment === 0 ? text : GO_ON, state);
+    const { stoppedBy, capped, err } = await harnesses[name](paths, model, segment === 0 ? text : goOn, state);
     if (state.session === undefined) return { ends, error: `no session: ${err.slice(-400)}` };
     const t = transcriptOf(name, paths, state);
     const end = await classifyEnd(request, finalText(t.steps.slice(t.steps.findLastIndex((s) => s.kind === 'user') + 1)), stoppedBy);
