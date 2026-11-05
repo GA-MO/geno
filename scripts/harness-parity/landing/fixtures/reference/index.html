@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeanCraft · Rotating single-origin coffee</title>
+<!-- The meter's reference page: it does everything the brief asks, so nearly every check must pass on it. -->
+<style>
+  :root { --ink: #2a1d14; --muted: #5f4b3c; --cream: #f7f1e8; --card: #fffaf3; --accent: #8a3b12; --line: #e3d6c4; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body { margin: 0; font: 17px/1.6 Georgia, "Iowan Old Style", serif; color: var(--ink); background: var(--cream); }
+  a { color: var(--accent); }
+  .hero { position: relative; min-height: 100svh; display: grid; place-items: center; overflow: hidden; color: #fff8ef; }
+  .hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hero-copy { position: relative; max-width: 40rem; padding: 0 1.5rem; text-align: center; }
+  .hero h1 { font-size: clamp(2.4rem, 7vw, 4.5rem); line-height: 1.05; margin: 0 0 1rem; }
+  .hero p { font-size: 1.15rem; margin: 0 0 2rem; color: #fbeee0; }
+  .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 1.5rem; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none; font: 600 1rem system-ui, sans-serif; }
+  .hero .button { background: #fff8ef; color: var(--ink); }
+  section { padding: 5rem 1.5rem; }
+  .wrap { max-width: 64rem; margin: 0 auto; }
+  h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 0 0 1rem; line-height: 1.15; }
+  h3 { margin: 0 0 .5rem; font-size: 1.25rem; }
+  .grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 1rem; padding: 1.5rem; }
+  .plan { display: flex; flex-direction: column; gap: .75rem; }
+  .price { font: 700 2.25rem/1 system-ui, sans-serif; color: var(--ink); }
+  .price small { font-size: 1rem; font-weight: 500; color: var(--muted); }
+  .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .75rem .5rem; border-bottom: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+  footer { padding: 3rem 1.5rem; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <div class="hero-copy">
+    <h1>Single-origin coffee, a new farm every shipment</h1>
+    <p>BeanCraft roasts one origin at a time and ships it to you fresh, on the cadence you pick.</p>
+    <a class="button" href="#plans">See the plans</a>
+  </div>
+</header>
+<main>
+  <section id="roasts" class="reveal">
+    <div class="wrap">
+      <h2>Roast profiles</h2>
+      <div class="grid">
+        <div class="card"><h3>Light roast</h3><p>Bright and floral. We stop just after first crack to keep the origin's fruit and acidity.</p></div>
+        <div class="card"><h3>Medium roast</h3><p>Caramel sweetness and a rounder body, for drip machines and pour-over alike.</p></div>
+        <div class="card"><h3>Dark roast</h3><p>Cocoa and toasted nuts, roasted slowly for espresso and milk drinks.</p></div>
+      </div>
+    </div>
+  </section>
+  <section id="sourcing" class="reveal">
+    <div class="wrap">
+      <h2>How we source</h2>
+      <p>We buy direct from small farms and cooperatives in Ethiopia, Colombia and Guatemala, pay above Fair Trade minimums, and name the producer on every bag. Each lot is cupped before we buy it.</p>
+      <p>Delivery cadence: every two weeks or every four weeks, and you can change it whenever you like.</p>
+    </div>
+  </section>
+  <section id="plans" class="reveal">
+    <div class="wrap">
+      <h2>Plans</h2>
+      <div class="grid">
+        <div class="card plan"><h3>Taster</h3><p class="price">$14 <small>per bag</small></p><p class="muted">One 250 g bag every four weeks.</p><a class="button" href="https://buy.stripe.com/test_taster">Subscribe</a></div>
+        <div class="card plan"><h3>Regular</h3><p class="price">$13 <small>per bag</small></p><p class="muted">Two 250 g bags every two weeks.</p><a class="button" href="https://buy.stripe.com/test_regular">Subscribe</a></div>
+        <div class="card plan"><h3>Office</h3><p class="price">$12 <small>per bag</small></p><p class="muted">Five 250 g bags every two weeks.</p><a class="button" href="https://buy.stripe.com/test_office">Subscribe</a></div>
+      </div>
+    </div>
+  </section>
+  <section id="roaster" class="reveal">
+    <div class="wrap">
+      <h2>Meet the roaster</h2>
+      <p>Mara Okafor has roasted for twelve years, first in Lagos and now in Portland. She profiles every origin by hand on a 15 kg drum roaster and tastes each batch before it ships.</p>
+    </div>
+  </section>
+  <section id="shipping" class="reveal">
+    <div class="wrap">
+      <h2>Shipping schedule</h2>
+      <table>
+        <thead><tr><th>Roast day</th><th>Ships</th><th>Arrives</th></tr></thead>
+        <tbody>
+          <tr><td>Monday</td><td>Tuesday</td><td>Thursday to Friday</td></tr>
+          <tr><td>Wednesday</td><td>Thursday</td><td>Monday to Tuesday</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">Orders placed by Sunday night go out in that week's Monday roast.</p>
+    </div>
+  </section>
+  <section id="pause" class="reveal">
+    <div class="wrap">
+      <h2>Pause anytime</h2>
+      <p>Going away? Pause anytime from the link in your shipping email. Nothing is charged while you are paused, and you pick the week we start again.</p>
+      <p><a href="/brew-guide.pdf" download>Download the brew guide (PDF)</a></p>
+    </div>
+  </section>
+  <section id="faq" class="reveal">
+    <div class="wrap">
+      <h2>FAQ</h2>
+      <details><summary>How fresh is the coffee?</summary><p>We roast to order and ship within 48 hours, so beans arrive within a week of roasting, at peak freshness.</p></details>
+      <details><summary>Can you grind it for me?</summary><p>Yes. Choose whole bean or grinding for espresso, filter or French press at checkout. Whole bean stays fresh longest.</p></details>
+    </div>
+  </section>
+  <section id="sustainability" class="reveal">
+    <div class="wrap">
+      <h2>Sustainability</h2>
+      <p>We work with farms that grow under shade and pay them directly. Our lots carry Fair Trade and organic certifications where the farm holds them. Packaging is a home-compostable bag with a paper label, shipped in a recycled box.</p>
+    </div>
+  </section>
+</main>
+<footer>BeanCraft · Roasted in Portland</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canvas = document.getElementById('bg');
+  const pointer = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
+  addEventListener('pointermove', (e) => { pointer.tx = e.clientX / innerWidth; pointer.ty = 1 - e.clientY / innerHeight; });
+  const VERT = `#version 300 es
+  in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
+  const FRAG = `#version 300 es
+  precision highp float;
+  uniform vec2 res; uniform float t; uniform vec2 m; out vec4 o;
+  void main() {
+    vec2 uv = gl_FragCoord.xy / res;
+    float d = distance(uv, m);
+    float w = sin(uv.x * 6.0 + t * 0.6) * 0.5 + sin(uv.y * 5.0 - t * 0.4) * 0.5;
+    vec3 a = vec3(0.24, 0.13, 0.07), b = vec3(0.62, 0.33, 0.16);
+    vec3 col = mix(a, b, 0.5 + 0.5 * w) + vec3(0.35, 0.2, 0.1) * smoothstep(0.35, 0.0, d);
+    o = vec4(col, 1.0);
+  }`;
+  let gl, program, frame;
+  function setup() {
+    gl = canvas.getContext('webgl2');
+    if (!gl) return;
+    const shader = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    program = gl.createProgram();
+    gl.attachShader(program, shader(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(program, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  }
+  function draw(now) {
+    const dpr = Math.min(devicePixelRatio, 2);
+    const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    pointer.x += (pointer.tx - pointer.x) * 0.08;
+    pointer.y += (pointer.ty - pointer.y) * 0.08;
+    gl.viewport(0, 0, w, h);
+    gl.uniform2f(gl.getUniformLocation(program, 'res'), w, h);
+    gl.uniform1f(gl.getUniformLocation(program, 't'), reduce ? 0 : now / 1000);
+    gl.uniform2f(gl.getUniformLocation(program, 'm'), pointer.x, pointer.y);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (!reduce) frame = requestAnimationFrame(draw);
+  }
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); cancelAnimationFrame(frame); });
+  canvas.addEventListener('webglcontextrestored', () => { setup(); frame = requestAnimationFrame(draw); });
+  setup();
+  if (gl) frame = requestAnimationFrame(draw);
+  if (reduce) addEventListener('resize', () => requestAnimationFrame(draw));
+
+  gsap.registerPlugin(ScrollTrigger);
+  for (const el of document.querySelectorAll('.reveal')) {
+    if (reduce) gsap.from(el, { opacity: 0, duration: 0.4, scrollTrigger: { trigger: el, start: 'top 85%' } });
+    else gsap.from(el, { opacity: 0, y: 40, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+  }
+  if (!reduce) for (const b of document.querySelectorAll('.button')) {
+    b.addEventListener('pointerenter', () => gsap.to(b, { scale: 1.04, duration: 0.2 }));
+    b.addEventListener('pointerleave', () => gsap.to(b, { scale: 1, duration: 0.2 }));
+  }
+</script>
+</body>
+</html>
