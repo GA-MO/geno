@@ -486,6 +486,66 @@ describe('gcode serve: scheduled tasks', () => {
     expect(asked.count, 'Allow holds for that change only').toBe(4);
   });
 
+  it('refuses schedule changes in Plan as it refuses an edit, though the chat allowed them, and makes them unasked once out of Plan', async () => {
+    const at = await fixture();
+    const clock = new FakeClock(T0);
+    const create = (id: string) => ({ id, name: 'schedule_task', input: { action: 'create', title: `Review ${id}`, prompt: '/review main', when: 'weekdays at 9:00' } });
+    const changes = (prefix: string, body: Body) => {
+      const id = /Scheduled (sch_[0-9a-f]{6})/.exec(JSON.stringify(body.messages))![1]!;
+      return [
+        create(`${prefix}_c`),
+        { id: `${prefix}_u`, name: 'schedule_task', input: { action: 'update', id, paused: true } },
+        { id: `${prefix}_d`, name: 'schedule_task', input: { action: 'delete', id } },
+        { id: `${prefix}_l`, name: 'schedule_task', input: { action: 'list' } },
+        { id: `${prefix}_e`, name: 'edit', input: { path: 'a.ts', old_string: 'alpha', new_string: 'beta' } },
+      ];
+    };
+    const model = models({
+      '[plan]': (n, body) => {
+        if (n === 0) return toolCall('Loading the tool.', [loadTools('schedule_task')], usage);
+        if (n === 1) return toolCall('Scheduling it.', [create('tu_first')], usage);
+        if (n === 3) return toolCall('Changing them.', changes('tu_plan', body), usage);
+        if (n === 5) return toolCall('Changing them.', changes('tu_ask', body).slice(0, 4), usage);
+        return answer('Done.', usage);
+      },
+    });
+    const allowed = await serve(at, clock, model.fetch, async (window) => (await window.prompt('[plan] review main every weekday at 9'), window.sessionId), ['allow-session']);
+    const { result, heard } = await serve(
+      at,
+      clock,
+      model.fetch,
+      async (window) => {
+        await window.ctx.request(acp.methods.agent.session.setMode, { sessionId: window.sessionId, modeId: 'plan' });
+        await window.prompt('pause it, then delete it');
+        const inPlan = await window.list();
+        await window.ctx.request(acp.methods.agent.session.setMode, { sessionId: window.sessionId, modeId: 'ask' });
+        await window.prompt('now do it');
+        return { inPlan, afterPlan: await window.list() };
+      },
+      [],
+      allowed.result,
+    );
+
+    const results = (await logOf(at.store, allowed.result)).filter((e) => e.kind === 'tool-result');
+    const outputOf = (id: string) => {
+      const found = results.find((e) => e.kind === 'tool-result' && e.toolUseId === id);
+      return found?.kind === 'tool-result' && 'output' in found ? found.output : '';
+    };
+    expect(allowed.heard.permissions).toHaveLength(1);
+    expect(heard.permissions, 'no card once the chat allowed schedule changes').toHaveLength(0);
+    expect(outputOf('tu_plan_e')).toBe('edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.');
+    for (const action of ['c', 'u', 'd'] as const) {
+      const word = { c: 'create', u: 'update', d: 'delete' }[action];
+      expect(outputOf(`tu_plan_${action}`)).toBe(`schedule_task ${word} is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.`);
+    }
+    expect(outputOf('tu_plan_l')).toMatch(/^- sch_[0-9a-f]{6} "Review tu_first": Weekdays at 09:00/);
+    expect(result.inPlan.tasks.map((t) => [t.title, t.paused]), 'Plan left the schedules as they were').toEqual([['Review tu_first', false]]);
+    expect(outputOf('tu_ask_c')).toMatch(/^Scheduled sch_/);
+    expect(outputOf('tu_ask_u')).toMatch(/^Changed sch_.*\(paused\)/);
+    expect(outputOf('tu_ask_d')).toMatch(/^Deleted sch_/);
+    expect(result.afterPlan.tasks.map((t) => t.title)).toEqual(['Review tu_ask_c']);
+  });
+
   it('runs a task now without moving its schedule, and pauses, resumes and deletes it from the Tasks list', async () => {
     const at = await fixture();
     const clock = new FakeClock(T0);
