@@ -16,12 +16,20 @@ const short = (value, n) => {
 const resultText = (content) => (typeof content === 'string' ? content : Array.isArray(content) ? content.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n') : JSON.stringify(content ?? ''));
 const zero = () => ({ input: 0, cacheRead: 0, cacheWrite: 0, output: 0 });
 
+/**
+ * What a Claude Code result line adds to the spend, given the running total before it. A resumed session reports
+ * `total_cost_usd` as the session's running total, so a segment costs its total minus the one before; a total that
+ * goes down started a fresh count and is added whole. A crashed or failed start reports zero, which is skipped.
+ */
+export const spendSince = (last, total) => (total === 0 ? 0 : total >= last ? total - last : total);
+
 /** Claude Code's `--output-format stream-json` lines, one or more runs appended. */
 export function fromClaudeStream(file) {
   const steps = [];
   const usage = zero();
   let modelCalls = 0;
   let costUsd = 0;
+  let total = 0;
   const seen = new Set();
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim().startsWith('{')) continue;
@@ -46,7 +54,8 @@ export function fromClaudeStream(file) {
       }
     }
     if (e.type === 'result') {
-      costUsd += e.total_cost_usd ?? 0;
+      costUsd += spendSince(total, e.total_cost_usd ?? 0);
+      total = e.total_cost_usd || total;
       const u = e.usage ?? {};
       usage.input += u.input_tokens ?? 0;
       usage.cacheRead += u.cache_read_input_tokens ?? 0;
