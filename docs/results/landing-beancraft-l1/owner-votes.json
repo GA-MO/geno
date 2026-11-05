@@ -1,0 +1,27 @@
+{
+  "code": "1B-2T-3B",
+  "from": "compare",
+  "rows": [
+    {
+      "pair": 1,
+      "owner": "geno",
+      "judge": "claude",
+      "agree": false
+    },
+    {
+      "pair": 2,
+      "owner": "tie",
+      "judge": "claude",
+      "agree": false
+    },
+    {
+      "pair": 3,
+      "owner": "claude",
+      "judge": "claude",
+      "agree": true
+    }
+  ],
+  "agreed": 1,
+  "of": 3,
+  "summary": "From the live pages on the compare page, after feedback: pair 1 Geno run 1 (judge Claude Code), pair 2 tie (judge Claude Code), pair 3 Claude Code run 3 (judge Claude Code). The judge agrees on 1 of 3 pairs."
+}

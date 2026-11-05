@@ -4,6 +4,8 @@
 
 **Claude Code wins** by the rule below. Claude Code was cheaper ($1.30 against $2.21).
 
+**Do not read this as the owner's taste yet.** The judge pairs decide it, and the judge agreed with the owner on only 1 of the 3 pairs the owner voted on (owner: Claude Code 1, Geno 1, tie 1). The checks alone (ก, ข, ค) are close: ก brief 33 to 33, ข quality 23 to 22, ค motion 24 to 24.
+
 | | Claude Code | Geno | needed to win |
 |---|---|---|---|
 | ก brief checks passed (final) | 33/33 | 33/33 | at least the other's |
@@ -188,6 +190,14 @@ Per round (1 / 2). Shots are screenshots it took of its own work. Edits against 
 ## Owner vote
 
 A blind page of 3 pairs of final pages, sides shuffled: [landing-beancraft-l1/vote.html](landing-beancraft-l1/vote.html). The key is kept apart in `docs/results/landing-beancraft-l1/vote-key.json`. After voting, `node scripts/harness-parity/landing/agree.mjs --round l1 --votes <the code the page shows>` says how many pairs the judge and the owner agree on.
+
+The owner voted (`1B-2T-3B`). From the live pages on the compare page, after feedback: pair 1 Geno run 1 (judge Claude Code), pair 2 tie (judge Claude Code), pair 3 Claude Code run 3 (judge Claude Code). The judge agrees on 1 of 3 pairs.
+
+| pair | owner | judge | agree |
+|---|---|---|---|
+| 1 | Geno | Claude Code | no |
+| 2 | tie | Claude Code | no |
+| 3 | Claude Code | Claude Code | yes |
 
 ## Compare the live pages
 

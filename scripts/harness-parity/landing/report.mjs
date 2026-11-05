@@ -8,7 +8,7 @@ import { CHECKS, CLS_MAX, FRAME_P95_MS, GROUPS, LCP_MS, LONG_FRAMES_MAX, feedbac
 import { ASKS, FEEDBACK, PROMPT } from './task.mjs';
 import { decide, minJudgeWins, pairVerdict } from './rules.mjs';
 import { roundsOf } from './logs.mjs';
-import { writeVotePage } from './vote.mjs';
+import { voteDir, writeVotePage } from './vote.mjs';
 
 export const docPath = (round) => path.join(REPO, 'docs/results', `landing-beancraft-${round}.md`);
 
@@ -93,6 +93,12 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
     const cheaper = verdict.cheaper === 'same' ? 'Both cost the same.' : `${NAMES[verdict.cheaper]} was cheaper (${money(sides[verdict.cheaper].costUsd)} against ${money(sides[verdict.cheaper === 'claude' ? 'geno' : 'claude'].costUsd)}).`;
     lines.push(verdict.winner === 'tie' ? `**Tie** by the rule below. ${cheaper}` : `**${NAMES[verdict.winner]} wins** by the rule below. ${cheaper}`, '');
   }
+  const owner = readJson(path.join(voteDir(round), 'owner-votes.json'));
+  // The judge stands in for the owner's eye; when the owner's own votes mostly disagree with it, the verdict says so.
+  if (owner && complete && owner.agreed * 2 <= owner.of) {
+    const tally = ['claude', 'geno', 'tie'].map((h) => `${NAMES[h] ?? 'tie'} ${owner.rows.filter((r) => r.owner === h).length}`).join(', ');
+    lines.push(`**Do not read this as the owner's taste yet.** The judge pairs decide it, and the judge agreed with the owner on only ${owner.agreed} of the ${owner.of} pairs the owner voted on (owner: ${tally}). The checks alone (ก, ข, ค) are close: ${GROUPS.brief} ${sides.claude.brief} to ${sides.geno.brief}, ${GROUPS.quality} ${sides.claude.quality} to ${sides.geno.quality}, ${GROUPS.motion} ${sides.claude.motion} to ${sides.geno.motion}.`, '');
+  }
   const need = minJudgeWins(pairs.length);
   lines.push('| | Claude Code | Geno | needed to win |', '|---|---|---|---|');
   for (const g of ['brief', 'quality', 'motion']) lines.push(`| ${GROUPS[g]} checks passed (final) | ${sides.claude[g]}/${groupSize(g) * claude.length} | ${sides.geno[g]}/${groupSize(g) * geno.length} | at least the other's |`);
@@ -169,9 +175,12 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
 
   const vote = await writeVotePage(round, pages, judged);
   lines.push('## Owner vote', '', `A blind page of ${vote.pairs} pairs of final pages, sides shuffled: [${path.relative(path.dirname(docPath(round)), vote.page)}](${path.relative(path.dirname(docPath(round)), vote.page)}). The key is kept apart in \`${path.relative(REPO, vote.key)}\`. After voting, \`node scripts/harness-parity/landing/agree.mjs --round ${round} --votes <the code the page shows>\` says how many pairs the judge and the owner agree on.`, '');
+  if (owner) {
+    lines.push(`The owner voted (\`${owner.code}\`). ${owner.summary}`, '', '| pair | owner | judge | agree |', '|---|---|---|---|');
+    for (const r of owner.rows) lines.push(`| ${r.pair} | ${NAMES[r.owner] ?? r.owner} | ${NAMES[r.judge] ?? 'not judged'} | ${r.agree ? 'yes' : 'no'} |`);
+    lines.push('');
+  }
   lines.push('## Compare the live pages', '', `\`scripts/harness-parity/landing/compare.html\` shows the same three pairs, sides hidden as in the vote, as live pages in frames at 375 and 1280, first round or after feedback, so the shader, the pointer and the reveals run for real. Reveal sides names the harnesses and the judge's verdict. Start it with \`node scripts/harness-parity/landing/compare.mjs --round ${round}\` and open http://127.0.0.1:4600/ (\`--port\` picks another port). The pages are served from \`${dir}\`, so they open on this Mac only.`, '');
-  const owner = readJson(path.join(path.dirname(vote.key), 'owner-votes.json'));
-  if (owner) lines.push(`The owner voted: ${owner.summary}`, '');
 
   lines.push(method(claude.length), '');
   lines.push(`Run folders: \`${dir}\`.`, '');
