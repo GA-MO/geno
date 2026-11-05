@@ -183,7 +183,8 @@ const listedUrlOf = (events: readonly TurnEvent[], id: number): string | undefin
  */
 function stalePage(state: BrowserState, workspace: string, id: number, events: readonly TurnEvent[], readOnly: boolean): { readonly retry: number; readonly note: string } | { readonly error: string } {
   const open = [...state.pages].filter(([, page]) => page.url !== BLANK);
-  const only = open.length === 1 && readOnly ? open[0]! : undefined;
+  // When the latest listing says what the page showed and reopen could not bring it back, the page left open is another one.
+  const only = open.length === 1 && readOnly && listedUrlOf(events, id) === undefined ? open[0]! : undefined;
   // Only a page the rules let through without asking: a local page, or a host the user approved this session.
   const page = only === undefined ? undefined : browserPage(state, only[1].url, workspace);
   if (only !== undefined && page !== undefined && (page.url.kind === 'local' || page.approved)) {
