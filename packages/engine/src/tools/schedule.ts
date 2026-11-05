@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import {
+  modeRefusal,
   parseScheduleTask,
   SCHEDULE_TASK_TOOL,
   scheduleListText,
   sessionAllowances,
   taskLine,
   updatedTask,
+  type ApprovalMode,
   type ScheduleChange,
   type ScheduleDraft,
   type ScheduledTask,
@@ -38,7 +40,8 @@ function taskNamed(tasks: readonly ScheduledTask[], id: string): ScheduledTask {
 const describeInput = (input: ScheduleToolInput): string =>
   input.action === 'create' ? `${SCHEDULE_TASK_TOOL} create ${input.draft.title}` : input.action === 'list' ? `${SCHEDULE_TASK_TOOL} list` : `${SCHEDULE_TASK_TOOL} ${input.action} ${input.id}`;
 
-export function scheduleExecutor(tools: ScheduleTools): Executor {
+/** Plan lists the tasks and refuses every change, as it refuses an edit, whatever the user allowed for the chat. */
+export function scheduleExecutor(tools: ScheduleTools, mode: () => ApprovalMode): Executor {
   const input = z.unknown().transform((raw, ctx) => {
     const parsed = parseScheduleTask(raw, tools.now(), tools.zone());
     if (parsed.ok) return parsed.value;
@@ -64,6 +67,7 @@ export function scheduleExecutor(tools: ScheduleTools): Executor {
     input,
     describe: describeInput,
     async run(request, ctx) {
+      if (request.action !== 'list' && mode() === 'plan') throw new ToolError(modeRefusal(`${SCHEDULE_TASK_TOOL} ${request.action}`, 'plan'));
       switch (request.action) {
         case 'list':
           return scheduleListText(await tools.list(), tools.zone(), tools.now());
