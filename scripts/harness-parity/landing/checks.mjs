@@ -19,14 +19,21 @@ const host = (href) => {
     return '';
   }
 };
-const isPdf = (href) => {
+/** A link to a .pdf file, or a PDF the page builds itself (a blob: or data: URL) behind a link that says PDF. */
+const isPdf = (link) => {
   try {
-    return new URL(href).pathname.toLowerCase().endsWith('.pdf');
+    if (new URL(link.href).pathname.toLowerCase().endsWith('.pdf')) return true;
   } catch {
     return false;
   }
+  return /^(blob:|data:application\/pdf)/.test(link.href) && (link.download || /pdf/i.test(link.text));
 };
-const section = (m, heading) => m.brief.headings.filter((h) => heading.test(h.text)).map((h) => `${h.text} ${h.body}`).join(' ');
+/**
+ * The parts of the page a reader sees as sections: each heading with the text under it, and each section, article or
+ * id'd block. Parts holding more than 40% of the page (the hero heading, <main>) are the page, not a section.
+ */
+const parts = (m) => [...m.brief.headings.map((h) => `${h.text} ${h.body}`), ...(m.brief.blocks ?? [])].filter((t) => t.length <= m.brief.text.length * 0.4);
+const findPart = (m, test) => parts(m).find(test);
 const hasContent = (layout) => layout !== undefined && layout.textChars >= MIN_TEXT;
 const isLocal = (url) => url.startsWith('/');
 const GSAP_FILE = /^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/gsap\/3\.12\.5\//;
@@ -49,28 +56,29 @@ export const CHECKS = [
       return when(bad.length === 0, `${bad.length} of ${s.length} Subscribe controls do not link to https://…stripe.com (${bad[0]?.href ?? bad[0]?.tag})`);
     },
   },
-  { id: 'pdf', group: 'brief', session: 'desktop', label: 'a brew guide PDF download link', test: (m) => when(m.brief.links.some((l) => isPdf(l.href)), 'no link to a .pdf') },
-  { id: 'roaster', group: 'brief', session: 'desktop', label: 'a roaster profile section', test: (m) => when(section(m, /roaster|roastmaster|roast master/i).length > 120, 'no section under a heading that names the roaster') },
+  { id: 'pdf', group: 'brief', session: 'desktop', label: 'a brew guide PDF download link', test: (m) => when(m.brief.links.some(isPdf), 'no link to a .pdf') },
+  { id: 'roaster', group: 'brief', session: 'desktop', label: 'a roaster profile section', test: (m) => when(findPart(m, (t) => /roaster|roastmaster|roast master/i.test(t) && t.length > 120) !== undefined, 'no section about the roaster') },
   {
     id: 'shipping', group: 'brief', session: 'desktop', label: 'a shipping schedule',
-    test: (m) => when(/\b(mon|tues|wednes|thurs|fri|satur|sun)day\b|\bweek(ly|s)?\b|\bmonth(ly)?\b|\bevery \w+ (days|weeks)\b|\bcut-?off\b/i.test(section(m, /ship|deliver/i)), 'no section on shipping or delivery that gives days or a cadence'),
+    test: (m) => when(findPart(m, (t) => /ship|deliver|dispatch|arriv/i.test(t) && /\b(mon|tue|wed|thu|fri|sat|sun)(day|s)?\b|\bcut-?off\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/i.test(t)) !== undefined, 'no section on shipping that names days, dates or a cut-off'),
   },
   { id: 'pause', group: 'brief', session: 'desktop', label: 'a "Pause anytime" explainer', test: (m) => when(/pause[^.]{0,80}any ?time|any ?time[^.]{0,80}pause/i.test(m.brief.text), 'nothing says you can pause anytime') },
   {
     id: 'faq', group: 'brief', session: 'desktop', label: 'an FAQ that covers freshness and grinding',
     test: (m) => {
-      const faq = section(m, /faq|frequently asked|questions/i);
-      if (faq === '') return fail('no FAQ heading');
-      return when(/fresh/i.test(faq) && /grind/i.test(faq), `the FAQ does not cover ${/fresh/i.test(faq) ? 'grinding' : 'freshness'}`);
+      const faqs = parts(m).filter((t) => /\bfaq\b|questions|asked/i.test(t) || (t.match(/\?/g) ?? []).length >= 2);
+      if (faqs.length === 0) return fail('no FAQ: no section of questions');
+      return when(faqs.some((t) => /fresh/i.test(t) && /grind/i.test(t)), 'no FAQ covers both freshness and grinding');
     },
   },
   {
     id: 'sustainability', group: 'brief', session: 'desktop', label: 'a sustainability statement on farms, certifications and packaging',
     test: (m) => {
-      const s = section(m, /sustainab/i);
-      if (s === '') return fail('no sustainability heading');
-      const missing = [['farms', /farm/i], ['certifications', /certif|fair ?trade|organic|rainforest alliance|b corp/i], ['packaging', /packag/i]].filter(([, re]) => !re.test(s)).map(([w]) => w);
-      return when(missing.length === 0, `says nothing on ${missing.join(', ')}`);
+      const topics = [['farms', /farm/i], ['certifications', /certif|fair ?trade|organic|rainforest alliance|b corp/i], ['packaging', /packag/i]];
+      const missing = (t) => topics.filter(([, re]) => !re.test(t)).map(([w]) => w);
+      const best = parts(m).filter((t) => /sustainab|planet|environment|impact|responsib/i.test(t) || missing(t).length === 0).sort((a, b) => missing(a).length - missing(b).length)[0];
+      if (best === undefined) return fail('no sustainability section');
+      return when(missing(best).length === 0, `the closest section says nothing on ${missing(best).join(', ')}`);
     },
   },
   {

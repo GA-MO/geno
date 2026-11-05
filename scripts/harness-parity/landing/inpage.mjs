@@ -129,9 +129,11 @@ export function briefFacts() {
     }
     return undefined;
   };
+  const blocks = [...document.querySelectorAll('section,article,aside,footer,header,[id]')].map((el) => textUnder(el).slice(0, 4000)).filter((t) => t.length > 0);
   return {
     text: textUnder(document.body).slice(0, 40000),
     headings: headings.map((h) => ({ text: textUnder(h), body: sectionOf(h) })),
+    blocks,
     subscribes: subscribes.map((el) => {
       const card = cardOf(el);
       return { tag: el.tagName.toLowerCase(), label: labelOf(el), href: el instanceof HTMLAnchorElement ? el.href : null, card: card ? textUnder(card).slice(0, 600) : null };
@@ -170,6 +172,8 @@ export function layoutFacts() {
     if (rects.length === 0) continue;
     const left = Math.min(...rects.map((r) => r.left));
     const right = Math.max(...rects.map((r) => r.right));
+    // Text parked wholly off screen (a skip link, visually hidden text) is hidden on purpose, not overflowing.
+    if (right <= 0 || left >= innerWidth) continue;
     const sample = n.textContent.trim().slice(0, 50);
     const block = blockOf(el);
     const box = block.getBoundingClientRect();
@@ -188,8 +192,12 @@ export function layoutFacts() {
     const border = ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(s[`border${side}Width`]) > 0 && s[`border${side}Style`] !== 'none');
     return (bg || border || s.backgroundImage !== 'none') && s.display !== 'inline';
   };
+  const onScreen = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.right > 0 && r.left < innerWidth && r.bottom + scrollY > 0;
+  };
   const smallButtons = [...document.querySelectorAll('a,button,[role=button],input,summary')]
-    .filter((el) => shown(el) && buttonLike(el))
+    .filter((el) => shown(el) && onScreen(el) && buttonLike(el))
     .map((el) => ({ el: `${name(el)} "${(el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30)}"`, height: Math.round(el.getBoundingClientRect().height * 10) / 10 }))
     .filter((b) => b.height < 44);
   // Sections: the children of <main>, or of <body> when there is none, that take up height and scroll with the page.
@@ -243,13 +251,15 @@ export function layoutFacts() {
     if (!card || card === document.body) continue;
     const r = card.getBoundingClientRect();
     cardRects.push({ top: r.top + scrollY, bottom: r.bottom + scrollY, left: r.left, right: r.right });
+    // The headline price: the largest text with a digit in the card, which the currency sign may sit beside.
+    let headline;
     const pw = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
     for (let n = pw.nextNode(); n; n = pw.nextNode()) {
-      if (!PRICE.test(n.textContent) || !n.parentElement) continue;
+      if (!/\d/.test(n.textContent) || !n.parentElement || n.parentElement.closest('a,button')) continue;
       const st = getComputedStyle(n.parentElement);
-      prices.push({ text: n.textContent.trim().slice(0, 20), fontSize: parseFloat(st.fontSize), fontWeight: Number(st.fontWeight) || 400, color: parseColor(st.color), background: backgroundOf(n.parentElement), opacity: Number(st.opacity) });
-      break;
+      if (headline === undefined || parseFloat(st.fontSize) > headline.fontSize) headline = { text: n.textContent.trim().slice(0, 20), fontSize: parseFloat(st.fontSize), fontWeight: Number(st.fontWeight) || 400, color: parseColor(st.color), background: backgroundOf(n.parentElement), opacity: Number(st.opacity) };
     }
+    if (headline) prices.push(headline);
   }
   const cards = cardRects.length === 0 ? undefined : { top: Math.min(...cardRects.map((r) => r.top)), bottom: Math.max(...cardRects.map((r) => r.bottom)), left: Math.min(...cardRects.map((r) => r.left)), right: Math.max(...cardRects.map((r) => r.right)) };
   return { viewport: innerWidth, scrollWidth: document.scrollingElement.scrollWidth, textChars: document.body.innerText.trim().length, overflows: [...new Set(overflows)], smallButtons, gaps, prices, cards, height: document.scrollingElement.scrollHeight };

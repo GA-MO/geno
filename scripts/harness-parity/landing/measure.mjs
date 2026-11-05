@@ -133,14 +133,14 @@ async function contrast(tab) {
   })`);
 }
 
-/** The hero's own pixels (everything but canvases hidden, on black), as luma samples. */
-async function heroPixels(tab, rect) {
+/** The hero's own pixels (everything but canvases hidden, on black), as luma samples of each rect in page pixels. */
+async function heroPixels(tab, rects) {
   await tab.run(isolateCanvas, true);
   await wait(120);
   const img = decodePng(await tab.shot(undefined, 'png'));
   await tab.run(isolateCanvas, false);
   const scale = img.width / DESKTOP.width;
-  return luma(img, { x: rect.x * scale, y: rect.y * scale, width: rect.width * scale, height: Math.min(rect.height, DESKTOP.height) * scale });
+  return rects.flatMap((r) => luma(img, { x: r.x * scale, y: r.y * scale, width: r.width * scale, height: Math.min(r.height, DESKTOP.height - r.y) * scale }));
 }
 
 const round1 = (n) => Math.round(n * 10) / 10;
@@ -161,15 +161,17 @@ async function desktopSession(tab, shots, out) {
     };
     const p1 = at(0.2, 0.35);
     const p2 = at(0.8, 0.6);
+    // Compared where the pointer was and went, so a local ripple is not drowned by time animating the whole hero.
+    const near = [p1, p2].map(([x, y]) => ({ x: x - rect.width * 0.125, y: Math.max(0, y - rect.height * 0.15), width: rect.width * 0.25, height: rect.height * 0.3 }));
     await tab.mouse(...p1);
     await wait(700);
-    const a = await heroPixels(tab, rect);
+    const a = await heroPixels(tab, near);
     await glide(p1, p2);
     await wait(700);
-    const b = await heroPixels(tab, rect);
+    const b = await heroPixels(tab, near);
     await wait(700);
-    const c = await heroPixels(tab, rect);
-    Object.assign(out.hero, { ...stats(b), pointerDiff: round1(meanDiff(a, b)), timeDiff: round1(meanDiff(b, c)) });
+    const c = await heroPixels(tab, near);
+    Object.assign(out.hero, { ...stats(await heroPixels(tab, [rect])), pointerDiff: round1(meanDiff(a, b)), timeDiff: round1(meanDiff(b, c)) });
   }
   tab.log.phase = 'scroll';
   await tab.scrollTo(0);
@@ -196,9 +198,9 @@ async function desktopSession(tab, shots, out) {
   if (out.layout1280.cards) await tab.shotClip(path.join(shots, 'cards-1280.jpg'), { x: 0, y: out.layout1280.cards.top - 16, width: DESKTOP.width, height: out.layout1280.cards.bottom - out.layout1280.cards.top + 32 });
   if (rect) {
     tab.log.phase = 'lost-context';
-    const before = await heroPixels(tab, rect);
+    const before = await heroPixels(tab, [rect]);
     const lost = await tab.run(loseContext);
-    const after = await heroPixels(tab, rect);
+    const after = await heroPixels(tab, [rect]);
     out.restore = { ...lost, before: stats(before), after: stats(after) };
   }
 }
@@ -243,9 +245,9 @@ async function reducedSession(tab, _shots, out) {
   const rect = await tab.run(findHero);
   let canvasDiff = 0;
   if (rect) {
-    const a = await heroPixels(tab, rect);
+    const a = await heroPixels(tab, [rect]);
     await wait(1000);
-    const b = await heroPixels(tab, rect);
+    const b = await heroPixels(tab, [rect]);
     canvasDiff = round1(meanDiff(a, b));
   }
   await tab.evaluate('window.__hp.startMovers()');

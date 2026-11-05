@@ -97,6 +97,8 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   if (problems.length > 0) lines.push('Problems in this run:', '', ...problems.map((p) => `- ${p}`), '');
 
   lines.push(RULES, '');
+  const notes = path.join(path.dirname(docPath(round)), `landing-beancraft-${round}`, 'notes.md');
+  if (existsSync(notes)) lines.push(readFileSync(notes, 'utf8').trim(), '');
 
   // Meter calibration.
   const cal = readJson(path.join(dir, 'calibration.json'));
@@ -147,8 +149,8 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   lines.push('');
 
   // Behaviour and cost.
-  lines.push('## How each agent worked', '', 'Per round (1 / 2). Shots are screenshots it took of its own work. Edits against writes counts edit calls and whole-file writes, and rewrites are writes over a file that was already there. Hand-backs are segments that ended without finishing, each answered with "go on".', '');
-  lines.push('| page | shots | edits / writes (rewrites) | shell writes | tool errors | model calls | hand-backs |', '|---|---|---|---|---|---|---|');
+  lines.push('## How each agent worked', '', 'Per round (1 / 2). Shots are screenshots it took of its own work. Edits against writes counts edit calls and whole-file writes, and rewrites are writes over a file that was already there. Shell changes are file changes made from bash: a heredoc, a sed, or a Python replace script. The diff share in the feedback table tells a spot fix from a rewrite. Hand-backs are segments that ended without finishing, each answered with "go on".', '');
+  lines.push('| page | shots | edits / writes (rewrites) | shell changes | tool errors | model calls | hand-backs |', '|---|---|---|---|---|---|---|');
   for (const p of pages.filter((x) => x.record)) {
     const [a, b] = p.record.rounds;
     const hb = (r) => r.ends.filter((e) => e.kind !== 'done').length;

@@ -32,10 +32,15 @@
   th, td { text-align: left; padding: .75rem .5rem; border-bottom: 1px solid var(--line); }
   details { border-bottom: 1px solid var(--line); }
   summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+  .skip { position: absolute; left: -9999px; top: 0; padding: 4px 8px; background: #fff; }
+  .skip:focus { left: 8px; }
+  .visually-hidden { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+  .eyebrow { font: 600 .8rem system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 .5rem; }
   footer { padding: 3rem 1.5rem; text-align: center; color: var(--muted); }
 </style>
 </head>
 <body>
+<a class="skip" href="#plans">Skip to the plans</a>
 <header class="hero">
   <canvas id="bg" aria-hidden="true"></canvas>
   <div class="hero-copy">
@@ -66,7 +71,7 @@
     <div class="wrap">
       <h2>Plans</h2>
       <div class="grid">
-        <div class="card plan"><h3>Taster</h3><p class="price">$14 <small>per bag</small></p><p class="muted">One 250 g bag every four weeks.</p><a class="button" href="https://buy.stripe.com/test_taster">Subscribe</a></div>
+        <div class="card plan"><h3>Taster</h3><p class="price">$14 <small>per bag</small></p><p class="muted">One 250 g bag every four weeks.</p><a class="button" href="https://buy.stripe.com/test_taster">Subscribe<span class="visually-hidden"> to Taster on Stripe (opens in a new tab)</span></a></div>
         <div class="card plan"><h3>Regular</h3><p class="price">$13 <small>per bag</small></p><p class="muted">Two 250 g bags every two weeks.</p><a class="button" href="https://buy.stripe.com/test_regular">Subscribe</a></div>
         <div class="card plan"><h3>Office</h3><p class="price">$12 <small>per bag</small></p><p class="muted">Five 250 g bags every two weeks.</p><a class="button" href="https://buy.stripe.com/test_office">Subscribe</a></div>
       </div>
@@ -100,15 +105,18 @@
   </section>
   <section id="faq" class="reveal">
     <div class="wrap">
-      <h2>FAQ</h2>
+      <p class="eyebrow">FAQ</p>
+      <h2>Freshness and grinding, answered.</h2>
       <details><summary>How fresh is the coffee?</summary><p>We roast to order and ship within 48 hours, so beans arrive within a week of roasting, at peak freshness.</p></details>
       <details><summary>Can you grind it for me?</summary><p>Yes. Choose whole bean or grinding for espresso, filter or French press at checkout. Whole bean stays fresh longest.</p></details>
     </div>
   </section>
   <section id="sustainability" class="reveal">
     <div class="wrap">
-      <h2>Sustainability</h2>
-      <p>We work with farms that grow under shade and pay them directly. Our lots carry Fair Trade and organic certifications where the farm holds them. Packaging is a home-compostable bag with a paper label, shipped in a recycled box.</p>
+      <h2>Good for the farm and the planet.</h2>
+      <h3>Farms</h3><p>We work with farms that grow under shade and pay them directly.</p>
+      <h3>Certifications</h3><p>Our lots carry Fair Trade and organic certifications where the farm holds them.</p>
+      <h3>Packaging</h3><p>A home-compostable bag with a paper label, shipped in a recycled box.</p>
     </div>
   </section>
 </main>

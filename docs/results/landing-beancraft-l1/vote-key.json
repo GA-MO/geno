@@ -1,0 +1,26 @@
+{
+  "note": "Which harness is Page A and Page B in each pair of vote.html. Do not open before voting.",
+  "pairs": [
+    {
+      "pair": 1,
+      "n": 1,
+      "A": "claude",
+      "B": "geno",
+      "judge": "claude"
+    },
+    {
+      "pair": 2,
+      "n": 2,
+      "A": "claude",
+      "B": "geno",
+      "judge": "claude"
+    },
+    {
+      "pair": 3,
+      "n": 3,
+      "A": "geno",
+      "B": "claude",
+      "judge": "claude"
+    }
+  ]
+}
