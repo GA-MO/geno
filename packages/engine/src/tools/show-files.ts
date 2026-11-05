@@ -1,14 +1,14 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { formatBytes, parseShowFilesInput, SHOW_FILES_LIMITS, SHOW_FILES_TOOL, shownKindOf, shownText, showFilesTitle, type ApprovalRecord, type ShowEntry, type ShowFilesInput, type ShownFiles } from '@g-code/core';
-import { executor, ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
+import { formatBytes, parseShowFilesInput, SHOW_FILES_LIMITS, SHOW_FILES_TOOL, shownKindOf, shownText, showFilesTitle, type ApprovalRecord, type SessionAllowance, type ShowEntry, type ShowFilesInput, type ShownFiles } from '@g-code/core';
+import { executor, ToolDenied, ToolError, ToolRejected, type Decided, type Executor, type ToolContext } from './context.js';
 
 /**
  * Where a path the model named lands, once the user's rules and questions let it through; it throws a ToolError to
  * refuse that file, or ToolRejected when the user said no, which ends the turn.
  */
-export type ShowGate = (ctx: ToolContext, given: string) => Promise<{ readonly real: string; readonly approval?: ApprovalRecord | undefined }>;
+export type ShowGate = (ctx: ToolContext, given: string) => Promise<{ readonly real: string } & Decided>;
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException => error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
 
@@ -25,11 +25,13 @@ export function showFilesExecutor(gate: ShowGate): Executor {
     async run({ files, caption, layout }, ctx) {
       const entries: ShowEntry[] = [];
       let approval: ApprovalRecord | undefined;
+      const allows: SessionAllowance[] = [];
       let total = 0;
       for (const given of files) {
         try {
           const passed = await gate(ctx, given);
           approval ??= passed.approval;
+          allows.push(...(passed.allows ?? []));
           const info = await stat(passed.real);
           if (!info.isFile()) throw new ToolError(`${given} is a directory; name the files in it`);
           if (info.size > SHOW_FILES_LIMITS.fileBytes) throw new ToolError(`${given} is ${formatBytes(info.size)}; ${SHOW_FILES_TOOL} shows files up to ${formatBytes(SHOW_FILES_LIMITS.fileBytes)}`);
@@ -45,7 +47,7 @@ export function showFilesExecutor(gate: ShowGate): Executor {
       }
       const shown: ShownFiles = { ...(caption === undefined ? {} : { caption }), layout, files: entries };
       const none = entries.every((entry) => entry.kind === 'refused');
-      return { text: shownText(shown), shown, ...(approval === undefined ? {} : { approval }), ...(none ? { status: 'error' as const } : {}) };
+      return { text: shownText(shown), shown, ...(approval === undefined ? {} : { approval }), ...(allows.length === 0 ? {} : { allows }), ...(none ? { status: 'error' as const } : {}) };
     },
   });
 }

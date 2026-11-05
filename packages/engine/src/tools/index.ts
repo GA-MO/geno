@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type HelperSpend, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
+import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type HelperSpend, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type SessionAllowance, type ToolStatus, type WidgetRef } from '@g-code/core';
 import { LoadedToolError, ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -27,7 +27,7 @@ export type ToolRun = {
   readonly chapter?: ChapterMark | undefined;
   readonly shown?: ShownFiles | undefined;
   readonly file?: FileStamp | undefined;
-  readonly openedHost?: string | undefined;
+  readonly allows?: readonly SessionAllowance[] | undefined;
 };
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>

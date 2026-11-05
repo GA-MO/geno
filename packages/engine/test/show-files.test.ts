@@ -120,6 +120,18 @@ describe('show_files path rules', () => {
     expect(run.shown?.files).toEqual([expect.objectContaining({ kind: 'shown', path: file })]);
   });
 
+  it('logs each directory the user allowed for the session, and none after Allow once', async () => {
+    const at = await place();
+    const other = path.join(at.root, 'other');
+    await mkdir(other, { recursive: true });
+    await writeFile(path.join(other, 'shot.png'), PNG);
+    const files = [path.join(at.outside, 'shot.png'), path.join(other, 'shot.png')];
+    const kept = await show(at, { files }, { answers: ['allow-session', 'allow-session'] });
+    expect(kept.run.allows).toEqual([{ kind: 'directory', path: at.outside }, { kind: 'directory', path: other }]);
+    const once = await show(at, { files }, { answers: ['allow', 'allow'] });
+    expect(once.run.allows).toBeUndefined();
+  });
+
   it("ends the turn on the user's no, as a read outside does", async () => {
     const at = await place();
     const { run } = await show(at, { files: ['shot.png', path.join(at.outside, 'shot.png')] }, { answers: ['reject'] });

@@ -322,7 +322,7 @@ import { draftNotice, wakeCancelRequest, WakeDriver, wakePolicyOf } from './wake
 import { ghCli, githubRemote, lookUpPr } from './gh.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
-import type { ScheduleTools } from './tools/schedule.js';
+import type { ScheduleAnswer, ScheduleTools } from './tools/schedule.js';
 import type { WorkflowTools } from './tools/workflow.js';
 import { appendJournal, journalFile, readJournal, WORKFLOW_TURNS, workflowDriver, workflowTools } from './workflows.js';
 import { loadAgents } from './subagents.js';
@@ -877,8 +877,6 @@ const WORKFLOW_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'reject', name: "Don't run", kind: 'reject_once' },
 ];
 
-type ScheduleAnswer = 'allow' | 'allow-session' | 'reject';
-
 /**
  * A background turn the engine starts: a scheduled task's run, with its budget in place of the engine's limits and a
  * prompt that says nobody watches, or a workflow's, whose director issues its rounds in place of the model.
@@ -1419,10 +1417,10 @@ export function gcodeAgent(io: Io, store: Store, limits: LimitsSpec, mcp: McpSes
       update: (id, change) => toolRefusal(schedules.update(workspace, id, change)),
       remove: (id) => toolRefusal(schedules.remove(workspace, id)),
       approve: async (change: ScheduleChange, signal) => {
-        if (scheduleAllowed.has(sessionId)) return true;
+        if (scheduleAllowed.has(sessionId)) return 'allow';
         const answer = await turn.approveSchedule(scheduleQuestion(change, localZone(), schedules.now()), signal);
         if (answer === 'allow-session') scheduleAllowed.add(sessionId);
-        return answer !== 'reject';
+        return answer;
       },
       now: () => schedules.now(),
       zone: localZone,

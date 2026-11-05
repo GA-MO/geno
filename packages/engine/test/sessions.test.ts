@@ -110,12 +110,14 @@ describe('session log', () => {
     expect(kept).toEqual(['start', 'session', 'workspace', undefined, undefined, undefined]);
   });
 
-  it('reads back the host a navigation opened, and a host it cannot read as none', async () => {
-    const opened = (seq: number, openedHost: unknown) => ({ kind: 'tool-result', seq, at, toolUseId: `tu_${seq}`, name: 'mcp__browser__new_page', status: 'ok', output: 'opened', openedHost });
+  it('reads back what a call allowed the session, and leaves out each allowance it cannot read', async () => {
+    const allowed = (seq: number, allows: unknown) => ({ kind: 'tool-result', seq, at, toolUseId: `tu_${seq}`, name: 'read', status: 'ok', output: 'done', allows });
+    const good = [{ kind: 'host', host: 'approved.example' }, { kind: 'directory', path: '/notes' }, { kind: 'schedule' }];
+    const bad = [{ kind: 'host', host: '' }, { kind: 'host' }, { kind: 'directory', path: 'notes' }, { kind: 'directory', path: 7 }, { kind: 'schedule', all: true }, { kind: 'everything' }, 'host', null];
     const file = await logWith([start]);
-    for (const [seq, host] of [[1, 'approved.example'], [2, ''], [3, 7], [4, null], [5, ['a']]] as const) await appendFile(file, `${JSON.stringify(opened(seq, host))}\n`);
-    const hosts = (await readSessionLog(file)).events.map((event) => (event.kind === 'tool-result' ? event.openedHost : 'start'));
-    expect(hosts).toEqual(['start', 'approved.example', undefined, undefined, undefined, undefined]);
+    for (const [seq, allows] of [[1, [...good, ...bad]], [2, 'schedule'], [3, null], [4, { kind: 'schedule' }]] as const) await appendFile(file, `${JSON.stringify(allowed(seq, allows))}\n`);
+    const read = (await readSessionLog(file)).events.map((event) => (event.kind === 'tool-result' ? event.allows : 'start'));
+    expect(read).toEqual(['start', good, undefined, undefined, undefined]);
   });
 
   it("reads back a web tool's result with the spend of the model call it made", async () => {
