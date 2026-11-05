@@ -70,6 +70,9 @@ export const MODE_REFUSALS: Readonly<Record<ApprovalMode, string | undefined>> =
   'non-interactive': undefined,
 };
 
+/** The refusal of a tool, or one of its actions, that `mode` leaves out. */
+export const modeRefusal = (what: string, mode: ApprovalMode): string => `${what} is not available: ${MODE_REFUSALS[mode] ?? `${mode} mode does not offer it`}. Do not retry it.`;
+
 export type Verdict = 'allow' | 'ask' | 'deny';
 /** `classify` hands the command to the classifier, which answers with a Verdict. */
 export type RuleVerdict = Verdict | 'classify';

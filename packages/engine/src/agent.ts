@@ -426,7 +426,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
           ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
           ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
           ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
-          ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
+          ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules, () => modeOf(options.approval)) }),
           ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
           ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
           ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),

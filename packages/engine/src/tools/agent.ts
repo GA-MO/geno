@@ -29,6 +29,7 @@ import {
   AGENT_MODE_TOOLS,
   AGENT_TOOL_NAMES,
   MODE_REFUSALS,
+  modeRefusal,
   neutralizeNoticeLines,
   outsideReadDenial,
   filesRun,
@@ -265,7 +266,7 @@ function inMode(name: AgentToolName, tool: Executor, approval: Approval): Execut
     async run(raw, ctx) {
       const mode = modeOf(approval);
       if (!AGENT_MODE_TOOLS[mode].includes(name)) {
-        throw new ToolError(`${name} is not available: ${MODE_REFUSALS[mode] ?? `${mode} mode does not offer it`}. Do not retry it.`);
+        throw new ToolError(modeRefusal(name, mode));
       }
       return tool.run(raw, ctx);
     },
@@ -739,7 +740,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
    */
   const approveCommand = async (command: string, ctx: ToolContext, background: boolean, unsandboxed = false): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
-    if (background && mode === 'plan') throw new ToolError(`background commands are not available: ${MODE_REFUSALS.plan}. Do not retry it.`);
+    if (background && mode === 'plan') throw new ToolError(modeRefusal('background commands', mode));
     const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
