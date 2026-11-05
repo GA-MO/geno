@@ -246,6 +246,8 @@ const toolResultFields = {
   chapter: chapterMarkSchema.optional(),
   shown: shownFilesSchema.optional(),
   file: z.strictObject({ path: z.string().min(1), ...diskStateFields }).optional(),
+  // As with `kept`, a host the log cannot read is one nobody approved.
+  openedHost: z.string().min(1).optional().catch(undefined),
   timing: z.strictObject(toolMarks).optional(),
 };
 

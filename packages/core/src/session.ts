@@ -166,6 +166,8 @@ export type ToolResultEvent = {
   readonly shown?: ShownFiles | undefined;
   /** The file a read showed or an edit wrote, as the model now knows it (`file-tracker.ts`). */
   readonly file?: FileStamp | undefined;
+  /** The host of another machine a browser navigation opened once its checks let it through, approved for the rest of the session. */
+  readonly openedHost?: string | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;

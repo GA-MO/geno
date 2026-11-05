@@ -110,6 +110,14 @@ describe('session log', () => {
     expect(kept).toEqual(['start', 'session', 'workspace', undefined, undefined, undefined]);
   });
 
+  it('reads back the host a navigation opened, and a host it cannot read as none', async () => {
+    const opened = (seq: number, openedHost: unknown) => ({ kind: 'tool-result', seq, at, toolUseId: `tu_${seq}`, name: 'mcp__browser__new_page', status: 'ok', output: 'opened', openedHost });
+    const file = await logWith([start]);
+    for (const [seq, host] of [[1, 'approved.example'], [2, ''], [3, 7], [4, null], [5, ['a']]] as const) await appendFile(file, `${JSON.stringify(opened(seq, host))}\n`);
+    const hosts = (await readSessionLog(file)).events.map((event) => (event.kind === 'tool-result' ? event.openedHost : 'start'));
+    expect(hosts).toEqual(['start', 'approved.example', undefined, undefined, undefined, undefined]);
+  });
+
   it("reads back a web tool's result with the spend of the model call it made", async () => {
     const searched: TurnEvent = {
       kind: 'tool-result',
