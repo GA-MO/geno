@@ -60,7 +60,7 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   const pages = jobs.map((job) => {
     const record = readJson(path.join(job.dir, 'record.json'));
     const m = { r1: readJson(path.join(job.dir, 'shots-r1', 'measures.json')), r2: readJson(path.join(job.dir, 'shots-r2', 'measures.json')) };
-    // A finished run whose page was never measured scores as all-fail, so it loses instead of stalling the verdict.
+    // A finished run whose page is not measured yet shows as all-fail in the tables; the verdict waits for the judge.
     const scoreOf = (x) => (x ? score(x) : record ? score({ fatal: 'not measured' }) : undefined);
     // Cost and working counts come from the run's logs, not the record, so a fix to their counting reaches old runs.
     const rounds = record ? roundsOf(job.dir, job.harness).map((r, i) => ({ ...record.rounds[i], ...r })) : undefined;

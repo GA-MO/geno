@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
-const WRITES = new Set(['write', 'write_file']);
+const WRITES = new Set(['write']);
 const EDITS = new Set(['edit', 'multi_edit', 'apply_patch', 'str_replace']);
 /** A whole-file write: Claude Code's Write, or Geno's edit with `create: true`, which writes the whole file too. */
 const isWrite = (s) => WRITES.has(s.name) || (EDITS.has(s.name) && s.input?.create === true);
