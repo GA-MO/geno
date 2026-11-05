@@ -44,9 +44,9 @@ async function place(workspace?: string): Promise<Place> {
   return { root, workspace: ws, spill, scratch, outside };
 }
 
-type Run = { readonly mode?: SessionMode | 'non-interactive'; readonly answers?: readonly PermissionAnswer[]; readonly rules?: readonly NewRule[]; readonly events?: readonly TurnEvent[] };
+type Run = { readonly mode?: SessionMode | 'non-interactive'; readonly answers?: readonly PermissionAnswer[]; readonly rules?: readonly NewRule[]; readonly events?: readonly TurnEvent[]; readonly tool?: string };
 
-async function show(at: Place, input: unknown, { mode = 'ask', answers = [], rules = [], events = [] }: Run = {}) {
+async function show(at: Place, input: unknown, { mode = 'ask', answers = [], rules = [], events = [], tool = 'show_files' }: Run = {}) {
   const asked: Denial[] = [];
   const pending = [...answers];
   const approval: Approval =
@@ -91,7 +91,7 @@ async function show(at: Place, input: unknown, { mode = 'ask', answers = [], rul
     events: () => events,
     earlierCalls: async () => {},
   };
-  const run = await runTool({ type: 'tool_use', id: 'tu_show', name: 'show_files', input, caller: { type: 'direct' } }, ctx, executors);
+  const run = await runTool({ type: 'tool_use', id: 'tu_show', name: tool, input, caller: { type: 'direct' } }, ctx, executors);
   return { run, asked };
 }
 
@@ -130,6 +130,16 @@ describe('show_files path rules', () => {
     expect(kept.run.allows).toEqual([{ kind: 'directory', path: at.outside }, { kind: 'directory', path: other }]);
     const once = await show(at, { files }, { answers: ['allow', 'allow'] });
     expect(once.run.allows).toBeUndefined();
+  });
+
+  it("ends the turn on the user's no to a secret file after a yes to the directory outside it", async () => {
+    const at = await place();
+    await writeFile(path.join(at.outside, '.env'), 'TOKEN=1\n');
+    for (const first of ['allow', 'allow-session'] as const) {
+      const { run, asked } = await show(at, { path: path.join(at.outside, '.env') }, { tool: 'read', answers: [first, 'reject'] });
+      expect(asked, first).toHaveLength(2);
+      expect([run.status, run.text], first).toEqual(['rejected', expect.stringMatching(/^The user rejected/)]);
+    }
   });
 
   it("ends the turn on the user's no, as a read outside does", async () => {
