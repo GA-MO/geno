@@ -154,7 +154,9 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
 const NO_PAGE = /^(Error: )?No page found$/m;
 const BLANK = 'about:blank';
 
-const pageLine = (id: number) => new RegExp(`^${id}: .*\\((\\S+)\\)(?: \\[selected\\])?$`, 'm');
+/** A page's line in a listing: "2: Title (url)", or "2: url" for a page with no title. */
+const pageLine = (id: number) => new RegExp(`^${id}: (?:(\\S+)|.*\\((\\S+)\\))(?: \\[selected\\])?$`, 'm');
+const urlIn = (line: RegExpExecArray | null): string | undefined => (line === null ? undefined : (line[1] ?? line[2]));
 const browserOutputs = (events: readonly TurnEvent[]): string[] =>
   events.toReversed().flatMap((event) => (event.kind === 'tool-result' && event.name.startsWith(`mcp__${BROWSER_SERVER}__`) && 'output' in event ? [event.output] : []));
 
@@ -162,7 +164,7 @@ const browserOutputs = (events: readonly TurnEvent[]): string[] =>
 export function lastUrlOf(events: readonly TurnEvent[], id: number): string | undefined {
   const line = pageLine(id);
   for (const output of browserOutputs(events)) {
-    const url = line.exec(output)?.[1];
+    const url = urlIn(line.exec(output));
     if (url !== undefined) return url;
   }
   return undefined;
@@ -171,7 +173,7 @@ export function lastUrlOf(events: readonly TurnEvent[], id: number): string | un
 /** The URL a page id had in the latest page listing, the last the model saw of the browser; none after close_page closed it. */
 const listedUrlOf = (events: readonly TurnEvent[], id: number): string | undefined => {
   const latest = browserOutputs(events).find((output) => /^## Pages$/m.test(output));
-  return latest === undefined ? undefined : pageLine(id).exec(latest)?.[1];
+  return latest === undefined ? undefined : urlIn(pageLine(id).exec(latest));
 };
 
 /**
@@ -208,10 +210,15 @@ async function reopen(handle: McpServerHandle, state: BrowserState, id: number, 
   if (showing !== undefined) return { id: showing, text: `Page ${showing} shows ${url}, which page ${id} showed` };
   const before = new Set(state.pages.keys());
   const result = await handle.call('new_page', { url }, ctx.signal).catch(() => undefined);
-  if (result === undefined || result.isError) return undefined;
   await refreshPages(handle, state, ctx.signal);
   const opened = [...state.pages].find(([pid, p]) => p.selected && !before.has(pid))?.[0];
-  return opened === undefined ? undefined : { id: opened, text: `Geno opened ${url}, which page ${id} showed, again as page ${opened}` };
+  if (result !== undefined && !result.isError && opened !== undefined) return { id: opened, text: `Geno opened ${url}, which page ${id} showed, again as page ${opened}` };
+  // The server opens and selects the tab before it loads the URL, so a load that failed leaves the tab behind.
+  if (opened !== undefined) {
+    await handle.call('close_page', { pageId: opened }, ctx.signal).catch(() => undefined);
+    await refreshPages(handle, state, ctx.signal);
+  }
+  return undefined;
 }
 
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
@@ -292,14 +299,12 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         // The page is open, so the words came from the page itself, such as a script's own error.
         if (state.pages.has(id)) throw error;
         const readOnly = effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly });
-        let stale = stalePage(state, ctx.workspace, id, ctx.events(), readOnly);
-        if ('error' in stale) {
-          const again = await reopen(handle, state, id, ctx, mode, rules);
-          if (again === undefined) throw new ToolError(`${error.message}\n\n${stale.error}`);
-          const gone = `[Geno] Page ${id} is not open: the browser starts fresh in each run, and pages can close. ${again.text}`;
-          if (!readOnly) throw new ToolError(`${error.message}\n\n${gone}; call ${info.tool} on page ${again.id}.`);
-          stale = { retry: again.id, note: `${gone}, and this ran there.` };
-        }
+        // The page the id showed comes first: once one page is back, the only-page rule would take every other id there.
+        const again = await reopen(handle, state, id, ctx, mode, rules);
+        const gone = again === undefined ? undefined : `[Geno] Page ${id} is not open: the browser starts fresh in each run, and pages can close. ${again.text}`;
+        if (again !== undefined && !readOnly) throw new ToolError(`${error.message}\n\n${gone}; call ${info.tool} on page ${again.id}.`);
+        const stale = again === undefined ? stalePage(state, ctx.workspace, id, ctx.events(), readOnly) : { retry: again.id, note: `${gone}, and this ran there.` };
+        if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
         try {
           reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
         } catch (retried) {
