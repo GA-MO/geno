@@ -169,6 +169,7 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
 
   const vote = await writeVotePage(round, pages, judged);
   lines.push('## Owner vote', '', `A blind page of ${vote.pairs} pairs of final pages, sides shuffled: [${path.relative(path.dirname(docPath(round)), vote.page)}](${path.relative(path.dirname(docPath(round)), vote.page)}). The key is kept apart in \`${path.relative(REPO, vote.key)}\`. After voting, \`node scripts/harness-parity/landing/agree.mjs --round ${round} --votes <the code the page shows>\` says how many pairs the judge and the owner agree on.`, '');
+  lines.push('## Compare the live pages', '', `\`scripts/harness-parity/landing/compare.html\` shows the same three pairs, sides hidden as in the vote, as live pages in frames at 375 and 1280, first round or after feedback, so the shader, the pointer and the reveals run for real. Reveal sides names the harnesses and the judge's verdict. Start it with \`node scripts/harness-parity/landing/compare.mjs --round ${round}\` and open http://127.0.0.1:4600/ (\`--port\` picks another port). The pages are served from \`${dir}\`, so they open on this Mac only.`, '');
   const owner = readJson(path.join(path.dirname(vote.key), 'owner-votes.json'));
   if (owner) lines.push(`The owner voted: ${owner.summary}`, '');
 
