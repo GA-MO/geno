@@ -179,7 +179,7 @@
   gsap.registerPlugin(ScrollTrigger);
   for (const el of document.querySelectorAll('.reveal')) {
     if (reduce) gsap.from(el, { opacity: 0, duration: 0.4, scrollTrigger: { trigger: el, start: 'top 85%' } });
-    else gsap.from(el, { opacity: 0, y: 40, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+    else gsap.from(el, { opacity: 0, y: 40, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%', once: true } });
   }
   if (!reduce) for (const b of document.querySelectorAll('.button')) {
     b.addEventListener('pointerenter', () => gsap.to(b, { scale: 1.04, duration: 0.2 }));

@@ -3,7 +3,11 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
-const WRITES = new Set(['write']);
+const WRITES = new Set(['write', 'write_file']);
+const EDITS = new Set(['edit', 'multi_edit', 'apply_patch', 'str_replace']);
+/** A whole-file write: Claude Code's Write, or Geno's edit with `create: true`, which writes the whole file too. */
+const isWrite = (s) => WRITES.has(s.name) || (EDITS.has(s.name) && s.input?.create === true);
+const isEdit = (s) => EDITS.has(s.name) && !isWrite(s);
 const SHELL_WRITE = /sed -i|perl -[a-z]*i|>\s*\S*index\.html|tee \S*index\.html|writeFileSync|open\([^)]*['"]w/;
 const target = (s) => String(s.input?.file_path ?? s.input?.path ?? '');
 
@@ -14,18 +18,18 @@ const target = (s) => String(s.input?.file_path ?? s.input?.path ?? '');
  */
 export function behaviour(steps, existed = []) {
   const tools = steps.filter((s) => s.kind === 'tool');
-  const shot = (s) => !WRITES.has(s.name) && s.name !== 'edit' && (/screenshot/i.test(s.name) || /screenshot/i.test(JSON.stringify(s.input ?? {}).slice(0, 600)));
+  const shot = (s) => !isWrite(s) && !isEdit(s) && (/screenshot/i.test(s.name) || /screenshot/i.test(JSON.stringify(s.input ?? {}).slice(0, 600)));
   const written = new Set(existed);
   let rewrites = 0;
-  for (const s of tools.filter((x) => WRITES.has(x.name))) {
+  for (const s of tools.filter(isWrite)) {
     const file = target(s).split('/').at(-1);
     if (written.has(file)) rewrites += 1;
     written.add(file);
   }
   return {
     screenshots: tools.filter(shot).length,
-    edits: tools.filter((s) => s.name === 'edit').length,
-    writes: tools.filter((s) => WRITES.has(s.name)).length,
+    edits: tools.filter(isEdit).length,
+    writes: tools.filter(isWrite).length,
     rewrites,
     shellWrites: tools.filter((s) => s.name === 'bash' && SHELL_WRITE.test(String(s.input?.command ?? ''))).length,
     toolErrors: tools.filter((s) => s.error).length,

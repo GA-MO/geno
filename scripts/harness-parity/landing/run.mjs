@@ -17,7 +17,8 @@ import { measure } from './measure.mjs';
 import { writeReport } from './report.mjs';
 import { HARNESSES, parseOptions } from './rules.mjs';
 import { makeSheets } from './sheets.mjs';
-import { behaviour, lineDiff } from './stats.mjs';
+import { roundsOf, spentBy } from './logs.mjs';
+import { lineDiff } from './stats.mjs';
 import { FEEDBACK, PROMPT, TASK_ID, WORKSPACE } from './task.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,8 @@ const CONTINUES = 2;
 /** What one run of both rounds is assumed to cost until a finished run says otherwise. */
 const RUN_ESTIMATE_USD = 1.5;
 const JUDGE_ESTIMATE_USD = 0.12;
+/** Each request segment's own cap on either harness, so one runaway run cannot spend the round's budget. */
+const SEGMENT_CAP_USD = 3;
 
 let opts;
 try {
@@ -44,15 +47,15 @@ const writeJson = (file, value) => writeFileSync(file, `${JSON.stringify(value, 
 const LEDGER = path.join(ROUND, 'ledger.json');
 const JUDGED = path.join(ROUND, 'judge.json');
 
-/** API dollars this round spent: the harness runs' own costs plus every judge and hand-back reader call. */
-function spent(jobs) {
-  const runs = jobs.map((j) => readJson(path.join(j.dir, 'record.json'), undefined)).filter(Boolean).reduce((s, r) => s + r.rounds.reduce((t, x) => t + x.costUsd, 0), 0);
-  return runs + readJson(LEDGER, { usd: 0 }).usd;
-}
-function charge() {
+/**
+ * API dollars this round spent: what every run folder's logs say, finished or not, plus the ledger of judge and
+ * hand-back reader calls and of run folders cleared for a retry.
+ */
+const spent = (jobs) => jobs.reduce((s, j) => s + spentBy(j.dir, j.harness), 0) + readJson(LEDGER, { usd: 0 }).usd;
+function charge(usd = spend.usd) {
   const ledger = readJson(LEDGER, { usd: 0 });
-  ledger.usd += spend.usd;
-  spend.usd = 0;
+  ledger.usd += usd;
+  if (usd === spend.usd) spend.usd = 0;
   writeJson(LEDGER, ledger);
 }
 
@@ -82,15 +85,16 @@ const copyPage = (from, to) => cpSync(from, to, { recursive: true, filter: (src)
 async function runJob(job) {
   const record = path.join(job.dir, 'record.json');
   if (existsSync(record)) return;
+  if (existsSync(job.dir)) charge(spentBy(job.dir, job.harness));
   rmSync(job.dir, { recursive: true, force: true });
   const home = path.join(job.dir, 'home');
   const ws = path.join(home, 'Development', WORKSPACE);
   mkdirSync(ws, { recursive: true });
   writeHome(home);
   const paths = { job: job.dir, home, ws };
-  const state = { session: undefined, texts: [] };
+  const state = { session: undefined, texts: [], capUsd: SEGMENT_CAP_USD };
   const rounds = [];
-  let before = { costUsd: 0, modelCalls: 0, usage: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } };
+  let prior = { modelCalls: 0, usage: {} };
   for (const [i, text] of [PROMPT, FEEDBACK].entries()) {
     const started = Date.now();
     const { ends, error } = await converse(job.harness, paths, opts.model, state, text, text, CONTINUES);
@@ -100,13 +104,11 @@ async function runJob(job) {
       throw new Error(`${job.harness} ${job.n} round ${i + 1}: ${error}`);
     }
     const t = transcriptOf(job.harness, paths, state);
-    const cut = t.steps.findIndex((s) => s.kind === 'user' && s.text === FEEDBACK);
-    const steps = i === 0 ? t.steps : t.steps.slice(cut);
-    const usage = Object.fromEntries(Object.keys(before.usage).map((k) => [k, (t.usage[k] ?? 0) - before.usage[k]]));
-    rounds.push({ ms: Date.now() - started, ends, costUsd: t.costUsd - before.costUsd, modelCalls: t.modelCalls - before.modelCalls, usage, behaviour: behaviour(steps, i === 0 ? [] : ['index.html']) });
-    before = { costUsd: t.costUsd, modelCalls: t.modelCalls, usage: { ...t.usage } };
+    rounds.push({ ms: Date.now() - started, ends, modelCalls: t.modelCalls - prior.modelCalls, usage: Object.fromEntries(Object.entries(t.usage).map(([k, v]) => [k, v - (prior.usage[k] ?? 0)])) });
+    prior = t;
     if (i === 0) copyPage(ws, path.join(job.dir, 'r1'));
   }
+  for (const [i, r] of roundsOf(job.dir, job.harness).entries()) Object.assign(rounds[i], r);
   rounds[1].diff = lineDiff(path.join(job.dir, 'r1', 'index.html'), path.join(ws, 'index.html'));
   copyPage(ws, path.join(job.dir, 'r2'));
   const t = transcriptOf(job.harness, paths, state);
@@ -179,12 +181,18 @@ async function judgeAll() {
     if (w.job) {
       const job = w.job;
       const card = (r, width) => (existsSync(path.join(job.dir, `shots-${r}`, `cards-${width}.jpg`)) ? path.join(job.dir, `shots-${r}`, `cards-${width}.jpg`) : undefined);
-      if (!sheetsOf(job, 'r1').hero || !sheetsOf(job, 'r2').hero) continue;
-      result = await judgeFixes(sheetsOf(job, 'r1'), sheetsOf(job, 'r2'), { before: [[card('r1', 375), '375px'], [card('r1', 1280), '1280px']], after: [[card('r2', 375), '375px'], [card('r2', 1280), '1280px']] }, via);
+      const shown = ['r1', 'r2'].every((r) => sheetsOf(job, r).hero !== undefined);
+      if (shown) result = await judgeFixes(sheetsOf(job, 'r1'), sheetsOf(job, 'r2'), { before: [[card('r1', 375), '375px'], [card('r1', 1280), '1280px']], after: [[card('r2', 375), '375px'], [card('r2', 1280), '1280px']] }, via);
+      else if (existsSync(path.join(job.dir, 'shots-r2', 'measures.json'))) result = { why: 'no page to compare: a round left no index.html', forfeit: true };
+      else continue;
     } else {
       const [a, b] = w.order === 'AB' ? [w.c, w.g] : [w.g, w.c];
-      if (!sheetsOf(a, w.r).hero || !sheetsOf(b, w.r).hero) continue;
-      result = await judgePair(sheetsOf(a, w.r), sheetsOf(b, w.r), via);
+      const shown = [a, b].map((p) => sheetsOf(p, w.r).hero !== undefined);
+      const measured = [a, b].every((p) => existsSync(path.join(p.dir, `shots-${w.r}`, 'measures.json')));
+      if (shown.every(Boolean)) result = await judgePair(sheetsOf(a, w.r), sheetsOf(b, w.r), via);
+      // A page that could not be shown loses its pair rather than holding up the verdict.
+      else if (measured) result = { winner: shown[0] ? 'A' : shown[1] ? 'B' : 'tie', totals: [0, 0], why: 'a page could not be shown: there is no index.html', forfeit: true };
+      else continue;
     }
     judged[w.key] = { ...result, via };
     writeJson(JUDGED, judged);

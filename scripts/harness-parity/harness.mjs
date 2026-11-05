@@ -65,7 +65,7 @@ export const harnesses = {
     writeFileSync(mcp, JSON.stringify(BROWSER_MCP));
     const stream = path.join(job, 'claude.jsonl');
     writeFileSync(stream, `${JSON.stringify({ type: 'hp-user', text })}\n`, { flag: 'a' });
-    const args = ['-p', text, '--model', model, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'auto', '--mcp-config', mcp, ...(state.session ? ['--resume', state.session] : [])];
+    const args = ['-p', text, '--model', model, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'auto', '--mcp-config', mcp, ...(state.session ? ['--resume', state.session] : []), ...(state.capUsd ? ['--max-budget-usd', String(state.capUsd)] : [])];
     const r = await sh('claude', args, { cwd: ws, env: { ...baseEnv(home), ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}` } }, stream);
     proxy.kill();
     state.session ??= /"session_id":"([0-9a-f-]{36})"/.exec(r.out)?.[1];
@@ -73,7 +73,7 @@ export const harnesses = {
     return { stoppedBy: result?.subtype && result.subtype !== 'success' ? result.subtype : r.signal ? `killed ${r.signal}` : undefined, err: r.err };
   },
   async geno({ job, home, ws }, model, text, state) {
-    const args = [path.join(REPO, 'packages/engine/src/cli.ts'), 'agent', ...(state.session ? ['--session', state.session] : ['--workspace', ws]), '--mode', 'auto', '--browser', text];
+    const args = [path.join(REPO, 'packages/engine/src/cli.ts'), 'agent', ...(state.session ? ['--session', state.session] : ['--workspace', ws]), '--mode', 'auto', '--browser', ...(state.capUsd ? ['--max-cost', String(state.capUsd)] : []), text];
     const env = { ...baseEnv(home), GCODE_PROVIDER: 'anthropic', GCODE_MODEL: model, ...(process.env.HP_WIRE ? { GCODE_WIRE_LOG: path.join(job, 'geno-wire.jsonl') } : {}) };
     const r = await sh(path.join(REPO, 'node_modules/.bin/tsx'), args, { cwd: ws, env }, path.join(job, 'geno.out'));
     state.session ??= /session: ([0-9a-f-]{36})/.exec(r.out)?.[1];
