@@ -46,7 +46,7 @@ function setup(pages: { id: number; url: string; selected?: boolean }[], events:
     allowed,
     call: async (args) => {
       calls.push(args);
-      if (!pages.some((p) => p.id === args['pageId'])) throw new ToolError('Error: No page found');
+      if (info.tool !== 'new_page' && !pages.some((p) => p.id === args['pageId'])) throw new ToolError('Error: No page found');
       const failed = fail?.(args);
       if (failed !== undefined) throw new ToolError(failed);
       return { text: `shot of page ${String(args['pageId'])}`, images: [] };
@@ -234,10 +234,10 @@ describe('a browser call after the run started again with a blank browser', () =
 
 describe('a browser call in a new run of the same session', () => {
   const PRICING = 'https://approved.example/pricing';
-  /** An earlier run's new_page of `url`, with its result's status and the listing it showed, page 4 at `url`. */
-  const opening = (url: string, status = 'ok', input: unknown = { url }): TurnEvent[] => [
-    { kind: 'assistant', seq: 1, at: '', content: [{ type: 'tool_use', id: 'tu_open', name: 'mcp__browser__new_page', input }] } as unknown as TurnEvent,
-    { kind: 'tool-result', seq: 2, at: '', toolUseId: 'tu_open', name: 'mcp__browser__new_page', status, output: `## Pages\n1: about:blank\n4: Pricing (${url}) [selected]` } as unknown as TurnEvent,
+  /** An earlier run's new_page of `url`, whose result showed page 4 at `url` and logged the host it opened, if it did. */
+  const opening = (url: string, status = 'ok', openedHost: string | null = new URL(url).host): TurnEvent[] => [
+    { kind: 'assistant', seq: 1, at: '', content: [{ type: 'tool_use', id: 'tu_open', name: 'mcp__browser__new_page', input: { url } }] } as unknown as TurnEvent,
+    { kind: 'tool-result', seq: 2, at: '', toolUseId: 'tu_open', name: 'mcp__browser__new_page', status, output: `## Pages\n1: about:blank\n4: Pricing (${url}) [selected]`, ...(openedHost === null ? {} : { openedHost }) } as unknown as TurnEvent,
   ];
   const asking = () => {
     const asked: string[] = [];
@@ -256,12 +256,23 @@ describe('a browser call in a new run of the same session', () => {
     }
   });
 
-  it('does not count a host whose opening was refused or rejected, or a call it cannot read', async () => {
-    for (const events of [opening(PRICING, 'denied'), opening(PRICING, 'rejected'), opening(PRICING, 'ok', PRICING), opening(PRICING, 'ok', { url: 7 }), opening(PRICING, 'ok', { url: 'approved.example/pricing' })]) {
+  it('does not count a navigation that never got past its checks, such as one refused, rejected, stopped or left unrun', async () => {
+    for (const events of [opening(PRICING, 'denied', null), opening(PRICING, 'rejected', null), opening(PRICING, 'error', null)]) {
       const { run, opened } = setup([{ id: 1, url: 'about:blank' }], events, SCREENSHOT, { approval: asking().approval });
       await expect(run({ pageId: 4 })).rejects.toThrow(`Page 4 showed ${PRICING}; open it again with new_page.`);
       expect(opened).toEqual([]);
     }
+  });
+
+  it('logs the host a navigation opened and its approval on the result, even when the page then fails to load', async () => {
+    const NEW_PAGE = { server: 'browser', tool: 'new_page', readOnly: false } as McpToolInfo;
+    const { approval } = asking();
+    const opened = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval });
+    expect(await opened.run({ url: PRICING })).toMatchObject({ openedHost: 'approved.example', approval: { decidedBy: 'user', verdict: 'allow' } });
+    const failed = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, fail: () => 'net::ERR_NAME_NOT_RESOLVED' });
+    expect(await failed.run({ url: PRICING })).toMatchObject({ status: 'error', text: 'net::ERR_NAME_NOT_RESOLVED', openedHost: 'approved.example', approval: { verdict: 'allow' } });
+    const local = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, fail: () => 'Error: boom' });
+    await expect(local.run({ url: PAGE }), 'a call nothing settled still throws').rejects.toThrow('Error: boom');
   });
 
   it("does not take a host from the turns a fork copied from another session, only from the fork's own", async () => {
@@ -283,6 +294,8 @@ describe('a browser call in a new run of the same session', () => {
       [{ verdict: 'allow' }, 1],
       [{ verdict: 'deny' }, 1],
       [{ verdict: 'allow', kept: 'workspace', rule: 'browser-risky-tool' }, 1],
+      [{ verdict: 'deny', kept: 'session' }, 1],
+      [{ verdict: 'allow', kept: 'session', decidedBy: 'hook' }, 1],
     ];
     for (const [record, asks] of cases) {
       const { asked, approval } = asking();

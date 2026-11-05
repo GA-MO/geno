@@ -174,6 +174,19 @@ describe('gcode serve with MCP', () => {
     expect(permissions, 'a new session asks').toHaveLength(2);
   });
 
+  it('keeps a tool allowed for the session in a new engine even when its allowed call failed', async () => {
+    const fail = (n: number) => ({ id: `tu_fail_${n}`, name: 'mcp__fake__fail', input: {} });
+    const { permissions, connect } = await setup([toolCall('', [loadTools('mcp__fake__fail')], usage), toolCall('Trying.', [fail(1)], usage), answer('It broke.', usage), toolCall('Again.', [fail(2)], usage), answer('Still broke.', usage)]);
+    const prompt = (text: string) => async (ctx: acp.ClientContext, sessionId: string) => {
+      await serversUntil(ctx, sessionId, allReady);
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
+      return sessionId;
+    };
+    const first = await connect([editorServer()], prompt('try it'));
+    await connect([editorServer()], prompt('try again'), first);
+    expect(permissions).toHaveLength(1);
+  });
+
   it('asks again in a new engine on the same session after Allow once or Reject', async () => {
     for (const once of ['allow', 'reject']) {
       const echo = (text: string) => ({ id: `tu_${once}_${text}`, name: 'mcp__fake__echo', input: { text } });

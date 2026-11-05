@@ -27,6 +27,7 @@ export type ToolRun = {
   readonly chapter?: ChapterMark | undefined;
   readonly shown?: ShownFiles | undefined;
   readonly file?: FileStamp | undefined;
+  readonly openedHost?: string | undefined;
 };
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>

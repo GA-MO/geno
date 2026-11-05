@@ -327,7 +327,7 @@ describe('MCP stdio servers', () => {
     expect(tools.find((tool) => tool.name === 'mcp__fake__echo')!.input_schema).toMatchObject({ properties: { text: { type: 'string' } } });
     expect(textOf(await executors['mcp__fake__echo']!.run({ text: 'hi' }, ctx(workspace)))).toBe('echo: hi');
     expect(textOf(await executors['mcp__fake__image']!.run({}, ctx(workspace)))).toBe('here it is\n[image image/png, 7 bytes, not shown]');
-    await expect(executors['mcp__fake__fail']!.run({}, ctx(workspace))).rejects.toThrow('it broke');
+    expect(await executors['mcp__fake__fail']!.run({}, ctx(workspace)), 'a failed call keeps how it was let through').toMatchObject({ status: 'error', text: 'it broke', approval: { decidedBy: 'classifier', verdict: 'allow' } });
 
     const shot = await executors['mcp__fake__screenshot']!.run({}, ctx(workspace));
     expect(shot).toMatchObject({
@@ -351,7 +351,7 @@ describe('MCP stdio servers', () => {
     const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
     const hub = await open();
     const { executors } = await toolsetOf(hub, approval('auto', 'allow').value);
-    await expect(executors['mcp__fake__crash']!.run({}, ctx(workspace))).rejects.toThrow(/fake/);
+    expect(await executors['mcp__fake__crash']!.run({}, ctx(workspace))).toMatchObject({ status: 'error', text: expect.stringMatching(/fake/) });
     await waitFor(() => hub.views()[0]!.state.status === 'ready' && (hub.views()[0]!.state as { restarts: number }).restarts === 1);
 
     expect(textOf(await executors['mcp__fake__echo']!.run({ text: 'again' }, ctx(workspace)))).toBe('echo: again');

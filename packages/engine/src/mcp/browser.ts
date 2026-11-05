@@ -22,7 +22,6 @@ import {
   navigationTarget,
   NOTHING_LISTENS,
   startsTurn,
-  toolUsesOf,
   type ApprovalMode,
   type ApprovalRecord,
   type BrowserPage,
@@ -35,7 +34,7 @@ import {
   type TurnEvent,
 } from '@g-code/core';
 import { denialText, modeOf, refusalOf, settle, type Approval, type KeptAnswer } from '../tools/agent.js';
-import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext, type ToolReply } from '../tools/context.js';
 import type { McpServerHandle } from './server.js';
 
 /** How the server process is started; the flags that matter for safety are added after it by browserServerConfig. */
@@ -224,9 +223,6 @@ async function reopen(handle: McpServerHandle, state: BrowserState, id: number, 
   return undefined;
 }
 
-const toolInput = z.record(z.string(), z.unknown());
-const BROWSER_PREFIX = `mcp__${BROWSER_SERVER}__`;
-
 /** The events of the session's own turns. A fork's log begins with the turns it copied, whose answers were given to its source. */
 function ownEvents(events: readonly TurnEvent[]): readonly TurnEvent[] {
   const head = events[0];
@@ -238,23 +234,24 @@ function ownEvents(events: readonly TurnEvent[]): readonly TurnEvent[] {
 
 /**
  * Adds what the user allowed earlier in the session, which a run that started since knows only from the log: the MCP
- * tools allowed for the session or the workspace, and the hosts of the navigations that went ahead.
+ * tools the user allowed for the session or the workspace, and the hosts the browser's navigations opened.
  */
-export function recallAllowances(events: readonly TurnEvent[], workspace: string, allowed: Set<string>, state: BrowserState): void {
-  const own = ownEvents(events);
-  const ran = new Set<string>();
-  for (const event of own) {
+export function recallAllowances(events: readonly TurnEvent[], allowed: Set<string>, state: BrowserState): void {
+  for (const event of ownEvents(events)) {
     if (event.kind !== 'tool-result') continue;
-    if (event.status === 'ok' || event.status === 'error') ran.add(event.toolUseId);
-    if (event.approval?.kept !== undefined && isMcpRule(event.approval.rule)) allowed.add(event.name);
+    const { approval } = event;
+    if (approval?.kept !== undefined && approval.decidedBy === 'user' && approval.verdict === 'allow' && isMcpRule(approval.rule)) allowed.add(event.name);
+    if (event.openedHost !== undefined) state.approvedHosts.add(event.openedHost);
   }
-  for (const use of own.flatMap((event) => (event.kind === 'assistant' ? toolUsesOf(event.content) : []))) {
-    if (!ran.has(use.id) || !use.name.startsWith(BROWSER_PREFIX)) continue;
-    const input = toolInput.safeParse(use.input);
-    const target = input.success ? navigationTarget({ tool: use.name.slice(BROWSER_PREFIX.length), args: input.data }) : undefined;
-    const url = target === undefined ? undefined : browserUrlOf(target, workspace);
-    if (url?.kind === 'remote') state.approvedHosts.add(url.host);
-  }
+}
+
+/** What settled a call before it ran: its approval, and the host it opened. */
+export type Decided = { readonly approval?: ApprovalRecord; readonly openedHost?: string };
+
+/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it. */
+export function failedAfterChecks(error: unknown, decided: Decided): ToolReply {
+  if (!(error instanceof ToolError) || (decided.approval === undefined && decided.openedHost === undefined)) throw error;
+  return { text: error.message, status: 'error', ...decided };
 }
 
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
@@ -284,7 +281,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
     input: z.record(z.string(), z.unknown()),
     describe: (args) => `${name} ${JSON.stringify(args)}`,
     async run(raw, ctx) {
-      recallAllowances(ctx.events(), ctx.workspace, allowed, state);
+      recallAllowances(ctx.events(), allowed, state);
       const target = navigationTarget({ tool: info.tool, args: raw });
       const args = target === undefined ? await withWorkspacePaths(raw, ctx) : { ...raw, url: target };
       const judged = target === undefined ? args : { ...args, url: await canonical(target) };
@@ -321,43 +318,50 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       const opened = target === undefined ? undefined : browserUrlOf(target, ctx.workspace);
       if (opened?.kind === 'remote') state.approvedHosts.add(opened.host);
 
-      const before = new Map([...state.pages].map(([id, page]) => [id, page.url]));
-      let reply: Awaited<ReturnType<BrowserToolDeps['call']>>;
-      const notes: string[] = [];
+      const decided: Decided = { ...(record === undefined ? {} : { approval: record }), ...(opened?.kind === 'remote' ? { openedHost: opened.host } : {}) };
+      let text: string;
+      let images: readonly ImageAttachment[];
       try {
-        reply = await deps.call(args, ctx);
-      } catch (error) {
-        if (error instanceof ToolError && target !== undefined && NOTHING_LISTENS.test(error.message) && browserUrlOf(target, ctx.workspace).kind === 'local') {
-          throw new ToolError(`${error.message}\n\n${devServerHint(target)}`);
-        }
-        const id = Number(args['pageId']);
-        if (!(error instanceof ToolError) || !NO_PAGE.test(error.message) || !Number.isInteger(id)) throw error;
-        await refreshPages(handle, state, ctx.signal);
-        // The page is open, so the words came from the page itself, such as a script's own error.
-        if (state.pages.has(id)) throw error;
-        const readOnly = effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly });
-        // The page the id showed comes first: once one page is back, the only-page rule would take every other id there.
-        const again = await reopen(handle, state, id, ctx, mode, rules);
-        const gone = again === undefined ? undefined : `[Geno] Page ${id} is not open: the browser starts fresh in each run, and pages can close. ${again.text}`;
-        if (again !== undefined && !readOnly) throw new ToolError(`${error.message}\n\n${gone}; call ${info.tool} on page ${again.id}.`);
-        const stale = again === undefined ? stalePage(state, ctx.workspace, id, ctx.events(), readOnly) : { retry: again.id, note: `${gone}, and this ran there.` };
-        if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
+        const before = new Map([...state.pages].map(([id, page]) => [id, page.url]));
+        let reply: Awaited<ReturnType<BrowserToolDeps['call']>>;
+        const notes: string[] = [];
         try {
-          reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
-        } catch (retried) {
-          if (retried instanceof ToolError) throw new ToolError(`${stale.note}\n${retried.message}`);
-          throw retried;
+          reply = await deps.call(args, ctx);
+        } catch (error) {
+          if (error instanceof ToolError && target !== undefined && NOTHING_LISTENS.test(error.message) && browserUrlOf(target, ctx.workspace).kind === 'local') {
+            throw new ToolError(`${error.message}\n\n${devServerHint(target)}`);
+          }
+          const id = Number(args['pageId']);
+          if (!(error instanceof ToolError) || !NO_PAGE.test(error.message) || !Number.isInteger(id)) throw error;
+          await refreshPages(handle, state, ctx.signal);
+          // The page is open, so the words came from the page itself, such as a script's own error.
+          if (state.pages.has(id)) throw error;
+          const readOnly = effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly });
+          // The page the id showed comes first: once one page is back, the only-page rule would take every other id there.
+          const again = await reopen(handle, state, id, ctx, mode, rules);
+          const gone = again === undefined ? undefined : `[Geno] Page ${id} is not open: the browser starts fresh in each run, and pages can close. ${again.text}`;
+          if (again !== undefined && !readOnly) throw new ToolError(`${error.message}\n\n${gone}; call ${info.tool} on page ${again.id}.`);
+          const stale = again === undefined ? stalePage(state, ctx.workspace, id, ctx.events(), readOnly) : { retry: again.id, note: `${gone}, and this ran there.` };
+          if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
+          try {
+            reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
+          } catch (retried) {
+            if (retried instanceof ToolError) throw new ToolError(`${stale.note}\n${retried.message}`);
+            throw retried;
+          }
+          notes.push(stale.note);
         }
-        notes.push(stale.note);
+        await refreshPages(handle, state, ctx.signal);
+        notes.push(...wandered(state, before, ctx.workspace));
+        const local = target !== undefined && browserUrlOf(target, ctx.workspace).kind === 'local';
+        if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target));
+        text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;
+        ({ images } = reply);
+      } catch (error) {
+        return failedAfterChecks(error, decided);
       }
-      await refreshPages(handle, state, ctx.signal);
-      notes.push(...wandered(state, before, ctx.workspace));
-      const local = target !== undefined && browserUrlOf(target, ctx.workspace).kind === 'local';
-      if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target));
-      const text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;
-      const { images } = reply;
-      if (record === undefined && images.length === 0) return text;
-      return { text, ...(record === undefined ? {} : { approval: record }), ...(images.length === 0 ? {} : { images }) };
+      if (decided.approval === undefined && decided.openedHost === undefined && images.length === 0) return text;
+      return { text, ...decided, ...(images.length === 0 ? {} : { images }) };
     },
   });
 }

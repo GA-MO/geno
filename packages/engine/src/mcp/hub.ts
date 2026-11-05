@@ -38,7 +38,7 @@ import type { Store } from '../store.js';
 import { laneAt } from '../lanes.js';
 import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
-import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, recallAllowances, type BrowserOptions } from './browser.js';
+import { browserExecutor, browserServerConfig, failedAfterChecks, keepMcpAnswer, newBrowserState, recallAllowances, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import type { McpTokenSource } from './connection.js';
 import { McpServerHandle } from './server.js';
@@ -201,7 +201,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
       input: argumentsSchema,
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
-        recallAllowances(ctx.events(), ctx.workspace, allowed, browserState);
+        recallAllowances(ctx.events(), allowed, browserState);
         const mode = modeOf(approval);
         const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly, args };
         const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);
@@ -217,7 +217,13 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
                 (answer) => keepMcpAnswer(answer, call, allowed, ctx),
               );
         if (record?.verdict === 'deny') throw refusalOf(record);
-        const { text, images } = await callTool(handle, name, info, args, ctx);
+        let ran: Awaited<ReturnType<typeof callTool>>;
+        try {
+          ran = await callTool(handle, name, info, args, ctx);
+        } catch (error) {
+          return failedAfterChecks(error, record === undefined ? {} : { approval: record });
+        }
+        const { text, images } = ran;
         if (record === undefined && images.length === 0) return text;
         return { text, ...(record === undefined ? {} : { approval: record }), ...(images.length === 0 ? {} : { images }) };
       },
