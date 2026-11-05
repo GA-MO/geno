@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BeanCraft</title>
+<!-- A careless page: a dialog, a stored preference, an outside font, an uncaught error, a pinned section, then a hang. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora">
+<style>
+  body { margin: 0; font-family: Lora, serif; }
+  .wide { width: 1600px; white-space: nowrap; }
+  .pinned { height: 100vh; background: #3b2a20; color: #3f2f25; }
+  a.cta { display: inline-block; padding: 4px 8px; background: #8a3b12; color: #fff; }
+</style>
+</head>
+<body>
+<h1 class="wide">BeanCraft BeanCraft BeanCraft BeanCraft BeanCraft BeanCraft BeanCraft BeanCraft BeanCraft</h1>
+<section class="pinned"><h2>Plans</h2><p>Plan $14 a month. <a class="cta" href="/checkout">Subscribe</a></p></section>
+<section style="height: 2000px"><p>More text here so the page scrolls.</p></section>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+  alert('Welcome to BeanCraft');
+  localStorage.setItem('beancraft-plan', 'regular');
+  document.cookie = 'seen=1';
+  gsap.registerPlugin(ScrollTrigger);
+  ScrollTrigger.create({ trigger: '.pinned', pin: true, start: 'top top', end: '+=1500' });
+  setTimeout(() => { throw new Error('boom'); }, 100);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) setTimeout(() => { for (;;) {} }, 1500);
+</script>
+</body>
+</html>
