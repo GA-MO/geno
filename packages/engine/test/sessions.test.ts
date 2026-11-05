@@ -93,6 +93,23 @@ describe('session log', () => {
     expect((await readSessionLog(file)).events).toEqual([start, denied]);
   });
 
+  it('reads back a yes kept for the session or the workspace, and reads a kept answer it cannot read as none', async () => {
+    const allowed = (seq: number, kept: unknown) => ({
+      kind: 'tool-result',
+      seq,
+      at,
+      toolUseId: `tu_${seq}`,
+      name: 'mcp__fake__echo',
+      status: 'ok',
+      output: 'echo',
+      approval: { mode: 'ask', rule: 'mcp-read-only', reason: 'r', command: 'mcp__fake__echo', decidedBy: 'user', verdict: 'allow', kept },
+    });
+    const file = await logWith([start]);
+    for (const [seq, kept] of [[1, 'session'], [2, 'workspace'], [3, 'forever'], [4, 7], [5, null]] as const) await appendFile(file, `${JSON.stringify(allowed(seq, kept))}\n`);
+    const kept = (await readSessionLog(file)).events.map((event) => (event.kind === 'tool-result' ? event.approval?.kept : 'start'));
+    expect(kept).toEqual(['start', 'session', 'workspace', undefined, undefined, undefined]);
+  });
+
   it("reads back a web tool's result with the spend of the model call it made", async () => {
     const searched: TurnEvent = {
       kind: 'tool-result',
