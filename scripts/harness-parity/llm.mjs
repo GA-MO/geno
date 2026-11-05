@@ -7,6 +7,10 @@ import path from 'node:path';
 import { campaignEnv } from '../real-usecases/env.mjs';
 
 const env = campaignEnv();
+/** Anthropic's list price per million tokens, as packages/core/src/cost.ts has it, for the calls made here. */
+const PRICE = { 'claude-opus-5-5': [4, 20], 'claude-sonnet-5-5': [2, 10] };
+/** What this process's API calls cost so far; the Claude Code CLI calls run on the user's sign-in and add nothing. */
+export const spend = { usd: 0, calls: 0 };
 
 /**
  * The same call through the Claude Code CLI on the user's own sign-in, for when the API key has no credit
@@ -17,17 +21,26 @@ function askCli(model, system, user) {
   mkdirSync(cwd, { recursive: true });
   const env = { ...process.env };
   for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']) delete env[k];
+  // Content with images goes in as one stream-json user message; plain text goes in as the prompt.
+  const blocks = Array.isArray(user);
+  const io = blocks ? ['--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json'];
+  const input = blocks ? `${JSON.stringify({ type: 'user', message: { role: 'user', content: user } })}\n` : user;
+  const resultOf = (stdout) => (blocks ? stdout.split('\n').filter((l) => l.includes('"type":"result"')).map((l) => JSON.parse(l)).at(-1) : JSON.parse(stdout));
   for (let attempt = 0; attempt < 3; attempt++) {
-    const r = spawnSync('claude', ['-p', '--model', model, '--system-prompt', system, '--tools', '', '--setting-sources', '', '--no-session-persistence', '--output-format', 'json'], { cwd, env, input: user, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 600_000 });
-    const text = r.status === 0 ? JSON.parse(r.stdout).result ?? '' : '';
+    const r = spawnSync('claude', ['-p', '--model', model, '--system-prompt', system, '--tools', '', '--setting-sources', '', '--no-session-persistence', ...io], { cwd, env, input, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 600_000 });
+    const text = r.status === 0 ? resultOf(r.stdout)?.result ?? '' : '';
     const json = /\{[\s\S]*\}/.exec(text)?.[0];
     if (json !== undefined) return JSON.parse(json);
   }
   throw new Error('the Claude Code CLI gave no JSON answer');
 }
 
-async function ask(model, system, user, maxTokens = 2000) {
-  if (process.env.HP_LLM === 'claude-cli') return askCli(model, system, user);
+/**
+ * One model call whose answer is a JSON object; `user` is text or content blocks (images included). `via` 'cli' runs
+ * it through the Claude Code CLI instead of the API.
+ */
+export async function ask(model, system, user, maxTokens = 2000, via = process.env.HP_LLM === 'claude-cli' ? 'cli' : 'api') {
+  if (via === 'cli') return askCli(model, system, user);
   for (let attempt = 0; ; attempt++) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -36,6 +49,9 @@ async function ask(model, system, user, maxTokens = 2000) {
     });
     if (res.ok) {
       const body = await res.json();
+      const [input, output] = PRICE[model] ?? [0, 0];
+      spend.usd += ((body.usage?.input_tokens ?? 0) * input + (body.usage?.output_tokens ?? 0) * output) / 1_000_000;
+      spend.calls += 1;
       const text = body.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       const json = /\{[\s\S]*\}/.exec(text)?.[0];
       if (json !== undefined) return JSON.parse(json);

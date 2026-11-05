@@ -8,7 +8,7 @@ import path from 'node:path';
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2' };
 
-function serve(root) {
+export function serve(root) {
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     let file = path.join(root, rel);
@@ -20,7 +20,7 @@ function serve(root) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-async function launch(near) {
+export async function launch(near) {
   const profile = mkdtempSync(path.join(near, '.chrome-'));
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
   const portFile = path.join(profile, 'DevToolsActivePort');
@@ -31,7 +31,7 @@ async function launch(near) {
   return { chrome, profile, wsUrl: page.webSocketDebuggerUrl };
 }
 
-function connect(wsUrl) {
+export function connect(wsUrl) {
   const socket = new WebSocket(wsUrl);
   let id = 0;
   const waiting = new Map();
