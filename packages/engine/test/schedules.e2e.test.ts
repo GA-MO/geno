@@ -129,7 +129,7 @@ type Window = {
  * An engine for the fixture's folder, on `clock`, and one editor window that shows Tasks and scheduled tasks, with
  * `scenario` run while it stays connected. `answers` picks each permission card's option, in order.
  */
-async function serve<T>(at: Fixture, clock: FakeClock, fetch: typeof globalThis.fetch, scenario: (window: Window, heard: Heard) => Promise<T>, answers: string[] = []): Promise<{ result: T; heard: Heard }> {
+async function serve<T>(at: Fixture, clock: FakeClock, fetch: typeof globalThis.fetch, scenario: (window: Window, heard: Heard) => Promise<T>, answers: string[] = [], existing?: string): Promise<{ result: T; heard: Heard }> {
   const io: Io = { env: at.env, cwd: at.workspace, out: () => {}, err: (line) => void (process.env['GCODE_TEST_LOG'] && console.error(line)), write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch };
   const heard: Heard = { updates: [], tasks: [], schedules: [], permissions: [] };
   const client = acp
@@ -147,7 +147,8 @@ async function serve<T>(at: Fixture, clock: FakeClock, fetch: typeof globalThis.
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { _meta: { [TASKS_CAPABILITY]: true, [SCHEDULES_CAPABILITY]: true } },
     });
-    const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: at.workspace, mcpServers: [] });
+    const sessionId = existing ?? (await ctx.request(acp.methods.agent.session.new, { cwd: at.workspace, mcpServers: [] })).sessionId;
+    if (existing !== undefined) await ctx.request(acp.methods.agent.session.load, { sessionId, cwd: at.workspace, mcpServers: [] });
     let read = 0;
     const window: Window = {
       ctx,
@@ -458,6 +459,31 @@ describe('gcode serve: scheduled tasks', () => {
     expect(model.strays, 'Auto mode never asked the classifier').toHaveLength(0);
     expect(result.list.tasks).toHaveLength(1);
     expect(result.list.tasks[0]).toMatchObject({ title: 'Review main', paused: true, createdBy: { kind: 'model' }, when: { kind: 'cron', expr: '0 9 * * 1-5' }, nextAt: null });
+  });
+
+  it('keeps schedule changes allowed for the chat in a new engine on the same session, and asks again after Allow or in a new chat', async () => {
+    const at = await fixture();
+    const clock = new FakeClock(T0);
+    const create = (id: string) => ({ id, name: 'schedule_task', input: { action: 'create', title: `Review ${id}`, prompt: '/review main', when: 'weekdays at 9:00' } });
+    const chat = (marker: string) => (n: number) =>
+      n === 0 ? toolCall('Loading the tool.', [loadTools('schedule_task')], usage) : n % 2 === 1 ? toolCall('Scheduling it.', [create(`${marker}_${n}`)], usage) : answer('Scheduled.', usage);
+    const model = models({ '[kept]': chat('kept'), '[other]': chat('other'), '[once]': chat('once') });
+    const ask = (marker: string) => async (window: Window) => (await window.prompt(`${marker} review main every weekday at 9`), window.sessionId);
+    const asked = { count: 0 };
+    const run = async (marker: string, answers: string[], existing?: string) => {
+      const { result, heard } = await serve(at, clock, model.fetch, ask(marker), answers, existing);
+      asked.count += heard.permissions.length;
+      return result;
+    };
+
+    const kept = await run('[kept]', ['allow-session']);
+    await run('[kept]', [], kept);
+    expect(asked.count, 'the same chat in a new engine changes schedules unasked').toBe(1);
+    await run('[other]', []);
+    expect(asked.count, 'a new chat asks').toBe(2);
+    const once = await run('[once]', ['allow']);
+    await run('[once]', [], once);
+    expect(asked.count, 'Allow holds for that change only').toBe(4);
   });
 
   it('runs a task now without moving its schedule, and pauses, resumes and deletes it from the Tasks list', async () => {
