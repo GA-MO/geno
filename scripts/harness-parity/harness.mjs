@@ -2,7 +2,7 @@
 // in a fresh HOME with the same headless browser server. Shared by the task rounds (run.mjs) and the landing suite.
 // When a request ends by handing work back, the simulated user says "go on" (up to `continues` times), as the real user did.
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { campaignEnv, REPO } from '../real-usecases/env.mjs';
 import { classifyEnd } from './llm.mjs';
@@ -35,12 +35,15 @@ function sh(cmd, args, opts, outFile) {
     const child = spawn(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
-    child.stdout.on('data', (d) => (out += d));
+    // Streamed to the file as it comes, so a runner that dies mid-segment leaves what the segment spent on disk.
+    child.stdout.on('data', (d) => {
+      out += d;
+      if (outFile) appendFileSync(outFile, d);
+    });
     child.stderr.on('data', (d) => (err += d));
     const timer = setTimeout(() => child.kill('SIGTERM'), SEGMENT_MS);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
-      if (outFile) writeFileSync(outFile, out, { flag: 'a' });
       resolve({ code, signal, out, err });
     });
   });
@@ -65,15 +68,15 @@ export const harnesses = {
     writeFileSync(mcp, JSON.stringify(BROWSER_MCP));
     const stream = path.join(job, 'claude.jsonl');
     writeFileSync(stream, `${JSON.stringify({ type: 'hp-user', text })}\n`, { flag: 'a' });
-    const args = ['-p', text, '--model', model, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'auto', '--mcp-config', mcp, ...(state.session ? ['--resume', state.session] : []), ...(state.capUsd ? ['--max-budget-usd', String(state.capUsd)] : [])];
+    const args = ['-p', text, '--model', model, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'auto', '--mcp-config', mcp, ...(state.session ? ['--resume', state.session] : []), ...(state.capUsd !== undefined ? ['--max-budget-usd', state.capUsd.toFixed(2)] : [])];
     const r = await sh('claude', args, { cwd: ws, env: { ...baseEnv(home), ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}` } }, stream);
     proxy.kill();
     state.session ??= /"session_id":"([0-9a-f-]{36})"/.exec(r.out)?.[1];
     const result = r.out.split('\n').filter((l) => l.includes('"type":"result"')).map((l) => JSON.parse(l)).at(-1);
-    return { stoppedBy: result?.subtype && result.subtype !== 'success' ? result.subtype : r.signal ? `killed ${r.signal}` : undefined, err: r.err };
+    return { stoppedBy: result?.subtype && result.subtype !== 'success' ? result.subtype : r.signal ? `killed ${r.signal}` : undefined, capped: state.capUsd !== undefined && result?.subtype === 'error_max_budget_usd', err: r.err };
   },
   async geno({ job, home, ws }, model, text, state) {
-    const args = [path.join(REPO, 'packages/engine/src/cli.ts'), 'agent', ...(state.session ? ['--session', state.session] : ['--workspace', ws]), '--mode', 'auto', '--browser', ...(state.capUsd ? ['--max-cost', String(state.capUsd)] : []), text];
+    const args = [path.join(REPO, 'packages/engine/src/cli.ts'), 'agent', ...(state.session ? ['--session', state.session] : ['--workspace', ws]), '--mode', 'auto', '--browser', ...(state.capUsd !== undefined ? ['--max-cost', state.capUsd.toFixed(2)] : []), text];
     const env = { ...baseEnv(home), GCODE_PROVIDER: 'anthropic', GCODE_MODEL: model, ...(process.env.HP_WIRE ? { GCODE_WIRE_LOG: path.join(job, 'geno-wire.jsonl') } : {}) };
     const r = await sh(path.join(REPO, 'node_modules/.bin/tsx'), args, { cwd: ws, env }, path.join(job, 'geno.out'));
     state.session ??= /session: ([0-9a-f-]{36})/.exec(r.out)?.[1];
@@ -82,7 +85,7 @@ export const harnesses = {
     const stop = /stopped after .*|budget.*|Reached the turn limit.*/i.exec(`${r.out}\n${r.err}`)?.[0];
     // A run that could not start, such as a session log the engine cannot read, is the harness failing, not the model.
     const failed = r.code !== 0 && r.code !== 3 ? `engine exited ${r.code}: ${r.err.trim().split('\n').at(-1)?.slice(0, 200)}` : undefined;
-    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : failed, err: r.err };
+    return { stoppedBy: r.code === 3 ? stop ?? 'turn or cost limit' : r.signal ? `killed ${r.signal}` : failed, capped: state.capUsd !== undefined && r.code === 3 && /cost|budget/i.test(stop ?? ''), err: r.err };
   },
 };
 
@@ -94,17 +97,18 @@ export function transcriptOf(name, { job, home }, state) {
 
 /**
  * Sends `text` in the run's session, then "go on" while the agent hands work back, up to `continues` times. Returns
- * how each segment ended, or `error` when the harness never started a session.
+ * how each segment ended, or `error` when the harness never started a session. A run that hit the cost cap its
+ * caller set (`state.capUsd`) is not told to go on.
  */
 export async function converse(name, paths, model, state, text, request, continues) {
   const ends = [];
   for (let segment = 0; ; segment++) {
-    const { stoppedBy, err } = await harnesses[name](paths, model, segment === 0 ? text : GO_ON, state);
+    const { stoppedBy, capped, err } = await harnesses[name](paths, model, segment === 0 ? text : GO_ON, state);
     if (state.session === undefined) return { ends, error: `no session: ${err.slice(-400)}` };
     const t = transcriptOf(name, paths, state);
     const end = await classifyEnd(request, finalText(t.steps.slice(t.steps.findLastIndex((s) => s.kind === 'user') + 1)), stoppedBy);
     ends.push({ ...end, stoppedBy });
-    if (end.kind === 'done' || segment >= continues) return { ends };
+    if (end.kind === 'done' || capped || segment >= continues) return { ends };
   }
 }
 

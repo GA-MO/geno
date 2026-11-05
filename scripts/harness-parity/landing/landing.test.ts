@@ -191,6 +191,17 @@ describe('roundsOf', () => {
     expect([a.costUsd, b.costUsd]).toEqual([0.5, 0.25]);
     expect([a.behaviour.writes, a.behaviour.edits, b.behaviour.writes, b.behaviour.rewrites, b.behaviour.edits]).toEqual([1, 0, 1, 1, 1]);
   });
+  const failedStart = jsonl([{ type: 'result', total_cost_usd: 0.24 }, { type: 'hp-user', text: FEEDBACK }, { type: 'result', subtype: 'error_during_execution', total_cost_usd: 0 }, { type: 'result', total_cost_usd: 0.35 }]);
+  it('skips the zero total of a failed start', () => {
+    const dir = job();
+    writeFileSync(path.join(dir, 'claude.jsonl'), failedStart);
+    expect(roundsOf(dir, 'claude').map((r) => Math.round(r.costUsd * 100) / 100)).toEqual([0.24, 0.11]);
+  });
+  it('still counts the spend of a run whose last log line a crash cut off', () => {
+    const dir = job();
+    writeFileSync(path.join(dir, 'claude.jsonl'), `${failedStart}{"type":"result","total_co`);
+    expect(spentBy(dir, 'claude')).toBeCloseTo(0.35, 6);
+  });
   it('reads a run that never started as zero, not a crash', () => {
     const dir = job();
     expect(roundsOf(dir, 'claude').map((r) => r.costUsd)).toEqual([0, 0]);
@@ -201,7 +212,7 @@ describe('roundsOf', () => {
 
 describe('the shipping check names every weekday', () => {
   const page = (body: string) => ({ errors: {}, brief: { text: 'x'.repeat(4000), headings: [{ text: 'Delivery', body }], blocks: [], subscribes: [], links: [] } });
-  it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false]])('%s', (body, pass) => {
+  it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false], ['Wednesday-roasted, shipped the same day.', true]])('%s', (body, pass) => {
     expect(score(page(body)).shipping.pass).toBe(pass);
   });
 });

@@ -60,7 +60,7 @@ export const CHECKS = [
   { id: 'roaster', group: 'brief', session: 'desktop', label: 'a roaster profile section', test: (m) => when(findPart(m, (t) => /roaster|roastmaster|roast master/i.test(t) && t.length > 120) !== undefined, 'no section about the roaster') },
   {
     id: 'shipping', group: 'brief', session: 'desktop', label: 'a shipping schedule',
-    test: (m) => when(findPart(m, (t) => /ship|deliver|dispatch|arriv/i.test(t) && /\b(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?s?\b(?!-)|\bcut-?off\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/i.test(t)) !== undefined, 'no section on shipping that names days, dates or a cut-off'),
+    test: (m) => when(findPart(m, (t) => /ship|deliver|dispatch|arriv/i.test(t) && /\b(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?s?\b(?!-dried)|\bcut-?off\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/i.test(t)) !== undefined, 'no section on shipping that names days, dates or a cut-off'),
   },
   { id: 'pause', group: 'brief', session: 'desktop', label: 'a "Pause anytime" explainer', test: (m) => when(/pause[^.]{0,80}any ?time|any ?time[^.]{0,80}pause/i.test(m.brief.text), 'nothing says you can pause anytime') },
   {

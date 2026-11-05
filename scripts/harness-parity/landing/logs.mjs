@@ -6,11 +6,20 @@ import { GO_ON, transcriptOf } from '../harness.mjs';
 import { behaviour } from './stats.mjs';
 import { FEEDBACK, PROMPT } from './task.mjs';
 
-const lines = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((l) => l.trim().startsWith('{')).map((l) => JSON.parse(l)) : []);
+/** A log's JSON lines; a line cut off by a crash mid-write is skipped, not fatal. */
+const lines = (file) =>
+  (existsSync(file) ? readFileSync(file, 'utf8').split('\n') : []).flatMap((l) => {
+    try {
+      return l.trim().startsWith('{') ? [JSON.parse(l)] : [];
+    } catch {
+      return [];
+    }
+  });
 
 /**
  * Claude Code's dollars per round. A resumed session reports `total_cost_usd` as the session's running total, so a
  * round costs its last total minus the one before it; a total that goes down started a fresh count and is added.
+ * A crashed or failed start reports zero, which says nothing about the running total and is skipped.
  */
 function claudeCosts(job) {
   const costs = [0, 0];
@@ -20,6 +29,7 @@ function claudeCosts(job) {
     if (e.type === 'hp-user' && e.text === FEEDBACK) round = 1;
     if (e.type !== 'result') continue;
     const total = e.total_cost_usd ?? 0;
+    if (total === 0) continue;
     costs[round] += total >= last ? total - last : total;
     last = total;
   }

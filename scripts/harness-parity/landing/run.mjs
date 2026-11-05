@@ -23,11 +23,12 @@ import { FEEDBACK, PROMPT, TASK_ID, WORKSPACE } from './task.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONTINUES = 2;
-/** What one run of both rounds is assumed to cost until a finished run says otherwise. */
-const RUN_ESTIMATE_USD = 1.5;
 const JUDGE_ESTIMATE_USD = 0.12;
-/** Each request segment's own cap on either harness, so one runaway run cannot spend the round's budget. */
-const SEGMENT_CAP_USD = 3;
+/**
+ * What one run may spend over both rounds on either harness. Each segment is capped at what the run has left, a
+ * capped run is not told to go on, and a run starts only when the round can afford every running one at this cap.
+ */
+const RUN_CAP_USD = 4;
 
 let opts;
 try {
@@ -52,11 +53,15 @@ const JUDGED = path.join(ROUND, 'judge.json');
  * hand-back reader calls and of run folders cleared for a retry.
  */
 const spent = (jobs) => jobs.reduce((s, j) => s + spentBy(j.dir, j.harness), 0) + readJson(LEDGER, { usd: 0 }).usd;
-function charge(usd = spend.usd) {
+function addToLedger(usd) {
   const ledger = readJson(LEDGER, { usd: 0 });
   ledger.usd += usd;
-  if (usd === spend.usd) spend.usd = 0;
   writeJson(LEDGER, ledger);
+}
+/** Moves this process's judge and hand-back reader spend into the ledger. */
+function charge() {
+  addToLedger(spend.usd);
+  spend.usd = 0;
 }
 
 /** What went wrong in a stage that the later stages can still work around; the command exits 1 when any is left. */
@@ -85,14 +90,20 @@ const copyPage = (from, to) => cpSync(from, to, { recursive: true, filter: (src)
 async function runJob(job) {
   const record = path.join(job.dir, 'record.json');
   if (existsSync(record)) return;
-  if (existsSync(job.dir)) charge(spentBy(job.dir, job.harness));
+  if (existsSync(job.dir)) addToLedger(spentBy(job.dir, job.harness));
   rmSync(job.dir, { recursive: true, force: true });
   const home = path.join(job.dir, 'home');
   const ws = path.join(home, 'Development', WORKSPACE);
   mkdirSync(ws, { recursive: true });
   writeHome(home);
   const paths = { job: job.dir, home, ws };
-  const state = { session: undefined, texts: [], capUsd: SEGMENT_CAP_USD };
+  const state = {
+    session: undefined,
+    texts: [],
+    get capUsd() {
+      return Math.max(0.05, RUN_CAP_USD - spentBy(job.dir, job.harness));
+    },
+  };
   const rounds = [];
   let prior = { modelCalls: 0, usage: {} };
   for (const [i, text] of [PROMPT, FEEDBACK].entries()) {
@@ -120,18 +131,14 @@ async function runAll() {
   const queue = jobs.filter((j) => !existsSync(path.join(j.dir, 'record.json')));
   let running = 0;
   const done = jobs.length - queue.length;
-  const average = () => {
-    const costs = jobs.map((j) => readJson(path.join(j.dir, 'record.json'), undefined)).filter(Boolean).map((r) => r.rounds.reduce((s, x) => s + x.costUsd, 0));
-    return costs.length ? Math.max(RUN_ESTIMATE_USD, costs.reduce((s, c) => s + c, 0) / costs.length) : RUN_ESTIMATE_USD;
-  };
   console.log(`runs: ${done} of ${jobs.length} done, ${queue.length} to go, $${spent(jobs).toFixed(2)} spent of $${opts.budget}`);
   const failures = [];
   await Promise.all(
     Array.from({ length: opts.parallel }, async () => {
       while (queue.length > 0) {
-        const projected = spent(jobs) + (running + 1) * average();
+        const projected = spent(jobs) + (running + 1) * RUN_CAP_USD;
         if (projected > opts.budget) {
-          failures.push(`stopped before ${queue.length} runs: they would take the spend to about $${projected.toFixed(2)} of the $${opts.budget} budget`);
+          failures.push(`stopped before ${queue.length} runs: they could take the spend to $${projected.toFixed(2)} of the $${opts.budget} budget`);
           queue.length = 0;
           break;
         }
@@ -183,15 +190,15 @@ async function judgeAll() {
       const card = (r, width) => (existsSync(path.join(job.dir, `shots-${r}`, `cards-${width}.jpg`)) ? path.join(job.dir, `shots-${r}`, `cards-${width}.jpg`) : undefined);
       const shown = ['r1', 'r2'].every((r) => sheetsOf(job, r).hero !== undefined);
       if (shown) result = await judgeFixes(sheetsOf(job, 'r1'), sheetsOf(job, 'r2'), { before: [[card('r1', 375), '375px'], [card('r1', 1280), '1280px']], after: [[card('r2', 375), '375px'], [card('r2', 1280), '1280px']] }, via);
-      else if (existsSync(path.join(job.dir, 'shots-r2', 'measures.json'))) result = { why: 'no page to compare: a round left no index.html', forfeit: true };
+      else if (['r1', 'r2'].some((r) => readJson(path.join(job.dir, `shots-${r}`, 'measures.json'), {}).fatal !== undefined)) result = { why: 'no page to compare: a round left no index.html', forfeit: true };
       else continue;
     } else {
       const [a, b] = w.order === 'AB' ? [w.c, w.g] : [w.g, w.c];
       const shown = [a, b].map((p) => sheetsOf(p, w.r).hero !== undefined);
-      const measured = [a, b].every((p) => existsSync(path.join(p.dir, `shots-${w.r}`, 'measures.json')));
+      const fatal = [a, b].map((p) => readJson(path.join(p.dir, `shots-${w.r}`, 'measures.json'), {}).fatal !== undefined);
       if (shown.every(Boolean)) result = await judgePair(sheetsOf(a, w.r), sheetsOf(b, w.r), via);
-      // A page that could not be shown loses its pair rather than holding up the verdict.
-      else if (measured) result = { winner: shown[0] ? 'A' : shown[1] ? 'B' : 'tie', totals: [0, 0], why: 'a page could not be shown: there is no index.html', forfeit: true };
+      // A page with no index.html loses its pair rather than holding up the verdict; a meter failure waits for a remeasure.
+      else if (fatal.some(Boolean) && shown.every((s, i) => s || fatal[i])) result = { winner: fatal[0] && fatal[1] ? 'tie' : fatal[0] ? 'B' : 'A', totals: [0, 0], why: 'a page could not be shown: there is no index.html', forfeit: true };
       else continue;
     }
     judged[w.key] = { ...result, via };
