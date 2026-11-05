@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { GO_ON, transcriptOf } from '../harness.mjs';
+import { spendSince } from '../transcript.mjs';
 import { behaviour } from './stats.mjs';
 import { FEEDBACK, GO_ON_EN, PROMPT } from './task.mjs';
 
@@ -31,10 +32,8 @@ export function priceUsage(model, u) {
 }
 
 /**
- * Claude Code's dollars per round. A resumed session reports `total_cost_usd` as the session's running total, so a
- * round costs its last total minus the one before it; a total that goes down started a fresh count and is added.
- * A crashed or failed start reports zero, which says nothing about the running total and is skipped. A segment that
- * was killed before its result line is priced from the usage of the model calls it streamed.
+ * Claude Code's dollars per round, each result line priced by spendSince. A segment that was killed before its
+ * result line is priced from the usage of the model calls it streamed.
  */
 function claudeCosts(job) {
   const costs = [0, 0];
@@ -58,9 +57,8 @@ function claudeCosts(job) {
     if (e.type !== 'result') continue;
     settled = true;
     const total = e.total_cost_usd ?? 0;
-    if (total === 0) continue;
-    costs[round] += total >= last ? total - last : total;
-    last = total;
+    costs[round] += spendSince(last, total);
+    last = total || last;
   }
   settle();
   return costs;

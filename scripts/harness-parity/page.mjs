@@ -9,11 +9,18 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2' };
 
 export function serve(root) {
+  const base = path.resolve(root);
   const server = http.createServer((req, res) => {
-    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    let file = path.join(root, rel);
+    let rel;
+    try {
+      rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    } catch {
+      return res.writeHead(400).end();
+    }
+    let file = path.join(base, rel);
     if (existsSync(file) && statSync(file).isDirectory()) file = path.join(file, 'index.html');
-    if (!file.startsWith(root) || !existsSync(file)) return res.writeHead(404).end();
+    // A sibling folder whose name starts with the root's, such as `site-old` beside `site`, is outside it.
+    if (!file.startsWith(base + path.sep) || !existsSync(file)) return res.writeHead(404).end();
     res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream' });
     createReadStream(file).pipe(res);
   });
