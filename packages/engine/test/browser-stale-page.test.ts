@@ -170,6 +170,21 @@ describe('a browser call after the run started again with a blank browser', () =
     expect(calls.map((c) => c['pageId'])).toEqual([2, 2, 3, 3]);
   });
 
+  it('does not move a call for a page it may not open again onto the page that came back', async () => {
+    const both = { ...listing(2, PAGE), output: `## Pages\n1: about:blank\n2: BeanCraft (${PAGE})\n3: Shop (https://unapproved.example/) [selected]` } as TurnEvent;
+    const { run, calls } = setup([{ id: 1, url: 'about:blank' }], [both]);
+    await run({ pageId: 2 });
+    await expect(run({ pageId: 3 })).rejects.toThrow('Page 3 showed https://unapproved.example/; open it again with new_page.');
+    expect(calls.map((c) => c['pageId'])).toEqual([2, 2, 3]);
+  });
+
+  it('does not move a call onto the page that came back when its own page failed to open again', async () => {
+    const pages = [{ id: 1, url: 'about:blank' }, { id: 2, url: PAGE }];
+    const { run, calls } = setup(pages, [listing(3, 'http://localhost:5173/')], SCREENSHOT, { openFails: true });
+    await expect(run({ pageId: 3 })).rejects.toThrow('Page 3 showed http://localhost:5173/; open it again with new_page.');
+    expect(calls.map((c) => c['pageId'])).toEqual([3]);
+  });
+
   it('reads the URL of a page with no title, which the listing shows bare', async () => {
     const untitled = { ...listing(2, PAGE), output: `## Pages\n1: about:blank\n2: ${PAGE} [selected]` } as TurnEvent;
     const { run, opened } = setup([{ id: 1, url: 'about:blank' }], [untitled]);
