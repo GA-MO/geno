@@ -36,6 +36,15 @@ describe("a deferred tool's first call that runs and fails", () => {
     expect([second.status, second.text, runs]).toEqual(['ok', 'audited', 2]);
   });
 
+  it('words a failure the tool returns, with what settled it, as it words one the tool throws', async () => {
+    const approval = { mode: 'ask', rule: 'mcp-tool', reason: 'r', command: NAME, decidedBy: 'user', verdict: 'allow', kept: 'session' } as const;
+    const inner = executor({ input: z.record(z.string(), z.unknown()), describe: () => NAME, run: async () => ({ text: 'Error: No page found', status: 'error', approval }) });
+    const ctx = { signal: new AbortController().signal, events: () => [], toolUseId: 'u1' } as unknown as ToolContext;
+    const r = await runTool(use('u1', { pageId: 2 }), ctx, rosterExecutors(roster, { [NAME]: inner }));
+    expect([r.status, r.loaded, r.approval]).toEqual(['error', [NAME], approval]);
+    expect(r.text).toContain('Geno loaded it and ran this call, which failed; it stays loaded, so call it directly.');
+  });
+
   it('still loads nothing when the input does not match the schema, since nothing ran', async () => {
     const inner = executor({ input: z.strictObject({ pageId: z.number() }), describe: () => NAME, run: async () => 'audited' });
     const executors = rosterExecutors(roster, { [NAME]: inner });
