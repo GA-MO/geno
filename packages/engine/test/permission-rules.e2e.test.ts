@@ -62,10 +62,14 @@ async function setup(replies: readonly Reply[]) {
     })
     .onNotification(acp.methods.client.session.update, () => {});
   const store = openStore(env);
-  /** A fresh engine and a new session in the workspace, as a reopened window would have. */
-  const session = <T>(work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>) =>
+  /** A fresh engine and a new session in the workspace, as a reopened window would have, or the session `existing` names. */
+  const session = <T>(work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>, existing?: string) =>
     client.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
       await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
+      if (existing !== undefined) {
+        await ctx.request(acp.methods.agent.session.load, { sessionId: existing, cwd: workspace, mcpServers: [] });
+        return work(ctx, existing);
+      }
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
       return work(ctx, sessionId);
     });
@@ -268,6 +272,27 @@ describe('remembered permission rules', () => {
     ]);
     expect(results().get(first.id)).toBe('1\tfirst note');
     expect(results().get(second.id)).toBe('1\tsecond note');
+  });
+
+  it('keeps a directory allowed for the session in a new engine on the same session, and asks again after Allow once or in a new session', async () => {
+    const outside = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-sibling-')));
+    await writeFile(path.join(outside, 'a.md'), 'first note\n');
+    await writeFile(path.join(outside, 'b.md'), 'second note\n');
+    const reads = [1, 2, 3, 4, 5].map(() => read(path.join(outside, 'b.md')));
+    const { permissions, session, prompt, answerWith } = await setup(reads.flatMap((use) => [toolCall('Reading.', [use], usage), answer('Read.', usage)]));
+    const readOnce = (text: string) => async (ctx: acp.ClientContext, sessionId: string) => (await prompt(ctx, sessionId, text), sessionId);
+
+    answerWith('allow-session');
+    const kept = await session(readOnce('Read the note next door.'));
+    answerWith('allow');
+    await session(readOnce('Read it again.'), kept);
+    expect(permissions, 'the same session in a new engine reads there unasked').toHaveLength(1);
+    await session(readOnce('Read the note next door.'));
+    expect(permissions, 'a new session asks').toHaveLength(2);
+
+    const once = await session(readOnce('Read the note next door.'));
+    await session(readOnce('Read it again.'), once);
+    expect(permissions, 'Allow once holds for that read only').toHaveLength(4);
   });
 });
 
