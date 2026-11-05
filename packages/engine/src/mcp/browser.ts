@@ -16,6 +16,7 @@ import {
   browserUrlOf,
   classifierInputOf,
   devServerHint,
+  effectivelyReadOnly,
   isMcpRule,
   mcpToolRuleName,
   navigationTarget,
@@ -147,8 +148,8 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
   });
 }
 
-/** The server's answer to a call whose pageId it does not have, as chrome-devtools-mcp words it. */
-const NO_PAGE = /No page found/;
+/** The server's whole answer to a call whose pageId it does not have, as chrome-devtools-mcp words it. */
+const NO_PAGE = /^(Error: )?No page found$/m;
 const BLANK = 'about:blank';
 
 /** The URL a page id last showed in this session's results, from the server's page listings ("2: Title (url)"). */
@@ -163,13 +164,13 @@ export function lastUrlOf(events: readonly TurnEvent[], id: number): string | un
 }
 
 /**
- * A call to a page the browser no longer has: the browser starts again with each run, and a page can close. With one
- * real page open the call goes there, and the reply says so; otherwise the error lists the open pages and the URL the
- * missing one showed.
+ * A call to a page the browser no longer has: the browser starts again with each run, and a page can close. A call
+ * that only reads the page goes to the one real page open, and the reply says so; any other call, which would change
+ * a page the model did not name, gets an error that lists the open pages and the URL the missing one showed.
  */
-function stalePage(state: BrowserState, workspace: string, id: number, events: readonly TurnEvent[]): { readonly retry: number; readonly note: string } | { readonly error: string } {
+function stalePage(state: BrowserState, workspace: string, id: number, events: readonly TurnEvent[], readOnly: boolean): { readonly retry: number; readonly note: string } | { readonly error: string } {
   const open = [...state.pages].filter(([, page]) => page.url !== BLANK);
-  const only = open.length === 1 ? open[0]! : undefined;
+  const only = open.length === 1 && readOnly ? open[0]! : undefined;
   // Only a page the rules let through without asking: a local page, or a host the user approved this session.
   const page = only === undefined ? undefined : browserPage(state, only[1].url, workspace);
   if (only !== undefined && page !== undefined && (page.url.kind === 'local' || page.approved)) {
@@ -255,9 +256,16 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         const id = Number(args['pageId']);
         if (!(error instanceof ToolError) || !NO_PAGE.test(error.message) || !Number.isInteger(id)) throw error;
         await refreshPages(handle, state, ctx.signal);
-        const stale = stalePage(state, ctx.workspace, id, ctx.events());
+        // The page is open, so the words came from the page itself, such as a script's own error.
+        if (state.pages.has(id)) throw error;
+        const stale = stalePage(state, ctx.workspace, id, ctx.events(), effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly }));
         if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
-        reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
+        try {
+          reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
+        } catch (retried) {
+          if (retried instanceof ToolError) throw new ToolError(`${stale.note}\n${retried.message}`);
+          throw retried;
+        }
         notes.push(stale.note);
       }
       await refreshPages(handle, state, ctx.signal);

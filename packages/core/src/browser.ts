@@ -147,7 +147,8 @@ export type BrowserContext = {
   readonly rules?: readonly PermissionRule[] | undefined;
 };
 
-const effectivelyReadOnly = (call: BrowserCall): boolean =>
+/** Whether a call only reads the page: a reads-unless-file tool given no file to write, or a tool the server marks read-only. */
+export const effectivelyReadOnly = (call: BrowserCall): boolean =>
   BROWSER_TOOL_KINDS[call.tool] === 'reads-unless-file' ? call.args['filePath'] === undefined || call.args['filePath'] === null : call.readOnly;
 
 function ruleDenial(rule: BrowserRuleId, mode: ApprovalMode, command: string, reason = BROWSER_RULES[rule].reason): Denial | undefined {

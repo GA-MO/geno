@@ -6,20 +6,25 @@ import { ToolError, type ToolContext } from '../src/tools/context.js';
 
 const WORKSPACE = '/w';
 const PAGE = `file://${WORKSPACE}/index.html`;
-const info: McpToolInfo = { server: 'browser', tool: 'take_screenshot', readOnly: true } as McpToolInfo;
+const SCREENSHOT = { server: 'browser', tool: 'take_screenshot', readOnly: true } as McpToolInfo;
 
-/** A browser server whose pages are `pages`; a call to a page it does not have answers as chrome-devtools-mcp does. */
-function setup(pages: { id: number; url: string }[], events: TurnEvent[] = []) {
+/**
+ * A browser server whose pages are `pages`; a call to a page it does not have answers as chrome-devtools-mcp does, and
+ * `fail` makes a call to a page it has fail with the page's own words.
+ */
+function setup(pages: { id: number; url: string }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, fail?: (args: Record<string, unknown>) => string | undefined) {
   const handle = { state: { status: 'ready' }, call: async () => ({ structured: { pages } }) } as unknown as McpServerHandle;
   const calls: Record<string, unknown>[] = [];
-  const executor = browserExecutor('mcp__browser__take_screenshot', info, {
+  const executor = browserExecutor(`mcp__browser__${info.tool}`, info, {
     handle,
     approval: { kind: 'non-interactive', mcp: true },
     state: newBrowserState(),
-    allowed: new Set(['mcp__browser__take_screenshot']),
+    allowed: new Set([`mcp__browser__${info.tool}`]),
     call: async (args) => {
       calls.push(args);
       if (!pages.some((p) => p.id === args['pageId'])) throw new ToolError('Error: No page found');
+      const failed = fail?.(args);
+      if (failed !== undefined) throw new ToolError(failed);
       return { text: `shot of page ${String(args['pageId'])}`, images: [] };
     },
   });
@@ -53,6 +58,32 @@ describe('a browser call to a page that is gone', () => {
     const { run, calls } = setup([{ id: 3, url: 'https://unapproved.example/' }]);
     await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
     expect(calls).toHaveLength(1);
+  });
+
+  it('never moves a call that changes a page, such as close_page, onto a page the model did not name', async () => {
+    const { run, calls } = setup([{ id: 1, url: 'about:blank' }, { id: 3, url: PAGE }], [], { server: 'browser', tool: 'close_page', readOnly: false } as McpToolInfo);
+    await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
+    expect(calls.map((c) => c['pageId'])).toEqual([2]);
+  });
+
+  it('does not move a screenshot that writes a file', async () => {
+    const { run, calls } = setup([{ id: 3, url: PAGE }]);
+    await expect(run({ pageId: 2, filePath: '/w/shot.png' })).rejects.toThrow(/Page 2 is not open/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("passes a page's own 'No page found' error through once, without a retry", async () => {
+    const own = setup([{ id: 2, url: PAGE }], [], SCREENSHOT, () => 'Error: No page found for /missing');
+    await expect(own.run({ pageId: 2 })).rejects.toThrow(/^Error: No page found for \/missing$/);
+    expect(own.calls).toHaveLength(1);
+    const exact = setup([{ id: 2, url: PAGE }], [], SCREENSHOT, () => 'Error: No page found');
+    await expect(exact.run({ pageId: 2 })).rejects.toThrow(/^Error: No page found$/);
+    expect(exact.calls).toHaveLength(1);
+  });
+
+  it('keeps the note when the call on the other page fails too', async () => {
+    const { run } = setup([{ id: 3, url: PAGE }], [], SCREENSHOT, (args) => (args['pageId'] === 3 ? 'Error: element 1_7 not found' : undefined));
+    await expect(run({ pageId: 2 })).rejects.toThrow(`[Geno] Page 2 is not open, so this ran on page 3 (${PAGE}), the only page open.\nError: element 1_7 not found`);
   });
 
   it('leaves other errors and calls without a pageId as they were', async () => {
