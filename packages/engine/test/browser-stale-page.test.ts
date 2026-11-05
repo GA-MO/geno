@@ -57,12 +57,22 @@ function setup(pages: { id: number; url: string; selected?: boolean }[], events:
 const listing = (id: number, url: string): TurnEvent =>
   ({ kind: 'tool-result', seq: 1, at: '', toolUseId: 't', name: 'mcp__browser__new_page', status: 'ok', output: `## Pages\n1: about:blank\n${id}: BeanCraft (${url}) [selected]` }) as unknown as TurnEvent;
 
+const text = (reply: Awaited<ReturnType<ReturnType<typeof setup>['run']>>) => (typeof reply === 'string' ? reply : reply.text);
+
 describe('a browser call to a page that is gone', () => {
   it('runs on the only real page open and says so', async () => {
     const { run, calls } = setup([{ id: 1, url: 'about:blank' }, { id: 3, url: PAGE }]);
     const reply = await run({ pageId: 2 });
     expect(calls.map((c) => c['pageId'])).toEqual([2, 3]);
     expect(typeof reply === 'string' ? reply : reply.text).toContain(`[Geno] Page 2 is not open, so this ran on page 3 (${PAGE}), the only page open.`);
+  });
+
+  it('still moves a read-only call onto the page the model opened itself in the new run, whose listing lacks the old id', async () => {
+    const reopenedByModel = { ...listing(2, PAGE), output: `## Pages\n1: about:blank\n2: BeanCraft (${PAGE}) [selected]` } as TurnEvent;
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }, { id: 2, url: PAGE }], [listing(3, `file://${WORKSPACE}/menu.html`), reopenedByModel]);
+    expect(text(await run({ pageId: 3 }))).toContain(`[Geno] Page 3 is not open, so this ran on page 2 (${PAGE}), the only page open.`);
+    expect(calls.map((c) => c['pageId'])).toEqual([3, 2]);
+    expect(opened).toEqual([]);
   });
 
   it('lists the open pages and the URL the missing page showed when it may not open that URL again itself', async () => {
@@ -118,7 +128,6 @@ describe('a browser call to a page that is gone', () => {
 
 describe('a browser call after the run started again with a blank browser', () => {
   const EMULATE = { server: 'browser', tool: 'emulate', readOnly: false } as McpToolInfo;
-  const text = (reply: Awaited<ReturnType<ReturnType<typeof setup>['run']>>) => (typeof reply === 'string' ? reply : reply.text);
 
   it('opens the local page the id showed again and runs a read-only call there, in one call', async () => {
     const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)]);
