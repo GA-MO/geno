@@ -35,7 +35,8 @@ function gate(roster: ToolRoster, name: string, inner: Executor): Executor {
         if (error instanceof ToolError && !(error instanceof ToolRejected || error instanceof ToolDenied)) throw new LoadedToolError(autoLoadedFailure(definition, error.message), [name]);
         throw error;
       }
-      return typeof reply === 'string' ? { text: autoLoadedText(definition, reply), loaded: [name] } : { ...reply, text: autoLoadedText(definition, reply.text), loaded: [name] };
+      if (typeof reply === 'string') return { text: autoLoadedText(definition, reply), loaded: [name] };
+      return { ...reply, text: (reply.status === 'error' ? autoLoadedFailure : autoLoadedText)(definition, reply.text), loaded: [name] };
     },
   };
 }

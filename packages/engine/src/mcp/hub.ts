@@ -221,7 +221,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
         try {
           ran = await callTool(handle, name, info, args, ctx);
         } catch (error) {
-          return failedAfterChecks(error, record === undefined ? {} : { approval: record });
+          return failedAfterChecks(error, record === undefined ? {} : { approval: record }, ctx.signal);
         }
         const { text, images } = ran;
         if (record === undefined && images.length === 0) return text;

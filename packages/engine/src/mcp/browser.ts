@@ -248,9 +248,9 @@ export function recallAllowances(events: readonly TurnEvent[], allowed: Set<stri
 /** What settled a call before it ran: its approval, and the host it opened. */
 export type Decided = { readonly approval?: ApprovalRecord; readonly openedHost?: string };
 
-/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it. */
-export function failedAfterChecks(error: unknown, decided: Decided): ToolReply {
-  if (!(error instanceof ToolError) || (decided.approval === undefined && decided.openedHost === undefined)) throw error;
+/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it; a stopped one still stops. */
+export function failedAfterChecks(error: unknown, decided: Decided, signal: AbortSignal): ToolReply {
+  if (signal.aborted || !(error instanceof ToolError) || (decided.approval === undefined && decided.openedHost === undefined)) throw error;
   return { text: error.message, status: 'error', ...decided };
 }
 
@@ -358,7 +358,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;
         ({ images } = reply);
       } catch (error) {
-        return failedAfterChecks(error, decided);
+        return failedAfterChecks(error, decided, ctx.signal);
       }
       if (decided.approval === undefined && decided.openedHost === undefined && images.length === 0) return text;
       return { text, ...decided, ...(images.length === 0 ? {} : { images }) };
