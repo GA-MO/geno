@@ -194,6 +194,13 @@ const approvalSchema = z.strictObject({
   interrupt: z.literal(true).optional(),
 });
 
+const allowanceSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('host'), host: z.string().min(1) }),
+  z.strictObject({ kind: z.literal('directory'), path: z.string().refine((dir) => path.isAbsolute(dir)) }),
+  z.strictObject({ kind: z.literal('schedule') }),
+]);
+const allowancesSchema = z.array(z.unknown()).transform((items) => items.flatMap((item) => (allowanceSchema.safeParse(item).data ?? [])));
+
 const hookNotesSchema = z.array(z.strictObject({ how: z.enum(['success', 'additional-context', 'blocking']), text: z.string() })).min(1);
 
 const todoSchema = z.array(z.strictObject({ id: z.string(), text: z.string(), status: z.enum(TODO_STATUSES) }));
@@ -246,8 +253,8 @@ const toolResultFields = {
   chapter: chapterMarkSchema.optional(),
   shown: shownFilesSchema.optional(),
   file: z.strictObject({ path: z.string().min(1), ...diskStateFields }).optional(),
-  // As with `kept`, a host the log cannot read is one nobody approved.
-  openedHost: z.string().min(1).optional().catch(undefined),
+  // As with `kept`, an allowance the log cannot read is one nobody gave.
+  allows: allowancesSchema.optional().catch(undefined),
   timing: z.strictObject(toolMarks).optional(),
 };
 

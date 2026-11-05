@@ -19,6 +19,7 @@ export * from './permission-comment.js';
 export * from './context-window.js';
 export * from './model-capabilities.js';
 export * from './tools.js';
+export * from './allowances.js';
 export * from './deferred-tools.js';
 export * from './page.js';
 export * from './loop.js';

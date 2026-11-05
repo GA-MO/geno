@@ -57,6 +57,7 @@ import {
   claudeDirOf,
   defaultUsd,
   agentToolModes,
+  sessionAllowances,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -175,7 +176,7 @@ export type AgentOptions = {
   readonly trustedWorkspace?: boolean | undefined;
   /**
    * The directories the user allowed the session to read from a card, kept by the engine across the session's runs;
-   * undefined keeps them to this run.
+   * undefined keeps them to this run. Those an earlier engine allowed come from the log.
    */
   readonly sessionDirectories?: Set<string> | undefined;
   /** A subagent of the session to resume with the prompt as its message, as the user's own `message_agent` call. */
@@ -243,9 +244,11 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const ruledPaths = (root: string) => async () => sandboxDenials(await permissions.list(), { workspace: root, tempDir, home });
   const setting = settingDirectories(io.env);
   if (setting.problem !== undefined) io.err(`directories: ${setting.problem}`);
+  const sessionDirectories = options.sessionDirectories ?? new Set<string>();
+  for (const directory of sessionAllowances(opened.log.events).directories) sessionDirectories.add(directory);
   const directories = workingDirectories(
     await addedDirectories([...setting.entries, ...(await permissions.directories())], lane?.repo.main ?? workspace, home, io.err),
-    options.sessionDirectories ?? new Set(),
+    sessionDirectories,
   );
   const writable = (more: readonly string[]) => [...more, ...directories.writable()];
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, writable: writable(lane?.gitWritable ?? []) }), ruledPaths(workspace));

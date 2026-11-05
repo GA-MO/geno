@@ -184,8 +184,9 @@ scenario:
                 at: settle
                 do: >-
                   `settle` เรียก `keep` ซึ่งเพิ่ม `/Users/me/shared-lib/src` เข้าโฟลเดอร์ที่ session นี้อ่านได้
+                  และบันทึกโฟลเดอร์ไว้ใน `allows` ของผลลัพธ์ engine ตัวใหม่ที่เปิด session เดิมจึงอ่านได้ต่อโดยไม่ถาม
                   การอ่านครั้งต่อไปใต้โฟลเดอร์นี้ไม่ถามอีก แต่ไฟล์ลับในนั้นยังถามแยก
-                ref: "packages/engine/src/tools/agent.ts#\"if (answer === 'allow-session' && denial.directory !== undefined) tools.directories.allow(denial.directory);\""
+                ref: "packages/engine/src/tools/agent.ts#\"allows = [{ kind: 'directory', path: denial.directory }];\""
                 phase: running-tools
           - id: reject
             label: Deny
@@ -232,7 +233,7 @@ scenario:
       do: >-
         `read` อ่านไฟล์โดยให้ราก filesystem เป็นโฟลเดอร์ที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
         ผลมีบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
-      ref: "packages/engine/src/tools/agent.ts#\"const approval = await askOutside(name, outside, reach);\""
+      ref: "packages/engine/src/tools/agent.ts#\"const decided = await askOutside(name, outside, reach);\""
 
     - use: tool-result-returns
 

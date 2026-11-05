@@ -238,7 +238,7 @@ describe('a browser call in a new run of the same session', () => {
   /** An earlier run's new_page of `url`, whose result showed page 4 at `url` and logged the host it opened, if it did. */
   const opening = (url: string, status = 'ok', openedHost: string | null = new URL(url).host): TurnEvent[] => [
     { kind: 'assistant', seq: 1, at: '', content: [{ type: 'tool_use', id: 'tu_open', name: 'mcp__browser__new_page', input: { url } }] } as unknown as TurnEvent,
-    { kind: 'tool-result', seq: 2, at: '', toolUseId: 'tu_open', name: 'mcp__browser__new_page', status, output: `## Pages\n1: about:blank\n4: Pricing (${url}) [selected]`, ...(openedHost === null ? {} : { openedHost }) } as unknown as TurnEvent,
+    { kind: 'tool-result', seq: 2, at: '', toolUseId: 'tu_open', name: 'mcp__browser__new_page', status, output: `## Pages\n1: about:blank\n4: Pricing (${url}) [selected]`, ...(openedHost === null ? {} : { allows: [{ kind: 'host', host: openedHost }] }) } as unknown as TurnEvent,
   ];
   const asking = () => {
     const asked: string[] = [];
@@ -269,9 +269,9 @@ describe('a browser call in a new run of the same session', () => {
     const NEW_PAGE = { server: 'browser', tool: 'new_page', readOnly: false } as McpToolInfo;
     const { approval } = asking();
     const opened = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval });
-    expect(await opened.run({ url: PRICING })).toMatchObject({ openedHost: 'approved.example', approval: { decidedBy: 'user', verdict: 'allow' } });
+    expect(await opened.run({ url: PRICING })).toMatchObject({ allows: [{ kind: 'host', host: 'approved.example' }], approval: { decidedBy: 'user', verdict: 'allow' } });
     const failed = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, fail: () => 'net::ERR_NAME_NOT_RESOLVED' });
-    expect(await failed.run({ url: PRICING })).toMatchObject({ status: 'error', text: 'net::ERR_NAME_NOT_RESOLVED', openedHost: 'approved.example', approval: { verdict: 'allow' } });
+    expect(await failed.run({ url: PRICING })).toMatchObject({ status: 'error', text: 'net::ERR_NAME_NOT_RESOLVED', allows: [{ kind: 'host', host: 'approved.example' }], approval: { verdict: 'allow' } });
     const local = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, fail: () => 'Error: boom' });
     await expect(local.run({ url: PAGE }), 'a call nothing settled still throws').rejects.toThrow('Error: boom');
     const stop = new AbortController();

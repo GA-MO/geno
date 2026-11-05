@@ -13,6 +13,7 @@ import { backgroundEndNotice, type BackgroundEndEvent } from './background.js';
 import type { Invocation } from './commands.js';
 import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
+import type { SessionAllowance } from './allowances.js';
 import type { ApprovalRecord } from './classifier.js';
 import type { ModelRetry } from './model-error.js';
 import type { EditorAction } from './editor-actions.js';
@@ -166,8 +167,8 @@ export type ToolResultEvent = {
   readonly shown?: ShownFiles | undefined;
   /** The file a read showed or an edit wrote, as the model now knows it (`file-tracker.ts`). */
   readonly file?: FileStamp | undefined;
-  /** The host of another machine a browser navigation opened once its checks let it through, approved for the rest of the session. */
-  readonly openedHost?: string | undefined;
+  /** What the call let the rest of the session do unasked (`allowances.ts`). */
+  readonly allows?: readonly SessionAllowance[] | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;

@@ -63,6 +63,7 @@ import {
   type LaneBounds,
   type PathTool,
   type Scripts,
+  type SessionAllowance,
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
@@ -80,6 +81,7 @@ import type { Sandbox } from '../sandbox.js';
 import {
   displayPath,
   executor,
+  failedAfterChecks,
   isSecret,
   missingPath,
   pathRuleRefusal,
@@ -93,6 +95,7 @@ import {
   ToolError,
   PermissionRerun,
   ToolRejected,
+  type Decided,
   type Executor,
   type ToolContext,
   type ToolReply,
@@ -624,16 +627,19 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   };
 
   /** The question `cat` of the same path meets, which offers the directory for the session; a refusal throws, naming the readable directories. */
-  const askOutside = async (name: ReachTool | typeof SHOW_FILES_TOOL, { target, directory }: Outside, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
+  const askOutside = async (name: ReachTool | typeof SHOW_FILES_TOOL, { target, directory }: Outside, ctx: ToolContext): Promise<Decided | undefined> => {
     const mode = modeOf(tools.approval);
     const denial = outsideReadDenial(`${name} ${target}`, target, directory, mode, ctx.credentialPlaces);
     if (denial === undefined) return undefined;
+    let allows: SessionAllowance[] | undefined;
     const keep = (answer: KeptAnswer) => {
-      if (answer === 'allow-session' && denial.directory !== undefined) tools.directories.allow(denial.directory);
+      if (answer !== 'allow-session' || denial.directory === undefined) return;
+      tools.directories.allow(denial.directory);
+      allows = [{ kind: 'directory', path: denial.directory }];
     };
     const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx, keep);
     if (approval.verdict === 'deny') throw outsideRefusal(approval, readableDirs(ctx));
-    return approval;
+    return { approval, ...(allows === undefined ? {} : { allows }) };
   };
 
   /**
@@ -654,10 +660,15 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const granted: ToolContext = { ...reach, readRoots: [...reach.readRoots, path.parse(outside.target).root] };
       const denied = pathRuleFor('read', outside.target, (await tools.permissions?.list()) ?? [], { ...scope(), workspace: ctx.workspace });
       if (denied?.effect === 'deny') return inner.run(raw, granted);
-      const approval = await askOutside(name, outside, reach);
-      const reply = await inner.run(raw, granted);
-      if (approval === undefined) return reply;
-      return typeof reply === 'string' ? { text: reply, approval } : { approval, ...reply };
+      const decided = await askOutside(name, outside, reach);
+      if (decided === undefined) return inner.run(raw, granted);
+      let reply: ToolReply;
+      try {
+        reply = await inner.run(raw, granted);
+      } catch (error) {
+        return failedAfterChecks(error, decided, ctx.signal);
+      }
+      return typeof reply === 'string' ? { text: reply, ...decided } : { ...decided, ...reply };
     },
   });
 
@@ -689,8 +700,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const rule = pathRuleFor('read', lexical, rules, { ...scope(), workspace: ctx.workspace }) ?? pathRuleFor('read', real, rules, { ...scope(), workspace: ctx.workspace });
     if (rule?.effect === 'deny') throw new ToolError(pathRuleRefusal(SHOW_FILES_TOOL, given, rule));
     const ruled = rule === undefined ? undefined : await askPathRule('read', given, { ...reach, readRoots: [...reach.readRoots, path.dirname(real)], pathRule: () => rule });
-    if (inside) return { real, approval: ruled };
-    return { real, approval: ruled ?? (await askOutside(SHOW_FILES_TOOL, { target: real, directory: path.dirname(real) }, reach)) };
+    if (inside || ruled !== undefined) return { real, approval: ruled };
+    return { real, ...(await askOutside(SHOW_FILES_TOOL, { target: real, directory: path.dirname(real) }, reach)) };
   };
 
   /** An edit may also write in the directories the user added as writable. */

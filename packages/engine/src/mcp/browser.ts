@@ -21,7 +21,7 @@ import {
   mcpToolRuleName,
   navigationTarget,
   NOTHING_LISTENS,
-  startsTurn,
+  sessionAllowances,
   type ApprovalMode,
   type ApprovalRecord,
   type BrowserPage,
@@ -34,7 +34,7 @@ import {
   type TurnEvent,
 } from '@g-code/core';
 import { denialText, modeOf, refusalOf, settle, type Approval, type KeptAnswer } from '../tools/agent.js';
-import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext, type ToolReply } from '../tools/context.js';
+import { executor, failedAfterChecks, resolveInside, resolveWritable, ToolError, type Decided, type Executor, type ToolContext } from '../tools/context.js';
 import type { McpServerHandle } from './server.js';
 
 /** How the server process is started; the flags that matter for safety are added after it by browserServerConfig. */
@@ -223,35 +223,11 @@ async function reopen(handle: McpServerHandle, state: BrowserState, id: number, 
   return undefined;
 }
 
-/** The events of the session's own turns. A fork's log begins with the turns it copied, whose answers were given to its source. */
-function ownEvents(events: readonly TurnEvent[]): readonly TurnEvent[] {
-  const head = events[0];
-  if (head?.kind !== 'session-start' || head.fork === undefined) return events;
-  const { turnSeq } = head.fork;
-  const start = events.findIndex((event) => startsTurn(event) && event.seq > turnSeq);
-  return start === -1 ? [] : events.slice(start);
-}
-
-/**
- * Adds what the user allowed earlier in the session, which a run that started since knows only from the log: the MCP
- * tools the user allowed for the session or the workspace, and the hosts the browser's navigations opened.
- */
+/** Adds what the user allowed earlier in the session, which a run that started since knows only from the log. */
 export function recallAllowances(events: readonly TurnEvent[], allowed: Set<string>, state: BrowserState): void {
-  for (const event of ownEvents(events)) {
-    if (event.kind !== 'tool-result') continue;
-    const { approval } = event;
-    if (approval?.kept !== undefined && approval.decidedBy === 'user' && approval.verdict === 'allow' && isMcpRule(approval.rule)) allowed.add(event.name);
-    if (event.openedHost !== undefined) state.approvedHosts.add(event.openedHost);
-  }
-}
-
-/** What settled a call before it ran: its approval, and the host it opened. */
-export type Decided = { readonly approval?: ApprovalRecord; readonly openedHost?: string };
-
-/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it; a stopped one still stops. */
-export function failedAfterChecks(error: unknown, decided: Decided, signal: AbortSignal): ToolReply {
-  if (signal.aborted || !(error instanceof ToolError) || (decided.approval === undefined && decided.openedHost === undefined)) throw error;
-  return { text: error.message, status: 'error', ...decided };
+  const { tools, hosts } = sessionAllowances(events);
+  for (const tool of tools) allowed.add(tool);
+  for (const host of hosts) state.approvedHosts.add(host);
 }
 
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
@@ -318,7 +294,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       const opened = target === undefined ? undefined : browserUrlOf(target, ctx.workspace);
       if (opened?.kind === 'remote') state.approvedHosts.add(opened.host);
 
-      const decided: Decided = { ...(record === undefined ? {} : { approval: record }), ...(opened?.kind === 'remote' ? { openedHost: opened.host } : {}) };
+      const decided: Decided = { ...(record === undefined ? {} : { approval: record }), ...(opened?.kind === 'remote' ? { allows: [{ kind: 'host', host: opened.host }] } : {}) };
       let text: string;
       let images: readonly ImageAttachment[];
       try {
@@ -360,7 +336,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       } catch (error) {
         return failedAfterChecks(error, decided, ctx.signal);
       }
-      if (decided.approval === undefined && decided.openedHost === undefined && images.length === 0) return text;
+      if (decided.approval === undefined && decided.allows === undefined && images.length === 0) return text;
       return { text, ...decided, ...(images.length === 0 ? {} : { images }) };
     },
   });

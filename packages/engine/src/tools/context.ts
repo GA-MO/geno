@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type HelperSpend, type PathRule, type PathTool, type ChapterMark, type ShownFiles, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type HelperSpend, type PathRule, type PathTool, type ChapterMark, type ShownFiles, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type SessionAllowance, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import type { PermissionStore } from '../permissions.js';
 import { isMissing } from '../store.js';
@@ -71,6 +71,15 @@ export class PermissionRerun extends Error {
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}
 
+/** What settled a call before it ran: its approval, and what it lets the rest of the session do. */
+export type Decided = { readonly approval?: ApprovalRecord | undefined; readonly allows?: readonly SessionAllowance[] | undefined };
+
+/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it; a stopped one still stops. */
+export function failedAfterChecks(error: unknown, decided: Decided, signal: AbortSignal): ToolReply {
+  if (signal.aborted || !(error instanceof ToolError) || (decided.approval === undefined && decided.allows === undefined)) throw error;
+  return { text: error.message, status: 'error', ...decided };
+}
+
 /** A deferred tool's first call that ran and failed: an error result, though the call loaded the tool. */
 export class LoadedToolError extends ToolError {
   constructor(
@@ -125,8 +134,8 @@ export type ToolReply =
       readonly shown?: ShownFiles | undefined;
       /** The file a read showed or an edit wrote, as the model now knows it. */
       readonly file?: FileStamp | undefined;
-      /** The host of another machine a browser navigation opened once its checks let it through. */
-      readonly openedHost?: string | undefined;
+      /** What the call let the rest of the session do unasked. */
+      readonly allows?: readonly SessionAllowance[] | undefined;
     };
 
 /** A tool's executor, typed on its parsed input. */
