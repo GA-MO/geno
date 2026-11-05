@@ -21,6 +21,7 @@ import {
   mcpToolRuleName,
   navigationTarget,
   NOTHING_LISTENS,
+  type ApprovalMode,
   type ApprovalRecord,
   type BrowserPage,
   type BrowserSettings,
@@ -28,6 +29,7 @@ import {
   type McpCall,
   type McpServerConfig,
   type McpToolInfo,
+  type PermissionRule,
   type TurnEvent,
 } from '@g-code/core';
 import { denialText, modeOf, refusalOf, settle, type Approval, type KeptAnswer } from '../tools/agent.js';
@@ -152,16 +154,25 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
 const NO_PAGE = /^(Error: )?No page found$/m;
 const BLANK = 'about:blank';
 
+const pageLine = (id: number) => new RegExp(`^${id}: .*\\((\\S+)\\)(?: \\[selected\\])?$`, 'm');
+const browserOutputs = (events: readonly TurnEvent[]): string[] =>
+  events.toReversed().flatMap((event) => (event.kind === 'tool-result' && event.name.startsWith(`mcp__${BROWSER_SERVER}__`) && 'output' in event ? [event.output] : []));
+
 /** The URL a page id last showed in this session's results, from the server's page listings ("2: Title (url)"). */
 export function lastUrlOf(events: readonly TurnEvent[], id: number): string | undefined {
-  const line = new RegExp(`^${id}: .*\\((\\S+)\\)(?: \\[selected\\])?$`, 'm');
-  for (const event of events.toReversed()) {
-    if (event.kind !== 'tool-result' || !event.name.startsWith(`mcp__${BROWSER_SERVER}__`)) continue;
-    const url = 'output' in event ? line.exec(event.output)?.[1] : undefined;
+  const line = pageLine(id);
+  for (const output of browserOutputs(events)) {
+    const url = line.exec(output)?.[1];
     if (url !== undefined) return url;
   }
   return undefined;
 }
+
+/** The URL a page id had in the latest page listing, the last the model saw of the browser; none after close_page closed it. */
+const listedUrlOf = (events: readonly TurnEvent[], id: number): string | undefined => {
+  const latest = browserOutputs(events).find((output) => /^## Pages$/m.test(output));
+  return latest === undefined ? undefined : pageLine(id).exec(latest)?.[1];
+};
 
 /**
  * A call to a page the browser no longer has: the browser starts again with each run, and a page can close. A call
@@ -179,6 +190,28 @@ function stalePage(state: BrowserState, workspace: string, id: number, events: r
   const listed = [...state.pages].map(([pid, p]) => `${pid}: ${p.url}`).join(', ') || 'none';
   const was = lastUrlOf(events, id);
   return { error: `Page ${id} is not open: the browser starts fresh in each run, and pages can close. Open pages: ${listed}.${was === undefined ? '' : ` Page ${id} showed ${was}; open it again with new_page.`}` };
+}
+
+/**
+ * A page the latest listing had that the browser lost, as when a new run starts it blank, back at the URL it showed:
+ * a page that already shows it, or a new one. Only when the browser may open that URL unasked, which is a page on
+ * this machine or a host the user approved this session.
+ */
+async function reopen(handle: McpServerHandle, state: BrowserState, id: number, ctx: ToolContext, mode: ApprovalMode, rules: readonly PermissionRule[]): Promise<{ readonly id: number; readonly text: string } | undefined> {
+  const url = listedUrlOf(ctx.events(), id);
+  if (url === undefined || url === BLANK) return undefined;
+  const judged = await canonical(url);
+  const page = browserPage(state, judged, ctx.workspace)!;
+  const denial = browserDenialFor({ name: 'new_page', tool: 'new_page', args: { url: judged }, readOnly: false }, mode, { workspace: ctx.workspace, allowedForSession: false, page: undefined, rules });
+  if (denial !== undefined && !(page.approved && denial.rule === 'browser-remote-url' && denial.verdict !== 'deny')) return undefined;
+  const showing = [...state.pages].find(([, p]) => p.url === url)?.[0];
+  if (showing !== undefined) return { id: showing, text: `Page ${showing} shows ${url}, which page ${id} showed` };
+  const before = new Set(state.pages.keys());
+  const result = await handle.call('new_page', { url }, ctx.signal).catch(() => undefined);
+  if (result === undefined || result.isError) return undefined;
+  await refreshPages(handle, state, ctx.signal);
+  const opened = [...state.pages].find(([pid, p]) => p.selected && !before.has(pid))?.[0];
+  return opened === undefined ? undefined : { id: opened, text: `Geno opened ${url}, which page ${id} showed, again as page ${opened}` };
 }
 
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
@@ -258,8 +291,15 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         await refreshPages(handle, state, ctx.signal);
         // The page is open, so the words came from the page itself, such as a script's own error.
         if (state.pages.has(id)) throw error;
-        const stale = stalePage(state, ctx.workspace, id, ctx.events(), effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly }));
-        if ('error' in stale) throw new ToolError(`${error.message}\n\n${stale.error}`);
+        const readOnly = effectivelyReadOnly({ name, tool: info.tool, args, readOnly: info.readOnly });
+        let stale = stalePage(state, ctx.workspace, id, ctx.events(), readOnly);
+        if ('error' in stale) {
+          const again = await reopen(handle, state, id, ctx, mode, rules);
+          if (again === undefined) throw new ToolError(`${error.message}\n\n${stale.error}`);
+          const gone = `[Geno] Page ${id} is not open: the browser starts fresh in each run, and pages can close. ${again.text}`;
+          if (!readOnly) throw new ToolError(`${error.message}\n\n${gone}; call ${info.tool} on page ${again.id}.`);
+          stale = { retry: again.id, note: `${gone}, and this ran there.` };
+        }
         try {
           reply = await deps.call({ ...args, pageId: stale.retry }, ctx);
         } catch (retried) {

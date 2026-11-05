@@ -118,10 +118,10 @@ describe('a browser call after the run started again with a blank browser', () =
     expect(text(reply)).toContain(`shot of page 2\n\n[Geno] Page 2 is not open: the browser starts fresh in each run, and pages can close. Geno opened ${PAGE}, which page 2 showed, again as page 2, and this ran there.`);
   });
 
-  it('opens a page on a host the user approved this session again', async () => {
+  it('opens a page on a host the user or the classifier approved this session again, in Auto', async () => {
     const state = newBrowserState();
     state.approvedHosts.add('approved.example');
-    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(4, 'https://approved.example/pricing')], SCREENSHOT, undefined, state);
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(4, 'https://approved.example/pricing')], SCREENSHOT, undefined, state, { kind: 'interactive', mode: () => 'auto' } as unknown as Approval);
     const reply = await run({ pageId: 4 });
     expect(opened).toEqual(['https://approved.example/pricing']);
     expect(calls.map((c) => c['pageId'])).toEqual([4, 2]);
@@ -149,6 +149,20 @@ describe('a browser call after the run started again with a blank browser', () =
       await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
       expect(opened).toEqual([]);
     }
+  });
+
+  it('does not open a page again that the model closed, which the latest listing no longer has', async () => {
+    const closed = { ...listing(2, PAGE), name: 'mcp__browser__close_page', output: '## Pages\n1: about:blank [selected]' } as TurnEvent;
+    const { run, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE), closed]);
+    await expect(run({ pageId: 2 })).rejects.toThrow(`Page 2 showed ${PAGE}; open it again with new_page.`);
+    expect(opened).toEqual([]);
+  });
+
+  it('does not point a call at a page that shows the URL when that URL is on a host nobody approved', async () => {
+    const { run, calls, opened } = setup([{ id: 3, url: 'https://unapproved.example/' }, { id: 4, url: PAGE }], [listing(2, 'https://unapproved.example/')]);
+    await expect(run({ pageId: 2 })).rejects.toThrow(/Open pages: 3: https:\/\/unapproved\.example\/, 4: /);
+    expect(calls).toHaveLength(1);
+    expect(opened).toEqual([]);
   });
 
   it('does not open the page again in Plan mode, where the browser may not open a page', async () => {
