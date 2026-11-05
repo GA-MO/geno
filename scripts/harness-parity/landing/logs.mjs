@@ -17,22 +17,52 @@ const lines = (file) =>
   });
 
 /**
+ * Anthropic's list price per million tokens, as packages/core/src/cost.ts has it; a cache write costs 1.25 times
+ * input for five minutes and twice input for an hour.
+ */
+const RATES = { 'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.2 }, 'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2 }, 'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1 } };
+
+/** What one model call cost, from the usage Claude Code streamed for it. An unpriced model is priced as Opus, never as free. */
+export function priceUsage(model, u) {
+  const r = RATES[model] ?? RATES['claude-opus-5-5'];
+  const hour = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+  const fiveMinutes = (u.cache_creation_input_tokens ?? 0) - hour;
+  return ((u.input_tokens ?? 0) * r.input + (u.output_tokens ?? 0) * r.output + (u.cache_read_input_tokens ?? 0) * r.cacheRead + fiveMinutes * r.input * 1.25 + hour * r.input * 2) / 1_000_000;
+}
+
+/**
  * Claude Code's dollars per round. A resumed session reports `total_cost_usd` as the session's running total, so a
  * round costs its last total minus the one before it; a total that goes down started a fresh count and is added.
- * A crashed or failed start reports zero, which says nothing about the running total and is skipped.
+ * A crashed or failed start reports zero, which says nothing about the running total and is skipped. A segment that
+ * was killed before its result line is priced from the usage of the model calls it streamed.
  */
 function claudeCosts(job) {
   const costs = [0, 0];
   let round = 0;
   let last = 0;
+  let calls = new Map();
+  let settled = true;
+  const settle = () => {
+    if (!settled) costs[round] += [...calls.values()].reduce((s, m) => s + priceUsage(m.model, m.usage), 0);
+    calls = new Map();
+    settled = true;
+  };
   for (const e of lines(path.join(job, 'claude.jsonl'))) {
-    if (e.type === 'hp-user' && e.text === FEEDBACK) round = 1;
+    if (e.type === 'hp-user') {
+      settle();
+      if (e.text === FEEDBACK) round = 1;
+      settled = false;
+    }
+    // Each streamed event repeats its call's usage as it grows, so the last one per call id is the call's total.
+    if (e.type === 'assistant' && e.message?.usage) calls.set(e.message.id, e.message);
     if (e.type !== 'result') continue;
+    settled = true;
     const total = e.total_cost_usd ?? 0;
     if (total === 0) continue;
     costs[round] += total >= last ? total - last : total;
     last = total;
   }
+  settle();
   return costs;
 }
 

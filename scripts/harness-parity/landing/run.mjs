@@ -15,7 +15,7 @@ import { CHECKS, passed, score } from './checks.mjs';
 import { judgeFixes, judgePair } from './judge.mjs';
 import { measure } from './measure.mjs';
 import { writeReport } from './report.mjs';
-import { HARNESSES, parseOptions } from './rules.mjs';
+import { budgetStep, HARNESSES, pairStep, parseOptions } from './rules.mjs';
 import { makeSheets } from './sheets.mjs';
 import { roundsOf, spentBy } from './logs.mjs';
 import { lineDiff } from './stats.mjs';
@@ -108,14 +108,18 @@ async function runJob(job) {
   let prior = { modelCalls: 0, usage: {} };
   for (const [i, text] of [PROMPT, FEEDBACK].entries()) {
     const started = Date.now();
-    const { ends, error } = await converse(job.harness, paths, opts.model, state, text, text, CONTINUES);
+    if (i === 1 && rounds[0].capped) {
+      rounds.push({ ms: 0, ends: [], modelCalls: 0, usage: {}, skipped: 'the run spent its cap in round 1, so it got no feedback round' });
+      break;
+    }
+    const { ends, error, capped } = await converse(job.harness, paths, opts.model, state, text, text, CONTINUES);
     charge();
     if (error) {
       writeJson(path.join(job.dir, 'failed.json'), { round: i + 1, error });
       throw new Error(`${job.harness} ${job.n} round ${i + 1}: ${error}`);
     }
     const t = transcriptOf(job.harness, paths, state);
-    rounds.push({ ms: Date.now() - started, ends, modelCalls: t.modelCalls - prior.modelCalls, usage: Object.fromEntries(Object.entries(t.usage).map(([k, v]) => [k, v - (prior.usage[k] ?? 0)])) });
+    rounds.push({ ms: Date.now() - started, ends, capped, modelCalls: t.modelCalls - prior.modelCalls, usage: Object.fromEntries(Object.entries(t.usage).map(([k, v]) => [k, v - (prior.usage[k] ?? 0)])) });
     prior = t;
     if (i === 0) copyPage(ws, path.join(job.dir, 'r1'));
   }
@@ -125,31 +129,37 @@ async function runJob(job) {
   const t = transcriptOf(job.harness, paths, state);
   writeFileSync(path.join(job.dir, 'transcript.md'), `# ${TASK_ID} · ${job.harness} ${job.n} · ${opts.model}\n\n${render(t.steps)}\n\n## change summary (round 2)\n${diffStat(path.join(job.dir, 'r1'), ws)}\n`);
   writeJson(record, { harness: job.harness, n: job.n, model: opts.model, session: state.session, rounds });
+  if (rounds[1].skipped) problems.push(`${job.harness} ${job.n}: ${rounds[1].skipped}; its final page is its round 1 page`);
 }
 
 async function runAll() {
   const queue = jobs.filter((j) => !existsSync(path.join(j.dir, 'record.json')));
-  let running = 0;
-  const done = jobs.length - queue.length;
-  console.log(`runs: ${done} of ${jobs.length} done, ${queue.length} to go, $${spent(jobs).toFixed(2)} spent of $${opts.budget}`);
+  const running = new Map();
+  console.log(`runs: ${jobs.length - queue.length} of ${jobs.length} done, ${queue.length} to go, $${spent(jobs).toFixed(2)} spent of $${opts.budget}`);
   const failures = [];
   await Promise.all(
     Array.from({ length: opts.parallel }, async () => {
       while (queue.length > 0) {
-        const projected = spent(jobs) + (running + 1) * RUN_CAP_USD;
-        if (projected > opts.budget) {
-          failures.push(`stopped before ${queue.length} runs: they could take the spend to $${projected.toFixed(2)} of the $${opts.budget} budget`);
+        const runningLeftUsd = [...running.keys()].map((j) => RUN_CAP_USD - spentBy(j.dir, j.harness));
+        const { step, projected } = budgetStep({ spentUsd: spent(jobs), runningLeftUsd, capUsd: RUN_CAP_USD, budgetUsd: opts.budget });
+        if (step === 'wait') {
+          await Promise.race(running.values());
+          continue;
+        }
+        if (step === 'stop') {
+          failures.push(`stopped before ${queue.length} runs: one more could take the spend to $${projected.toFixed(2)} of the $${opts.budget} budget`);
           queue.length = 0;
           break;
         }
         const job = queue.shift();
-        running += 1;
         console.log(`>>> ${job.harness} ${job.n}`);
-        await runJob(job).then(
+        const done = runJob(job).then(
           () => console.log(`<<< ${job.harness} ${job.n} done, $${spent(jobs).toFixed(2)} spent`),
           (error) => failures.push(error.message),
         );
-        running -= 1;
+        running.set(job, done);
+        await done;
+        running.delete(job);
       }
     }),
   );
@@ -183,6 +193,7 @@ async function judgeAll() {
   const remaining = opts.budget - spent(jobs);
   const via = opts.judge === 'cli' || remaining < todo.length * JUDGE_ESTIMATE_USD ? 'cli' : 'api';
   if (via !== opts.judge) console.log(`judge: $${remaining.toFixed(2)} of the budget is left for ${todo.length} calls, so the judge runs through the Claude Code CLI on the owner's sign-in`);
+  const waiting = new Set();
   for (const w of todo) {
     let result;
     if (w.job) {
@@ -191,21 +202,31 @@ async function judgeAll() {
       const shown = ['r1', 'r2'].every((r) => sheetsOf(job, r).hero !== undefined);
       if (shown) result = await judgeFixes(sheetsOf(job, 'r1'), sheetsOf(job, 'r2'), { before: [[card('r1', 375), '375px'], [card('r1', 1280), '1280px']], after: [[card('r2', 375), '375px'], [card('r2', 1280), '1280px']] }, via);
       else if (['r1', 'r2'].some((r) => readJson(path.join(job.dir, `shots-${r}`, 'measures.json'), {}).fatal !== undefined)) result = { why: 'no page to compare: a round left no index.html', forfeit: true };
-      else continue;
+      else {
+        waiting.add(`the feedback judgement of ${job.harness} ${job.n} waits: the meter could not show a round of it; run again with --remeasure`);
+        continue;
+      }
     } else {
       const [a, b] = w.order === 'AB' ? [w.c, w.g] : [w.g, w.c];
-      const shown = [a, b].map((p) => sheetsOf(p, w.r).hero !== undefined);
-      const fatal = [a, b].map((p) => readJson(path.join(p.dir, `shots-${w.r}`, 'measures.json'), {}).fatal !== undefined);
-      if (shown.every(Boolean)) result = await judgePair(sheetsOf(a, w.r), sheetsOf(b, w.r), via);
-      // A page with no index.html loses its pair rather than holding up the verdict; a meter failure waits for a remeasure.
-      else if (fatal.some(Boolean) && shown.every((s, i) => s || fatal[i])) result = { winner: fatal[0] && fatal[1] ? 'tie' : fatal[0] ? 'B' : 'A', totals: [0, 0], why: 'a page could not be shown: there is no index.html', forfeit: true };
-      else continue;
+      const facts = (p, label) => {
+        const m = readJson(path.join(p.dir, `shots-${w.r}`, 'measures.json'), undefined);
+        return { label, shown: sheetsOf(p, w.r).hero !== undefined, fatal: m?.fatal !== undefined, measured: m !== undefined, error: m && Object.values(m.errors ?? {})[0] };
+      };
+      const verdict = pairStep([facts(a, `${a.harness} ${a.n} ${w.r}`), facts(b, `${b.harness} ${b.n} ${w.r}`)]);
+      if (verdict.step === 'judge') result = await judgePair(sheetsOf(a, w.r), sheetsOf(b, w.r), via);
+      // A page with no index.html loses its pair rather than holding up the verdict.
+      else if (verdict.step === 'forfeit') result = { winner: verdict.winner, totals: [0, 0], why: 'a page could not be shown: there is no index.html', forfeit: true };
+      else {
+        waiting.add(verdict.why);
+        continue;
+      }
     }
     judged[w.key] = { ...result, via };
     writeJson(JUDGED, judged);
     charge();
     console.log(`judge ${w.key}: ${result.winner ?? JSON.stringify(result).slice(0, 80)}`);
   }
+  problems.push(...[...waiting].map((why) => `a judgement waits: ${why}`));
 }
 
 const stages = { calibrate, run: runAll, measure: measureAll, judge: judgeAll, report: () => writeReport({ round: opts.round, dir: ROUND, jobs, model: opts.model, budget: opts.budget, spentUsd: spent(jobs), judged: readJson(JUDGED, {}), problems }) };
