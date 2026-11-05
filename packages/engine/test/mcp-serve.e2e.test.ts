@@ -70,12 +70,17 @@ async function setup(replies: readonly Reply[], mcpJson?: unknown) {
       updates.push(params.update);
     });
   const store = openStore(env);
-  const connect = <T>(servers: acp.McpServer[], work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>) => {
+  /** A fresh engine, as a new process is, on a new session or on the one `existing` names. */
+  const connect = <T>(servers: acp.McpServer[], work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>, existing?: string) => {
     const mcp = mcpSessions(store, env);
     sessions.push(mcp);
     return client.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }, mcp), async (ctx) => {
       const init = await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
       expect(init.agentCapabilities?.mcpCapabilities).toEqual({ http: true, sse: true });
+      if (existing !== undefined) {
+        await ctx.request(acp.methods.agent.session.load, { sessionId: existing, cwd: workspace, mcpServers: servers });
+        return work(ctx, existing);
+      }
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: servers });
       return work(ctx, sessionId);
     });
@@ -140,6 +145,56 @@ describe('gcode serve with MCP', () => {
     expect(updates).toContainEqual(
       expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: first.id, _meta: { [APPROVAL_META]: expect.objectContaining({ rule: 'mcp-read-only', decidedBy: 'user', verdict: 'allow' }) } }),
     );
+  });
+
+  it('keeps a tool allowed for the session in a new engine on the same session, and asks again in a new session', async () => {
+    const echo = (text: string) => ({ id: `tu_kept_${text}`, name: 'mcp__fake__echo', input: { text } });
+    const { permissions, connect } = await setup([
+      toolCall('', [loadTools('mcp__fake__echo')], usage),
+      toolCall('Echoing.', [echo('one')], usage),
+      answer('Done.', usage),
+      toolCall('Again.', [echo('two')], usage),
+      answer('Done.', usage),
+      toolCall('', [loadTools('mcp__fake__echo')], usage),
+      toolCall('Fresh.', [echo('three')], usage),
+      answer('Done.', usage),
+    ]);
+    const echoOnce = (prompt: string) => (ctx: acp.ClientContext, sessionId: string) =>
+      serversUntil(ctx, sessionId, allReady).then(async () => {
+        await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: prompt }] });
+        return sessionId;
+      });
+
+    const first = await connect([editorServer()], echoOnce('echo one'));
+    expect(permissions).toHaveLength(1);
+    await connect([editorServer()], echoOnce('echo two'), first);
+    expect(permissions, 'the same session in a new engine does not ask again').toHaveLength(1);
+    const other = await connect([editorServer()], echoOnce('echo three'));
+    expect(other).not.toBe(first);
+    expect(permissions, 'a new session asks').toHaveLength(2);
+  });
+
+  it('asks again in a new engine on the same session after Allow once or Reject', async () => {
+    for (const once of ['allow', 'reject']) {
+      const echo = (text: string) => ({ id: `tu_${once}_${text}`, name: 'mcp__fake__echo', input: { text } });
+      const { permissions, connect, setAnswer } = await setup([
+        toolCall('', [loadTools('mcp__fake__echo')], usage),
+        toolCall('Echoing.', [echo('one')], usage),
+        ...(once === 'allow' ? [answer('Done.', usage)] : []),
+        toolCall('Again.', [echo('two')], usage),
+        answer('Done.', usage),
+      ]);
+      setAnswer(once);
+      const echoOnce = (prompt: string) => (ctx: acp.ClientContext, sessionId: string) =>
+        serversUntil(ctx, sessionId, allReady).then(async () => {
+          await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: prompt }] });
+          return sessionId;
+        });
+      const first = await connect([editorServer()], echoOnce('echo one'));
+      setAnswer('allow');
+      await connect([editorServer()], echoOnce('echo two'), first);
+      expect(permissions, `${once} holds for that call only`).toHaveLength(2);
+    }
   });
 
   it('shows an untrusted workspace server through the servers method, never starts it, and starts it once trusted over ACP', async () => {

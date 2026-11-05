@@ -19,9 +19,11 @@ type Options = {
   readonly approval?: Approval;
   /** new_page leaves its tab on an error page and fails, as when nothing listens at the URL. */
   readonly openFails?: boolean;
+  /** The tools this run allowed for the session so far; the tool under test by default. */
+  readonly allowed?: Set<string>;
 };
 
-function setup(pages: { id: number; url: string; selected?: boolean }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, { fail, state = newBrowserState(), approval = { kind: 'non-interactive', mcp: true }, openFails = false }: Options = {}) {
+function setup(pages: { id: number; url: string; selected?: boolean }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, { fail, state = newBrowserState(), approval = { kind: 'non-interactive', mcp: true }, openFails = false, allowed = new Set([`mcp__browser__${info.tool}`]) }: Options = {}) {
   const opened: string[] = [];
   const handle = {
     state: { status: 'ready' },
@@ -41,7 +43,7 @@ function setup(pages: { id: number; url: string; selected?: boolean }[], events:
     handle,
     approval,
     state,
-    allowed: new Set([`mcp__browser__${info.tool}`]),
+    allowed,
     call: async (args) => {
       calls.push(args);
       if (!pages.some((p) => p.id === args['pageId'])) throw new ToolError('Error: No page found');
@@ -227,6 +229,65 @@ describe('a browser call after the run started again with a blank browser', () =
     const { run, opened } = setup([{ id: 1, url: 'about:blank' }], [listing(2, PAGE)], SCREENSHOT, { approval: { kind: 'interactive', mode: () => 'plan' } as unknown as Approval });
     await expect(run({ pageId: 2 })).rejects.toThrow(/Page 2 is not open/);
     expect(opened).toEqual([]);
+  });
+});
+
+describe('a browser call in a new run of the same session', () => {
+  const PRICING = 'https://approved.example/pricing';
+  /** An earlier run's new_page of `url`, with its result's status and the listing it showed, page 4 at `url`. */
+  const opening = (url: string, status = 'ok', input: unknown = { url }): TurnEvent[] => [
+    { kind: 'assistant', seq: 1, at: '', content: [{ type: 'tool_use', id: 'tu_open', name: 'mcp__browser__new_page', input }] } as unknown as TurnEvent,
+    { kind: 'tool-result', seq: 2, at: '', toolUseId: 'tu_open', name: 'mcp__browser__new_page', status, output: `## Pages\n1: about:blank\n4: Pricing (${url}) [selected]` } as unknown as TurnEvent,
+  ];
+  const asking = () => {
+    const asked: string[] = [];
+    const approval = { kind: 'interactive', mode: () => 'ask', approve: async (denial: { command: string }) => (asked.push(denial.command), 'allow'), classify: async () => undefined } as unknown as Approval;
+    return { asked, approval };
+  };
+
+  it('opens a lost page again on a host the browser opened earlier in the session, and runs a read-only call there, asking nobody', async () => {
+    const { asked, approval } = asking();
+    const { run, calls, opened } = setup([{ id: 1, url: 'about:blank' }], opening(PRICING), SCREENSHOT, { approval });
+    expect(text(await run({ pageId: 4 }))).toContain(`Geno opened ${PRICING}, which page 4 showed, again as page 2, and this ran there.`);
+    expect(opened).toEqual([PRICING]);
+    expect(calls.map((c) => c['pageId'])).toEqual([4, 2]);
+    expect(asked).toEqual([]);
+  });
+
+  it('does not count a host whose opening was refused or rejected, or a call it cannot read', async () => {
+    for (const events of [opening(PRICING, 'denied'), opening(PRICING, 'rejected'), opening(PRICING, 'ok', PRICING), opening(PRICING, 'ok', { url: 7 })]) {
+      const { run, opened } = setup([{ id: 1, url: 'about:blank' }], events, SCREENSHOT, { approval: asking().approval });
+      await expect(run({ pageId: 4 })).rejects.toThrow(`Page 4 showed ${PRICING}; open it again with new_page.`);
+      expect(opened).toEqual([]);
+    }
+  });
+
+  it("does not take a host from the turns a fork copied from another session, only from the fork's own", async () => {
+    const forked = { kind: 'session-start', session: {}, fork: { sessionId: 'source', turnSeq: 1, title: 'Source' } } as unknown as TurnEvent;
+    const copied = setup([{ id: 1, url: 'about:blank' }], [forked, ...opening(PRICING)], SCREENSHOT, { approval: asking().approval });
+    await expect(copied.run({ pageId: 4 })).rejects.toThrow(`Page 4 showed ${PRICING}; open it again with new_page.`);
+    const prompt = { kind: 'user', seq: 3, at: '', content: 'go on' } as unknown as TurnEvent;
+    const own = opening(PRICING).map((event, i) => ({ ...event, seq: 4 + i }) as TurnEvent);
+    const fork = setup([{ id: 1, url: 'about:blank' }], [forked, ...opening(PRICING), prompt, ...own], SCREENSHOT, { approval: asking().approval });
+    expect(text(await fork.run({ pageId: 4 }))).toContain('again as page 2, and this ran there.');
+  });
+
+  it('runs a tool the user allowed for the session in an earlier run without asking, but asks again after Allow once or a no', async () => {
+    const answered = (record: Record<string, unknown>): TurnEvent =>
+      ({ kind: 'tool-result', seq: 1, at: '', toolUseId: 'tu_shot', name: 'mcp__browser__take_screenshot', status: 'ok', output: 'shot', approval: { mode: 'ask', rule: 'mcp-read-only', reason: 'r', command: 'mcp__browser__take_screenshot', decidedBy: 'user', ...record } }) as unknown as TurnEvent;
+    const cases: [Record<string, unknown>, number][] = [
+      [{ verdict: 'allow', kept: 'session' }, 0],
+      [{ verdict: 'allow', kept: 'workspace' }, 0],
+      [{ verdict: 'allow' }, 1],
+      [{ verdict: 'deny' }, 1],
+      [{ verdict: 'allow', kept: 'forever' }, 1],
+    ];
+    for (const [record, asks] of cases) {
+      const { asked, approval } = asking();
+      const { run } = setup([{ id: 3, url: PAGE }], [answered(record)], SCREENSHOT, { approval, allowed: new Set() });
+      await run({ pageId: 3 });
+      expect(asked, JSON.stringify(record)).toHaveLength(asks);
+    }
   });
 });
 
