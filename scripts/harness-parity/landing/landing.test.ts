@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { parseVotes } from './agree.mjs';
 import { parsePort, resolvePage, revealOf } from './compare.mjs';
 import { calibration } from './rejudge.mjs';
+import { SIGNS } from './rounds.mjs';
 import { CHECKS, contrastRatio, regressions, score } from './checks.mjs';
 import { decodePng } from './png.mjs';
 import { budgetStep, decide, pairStep, pairVerdict, parseOptions } from './rules.mjs';
@@ -326,5 +327,21 @@ describe('calibration', () => {
     const r = calibration(judged({ 'c1|g1': pick('A', 'B') }), {}, owner, pairs);
     expect([r.changed, r.judged, r.owner.next]).toEqual([[], 0, 0]);
     expect(r.missed).toEqual([{ pair: 1, owner: 'geno', judge: 'not judged' }, { pair: 2, owner: 'tie', judge: 'not judged' }]);
+  });
+});
+
+describe('the transcript signs of the engine fixes', () => {
+  const tool = (output: string) => ({ kind: 'tool', name: 'x', output });
+  const text = (t: string) => ({ kind: 'text', text: t });
+  it.each([
+    ['stale page', tool('Error: No page found'), tool('Took a screenshot')],
+    ['deferred preamble', tool('You called mcp__browser__x before loading it with tool_search.'), tool('Loaded this tool.')],
+    ['array as JSON text', tool('types: Invalid input: expected array, received string'), tool('types: Invalid input: expected number')],
+    ['GNU sed on macOS', tool('sed: 1: "index.html": command i expects \\ followed by text'), tool('sed: no such file')],
+    ['Thai reply', text('ผมตรวจแล้ว'), text('I checked it.')],
+    ['asks the user to check', text('Please move the pointer over it yourself.'), text('I moved the pointer over it.')],
+  ])('%s', (name, hit, miss) => {
+    const test = SIGNS[name as keyof typeof SIGNS];
+    expect([test(hit), test(miss)]).toEqual([true, false]);
   });
 });

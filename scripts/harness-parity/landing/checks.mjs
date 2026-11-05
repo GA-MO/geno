@@ -142,7 +142,7 @@ export const CHECKS = [
     test: (m) => (!m.hero.found ? fail('no canvas in the first screen') : when(m.hero.pointerDiff > m.hero.timeDiff * 1.25 + 0.5, `pointer move changed ${m.hero.pointerDiff}, time alone ${m.hero.timeDiff}`)),
   },
   {
-    id: 'context-restore', group: 'motion', session: 'desktop', label: 'the hero comes back after WEBGL_lose_context',
+    id: 'context-restore', group: 'motion', session: 'restore', label: 'the hero comes back after WEBGL_lose_context',
     test: (m) => {
       const r = m.restore;
       if (r === undefined || !r.tried) return fail('no WebGL context to lose');

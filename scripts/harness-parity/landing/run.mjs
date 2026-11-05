@@ -70,7 +70,7 @@ const jobs = HARNESSES.flatMap((harness) => Array.from({ length: opts.runs }, (_
 
 async function calibrate() {
   const file = path.join(ROUND, 'calibration.json');
-  const fixtures = { reference: path.join(HERE, 'fixtures/reference'), blank: path.join(HERE, 'fixtures/blank'), hostile: path.join(HERE, 'fixtures/hostile'), missing: path.join(HERE, 'fixtures/missing') };
+  const fixtures = { reference: path.join(HERE, 'fixtures/reference'), blank: path.join(HERE, 'fixtures/blank'), hostile: path.join(HERE, 'fixtures/hostile'), reloads: path.join(HERE, 'fixtures/reloads'), missing: path.join(HERE, 'fixtures/missing') };
   const result = {};
   for (const [name, dir] of Object.entries(fixtures)) {
     const scores = score(await measure(dir, path.join(ROUND, 'calibration', name)));
@@ -79,6 +79,7 @@ async function calibrate() {
   }
   const off = [];
   if (result.reference.passed < Math.ceil(CHECKS.length * 0.9)) off.push(`the reference page passes only ${result.reference.passed}/${CHECKS.length}: ${result.reference.failed.join('; ')}`);
+  if (!result.reloads.passedIds.includes('context-restore') || result.reloads.passed < result.reference.passed) off.push(`the page that reloads to recover its WebGL context passes ${result.reloads.passed}, and context-restore ${result.reloads.passedIds.includes('context-restore') ? 'passes' : 'fails'}: ${result.reloads.failed.join('; ')}`);
   for (const name of ['blank', 'missing']) if (result[name].passed > Math.floor(CHECKS.length * 0.1)) off.push(`the ${name} page passes ${result[name].passed}: ${result[name].passedIds.join(', ')}`);
   for (const id of ['no-storage', 'self-contained', 'no-hscroll@1280', 'tap-targets@375', 'console', 'no-pin', 'checkout', 'reduced-motion']) if (result.hostile.passedIds.includes(id)) off.push(`the hostile page passes ${id}`);
   writeJson(file, { ...result, off });

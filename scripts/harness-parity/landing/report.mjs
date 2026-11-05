@@ -115,7 +115,7 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   const cal = readJson(path.join(dir, 'calibration.json'));
   if (cal) {
     lines.push('## The meter on its fixtures', '', 'Checked before the runs. The reference page under `scripts/harness-parity/landing/fixtures/` does all the brief asks; the agents never see it.', '', '| fixture | checks passed | what it shows |', '|---|---|---|');
-    const what = { reference: 'a page that does everything', blank: 'an empty page', missing: 'a folder with no index.html', hostile: 'a dialog, a stored preference, an outside font, an error, a pin, and a hang under reduced motion' };
+    const what = { reference: 'a page that does everything', blank: 'an empty page', missing: 'a folder with no index.html', hostile: 'a dialog, a stored preference, an outside font, an error, a pin, and a hang under reduced motion', reloads: 'the reference page, recovering a lost WebGL context by reloading itself' };
     for (const [name, r] of Object.entries(cal).filter(([k]) => k !== 'off')) lines.push(`| ${name} | ${r.passed}/${r.of} | ${what[name]} |`);
     lines.push('');
   }
@@ -184,10 +184,14 @@ export async function writeReport({ round, dir, jobs, model, budget, spentUsd, j
   if (taste) {
     const tally = (t) => `Claude Code ${t.claude}, Geno ${t.geno}, tie ${t.tie}`;
     lines.push('## Judge calibrated on the owner', '', `The same screenshots of the final pages, judged again in both orders with the \`taste\` rubric in \`scripts/harness-parity/landing/judge.mjs\`: layout weighs 50, beauty 30 and brief 20, and layout is read the way the owner reads a page (one spacing rhythm, equal padding, true centring, a hierarchy that reads at a glance, nothing cluttered, a 375px page that holds; beauty means premium, not template or AI-made). No agent ran. The verdicts are in \`docs/results/landing-beancraft-${round}/judge-taste.json\`, apart from the round's judge.json, and cost $${taste.spentUsd.toFixed(2)}.`, '');
-    lines.push('| | rubric fixed before the run | taste rubric |', '|---|---|---|', `| agrees with the owner | ${taste.owner.base} of ${taste.owner.of} | ${taste.owner.next} of ${taste.owner.of} |`, `| the ${taste.judged} final pairs | ${tally(taste.tally.base)} | ${tally(taste.tally.next)} |`, '');
+    const voted = taste.owner.of > 0;
+    lines.push('| | rubric fixed before the run | taste rubric |', '|---|---|---|', ...(voted ? [`| agrees with the owner | ${taste.owner.base} of ${taste.owner.of} | ${taste.owner.next} of ${taste.owner.of} |`] : []), `| the ${taste.judged} final pairs | ${tally(taste.tally.base)} | ${tally(taste.tally.next)} |`, '');
     const named = { claude: 'Claude Code', geno: 'Geno', tie: 'a tie' };
     if (taste.missed?.length) lines.push(`Still apart from the owner: ${taste.missed.map((m) => `pair ${m.pair}, where the owner picked ${named[m.owner]} and the taste judge ${named[m.judge] ?? m.judge}`).join('; ')}.`, '');
-    lines.push(`${taste.changed.length} of the ${taste.judged} pairs changed: ${taste.changed.join(', ') || 'none'}. ${taste.owner.of} votes are too few to confirm a rubric: one pair more or less moves agreement by a third, so this says the taste rubric is worth testing on more votes, not that it matches the owner. The win rule above still uses the rubric fixed before the run.`, '');
+    const confirm = voted
+      ? `${taste.owner.of} votes are too few to confirm a rubric: one pair more or less moves agreement by a third, so this says the taste rubric is worth testing on more votes, not that it matches the owner.`
+      : "The owner has not voted on this round's pages yet, so how well either rubric matches the owner is not known here.";
+    lines.push(`${taste.changed.length} of the ${taste.judged} pairs changed: ${taste.changed.join(', ') || 'none'}. ${confirm} The win rule above still uses the rubric fixed before the run.`, '');
   }
   lines.push('## Compare the live pages', '', `\`scripts/harness-parity/landing/compare.html\` shows the same three pairs, sides hidden as in the vote, as live pages in frames at 375 and 1280, first round or after feedback, so the shader, the pointer and the reveals run for real. Reveal sides names the harnesses and the judge's verdict. Start it with \`node scripts/harness-parity/landing/compare.mjs --round ${round}\` and open http://127.0.0.1:4600/ (\`--port\` picks another port). The pages are served from \`${dir}\`, so they open on this Mac only.`, '');
 

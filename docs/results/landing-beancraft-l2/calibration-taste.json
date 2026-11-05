@@ -1,0 +1,29 @@
+{
+  "rubric": "taste",
+  "spentUsd": 1.58,
+  "owner": {
+    "base": 0,
+    "next": 0,
+    "of": 0
+  },
+  "missed": [],
+  "changed": [
+    "C1-G3: claude → tie",
+    "C3-G1: tie → claude",
+    "C3-G2: tie → claude",
+    "C3-G3: tie → claude"
+  ],
+  "tally": {
+    "base": {
+      "claude": 2,
+      "geno": 2,
+      "tie": 5
+    },
+    "next": {
+      "claude": 4,
+      "geno": 2,
+      "tie": 3
+    }
+  },
+  "judged": 9
+}
