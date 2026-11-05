@@ -4,6 +4,8 @@ Same model on both sides, 13 tasks replayed from Geno checkpoints of the user's 
 
 Opus 5.5 was judged through the Claude Code CLI after the API key ran out of credit, and its phases-all task did not finish for the same reason. The tables below are the first rounds. The run on the shipped prompt is under [Final run on the shipped prompt](#final-run-on-the-shipped-prompt-2026-11-03).
 
+Claude Code's dollar figures are too high in every cell with a hand-back. A resumed Claude Code session reports its running total, and run.mjs added the total of each segment, so the first segments were counted again (fixed on 2026-11-05). The run folders no longer exist, so these cells cannot be counted again. A run's real cost is below its figure and at least half of it with one hand-back, a third with two, and a quarter with three. On the landing bake-off's six Claude Code runs, which still have their logs, the real cost was 0.34 to 0.62 of the old count. Cells with no hand-back, Geno's dollars, tokens, model calls, checks and verdicts are not affected.
+
 ## claude-sonnet-5-5
 
 ### Claude Code r0,r2 vs Geno r4
