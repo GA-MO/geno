@@ -125,6 +125,7 @@ export type ToolReply =
       readonly shown?: ShownFiles | undefined;
       /** The file a read showed or an edit wrote, as the model now knows it. */
       readonly file?: FileStamp | undefined;
+      /** The host of another machine a browser navigation opened once its checks let it through. */
       readonly openedHost?: string | undefined;
     };
 

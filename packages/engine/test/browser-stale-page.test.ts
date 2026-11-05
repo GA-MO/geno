@@ -21,9 +21,10 @@ type Options = {
   readonly openFails?: boolean;
   /** The tools this run allowed for the session so far; the tool under test by default. */
   readonly allowed?: Set<string>;
+  readonly signal?: AbortSignal;
 };
 
-function setup(pages: { id: number; url: string; selected?: boolean }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, { fail, state = newBrowserState(), approval = { kind: 'non-interactive', mcp: true }, openFails = false, allowed = new Set([`mcp__browser__${info.tool}`]) }: Options = {}) {
+function setup(pages: { id: number; url: string; selected?: boolean }[], events: TurnEvent[] = [], info: McpToolInfo = SCREENSHOT, { fail, state = newBrowserState(), approval = { kind: 'non-interactive', mcp: true }, openFails = false, allowed = new Set([`mcp__browser__${info.tool}`]), signal = new AbortController().signal }: Options = {}) {
   const opened: string[] = [];
   const handle = {
     state: { status: 'ready' },
@@ -52,7 +53,7 @@ function setup(pages: { id: number; url: string; selected?: boolean }[], events:
       return { text: `shot of page ${String(args['pageId'])}`, images: [] };
     },
   });
-  const ctx = { workspace: WORKSPACE, signal: new AbortController().signal, events: () => events, permissions: undefined } as unknown as ToolContext;
+  const ctx = { workspace: WORKSPACE, signal, events: () => events, permissions: undefined } as unknown as ToolContext;
   return { run: (args: Record<string, unknown>) => executor.run(args, ctx), calls, opened };
 }
 
@@ -273,6 +274,9 @@ describe('a browser call in a new run of the same session', () => {
     expect(await failed.run({ url: PRICING })).toMatchObject({ status: 'error', text: 'net::ERR_NAME_NOT_RESOLVED', openedHost: 'approved.example', approval: { verdict: 'allow' } });
     const local = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, fail: () => 'Error: boom' });
     await expect(local.run({ url: PAGE }), 'a call nothing settled still throws').rejects.toThrow('Error: boom');
+    const stop = new AbortController();
+    const stopped = setup([{ id: 1, url: 'about:blank' }], [], NEW_PAGE, { approval, signal: stop.signal, fail: () => (stop.abort(), 'net::ERR_ABORTED') });
+    await expect(stopped.run({ url: PRICING }), 'a call the user stopped still stops the turn').rejects.toThrow('net::ERR_ABORTED');
   });
 
   it("does not take a host from the turns a fork copied from another session, only from the fork's own", async () => {
