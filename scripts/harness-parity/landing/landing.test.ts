@@ -71,6 +71,24 @@ describe('score', () => {
   });
 });
 
+describe('the brief checks read meaning, not heading words', () => {
+  const page = (headings: { text: string; body: string }[], extra = {}) => ({ errors: {}, brief: { text: 'x'.repeat(4000), headings, blocks: [], subscribes: [], links: [], ...extra } });
+  it('finds an FAQ under an editorial heading, and needs both freshness and grinding', () => {
+    expect(score(page([{ text: 'Freshness and grinding, answered.', body: 'How fresh is it? Roasted Monday. Can you grind it? Yes.' }])).faq.pass).toBe(true);
+    expect(score(page([{ text: 'Questions', body: 'How fresh is it? Very. Do you ship abroad? No.' }])).faq).toMatchObject({ pass: false, detail: 'no FAQ covers both freshness and grinding' });
+  });
+  it('does not count the hero heading, whose section is the whole page', () => {
+    const all = 'Questions? Is it fresh? Can you grind? farms, organic certification, packaging '.repeat(60);
+    const s = score({ errors: {}, brief: { text: all, headings: [{ text: 'BeanCraft', body: all }], blocks: [], subscribes: [], links: [] } });
+    expect([s.faq.pass, s.sustainability.pass]).toEqual([false, false]);
+  });
+  it('takes a PDF the page builds as a blob behind a link that says PDF', () => {
+    expect(score(page([], { links: [{ href: 'blob:http://127.0.0.1/1f2e', text: 'Download the brew guide (PDF)', download: false }] })).pdf.pass).toBe(true);
+    expect(score(page([], { links: [{ href: 'blob:http://127.0.0.1/1f2e', text: 'Open', download: false }] })).pdf.pass).toBe(false);
+    expect(score(page([], { links: [{ href: 'not a url', text: 'PDF', download: true }] })).pdf.pass).toBe(false);
+  });
+});
+
 describe('contrastRatio', () => {
   it('matches WCAG for black on white and blends translucent text', () => {
     expect(contrastRatio([0, 0, 0, 1], [255, 255, 255, 1])).toBeCloseTo(21, 0);

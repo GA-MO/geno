@@ -12,7 +12,7 @@ const RUNNERS = ['claude-sonnet-5-5'];
 export function parseOptions(argv) {
   const { values } = parseArgs({
     args: argv,
-    options: { round: { type: 'string' }, runs: { type: 'string' }, model: { type: 'string' }, budget: { type: 'string' }, parallel: { type: 'string' }, judge: { type: 'string' }, stability: { type: 'string' }, only: { type: 'string' }, help: { type: 'boolean' } },
+    options: { round: { type: 'string' }, runs: { type: 'string' }, model: { type: 'string' }, budget: { type: 'string' }, parallel: { type: 'string' }, judge: { type: 'string' }, stability: { type: 'string' }, only: { type: 'string' }, remeasure: { type: 'boolean' }, help: { type: 'boolean' } },
     strict: true,
   });
   const v = { ...DEFAULTS, ...values };
@@ -28,7 +28,7 @@ export function parseOptions(argv) {
   if (!['api', 'cli'].includes(v.judge)) throw new Error(`--judge must be api or cli, got "${v.judge}"`);
   const stages = ['calibrate', 'run', 'measure', 'judge', 'report'];
   if (v.only !== undefined && !stages.includes(v.only)) throw new Error(`--only must be one of ${stages.join(', ')}, got "${v.only}"`);
-  return { round: v.round, runs: int('runs', 1, 5), model: v.model, budget, parallel: int('parallel', 1, 6), judge: v.judge, stability: int('stability', 0, 25), only: v.only, help: v.help === true };
+  return { round: v.round, runs: int('runs', 1, 5), model: v.model, budget, parallel: int('parallel', 1, 6), judge: v.judge, stability: int('stability', 0, 25), only: v.only, remeasure: v.remeasure === true, help: v.help === true };
 }
 
 /** A pair's verdict: a side wins only when both orders pick it; a split or a tie in either order is a tie. */

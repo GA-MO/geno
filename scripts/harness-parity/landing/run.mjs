@@ -2,7 +2,8 @@
 // BeanCraft page `--runs` times from an empty folder and take one round of feedback, score every page by script,
 // judge the pages blind in pairs, and write the results doc and the owner's blind vote page.
 // Every stage keeps its output in the round's folder and skips what is already there, so a rerun resumes.
-// usage: node scripts/harness-parity/landing/run.mjs [--round l1] [--runs 3] [--budget 15] [--parallel 3] [--judge api|cli] [--stability 9] [--only calibrate|run|measure|judge|report]
+// usage: node scripts/harness-parity/landing/run.mjs [--round l1] [--runs 3] [--budget 15] [--parallel 3] [--judge api|cli] [--stability 9] [--only calibrate|run|measure|judge|report] [--remeasure]
+// --remeasure measures every page again after the meter changed; runs and verdicts already made are kept.
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,7 +151,7 @@ async function measureAll() {
   for (const job of jobs) {
     for (const r of ['r1', 'r2']) {
       const shots = path.join(job.dir, `shots-${r}`);
-      if (!existsSync(path.join(job.dir, r)) || existsSync(path.join(shots, 'sheets.json'))) continue;
+      if (!existsSync(path.join(job.dir, r)) || (!opts.remeasure && existsSync(path.join(shots, 'sheets.json')))) continue;
       console.log(`measure ${job.harness} ${job.n} ${r}`);
       const m = await measure(path.join(job.dir, r), shots);
       writeJson(path.join(shots, 'sheets.json'), m.fatal ? {} : await makeSheets(shots, m));
