@@ -189,6 +189,10 @@ Per round (1 / 2). Shots are screenshots it took of its own work. Edits against 
 
 A blind page of 3 pairs of final pages, sides shuffled: [landing-beancraft-l1/vote.html](landing-beancraft-l1/vote.html). The key is kept apart in `docs/results/landing-beancraft-l1/vote-key.json`. After voting, `node scripts/harness-parity/landing/agree.mjs --round l1 --votes <the code the page shows>` says how many pairs the judge and the owner agree on.
 
+## Compare the live pages
+
+`scripts/harness-parity/landing/compare.html` shows the same three pairs, sides hidden as in the vote, as live pages in frames at 375 and 1280, first round or after feedback, so the shader, the pointer and the reveals run for real. Reveal sides names the harnesses and the judge's verdict. Start it with `node scripts/harness-parity/landing/compare.mjs --round l1` and open http://127.0.0.1:4600/ (`--port` picks another port). The pages are served from `/Users/sbpdigital/Development/hp-runs/l1`, so they open on this Mac only.
+
 ## Method
 
 Both harnesses get the same brief word for word, in an empty folder (`~/Development/beancraft` in a fresh HOME), on `claude-sonnet-5-5`. Claude Code runs `claude -p --permission-mode auto`, and Geno runs `gcode agent --mode auto --browser`. Both get the same headless browser server (chrome-devtools-mcp). The brief follows UI-Bench prompt #21, with the stack and motion asks added. When a request ends by handing work back, the simulated user answers "go on" up to twice. After the first request ends, the same session gets one feedback message. Each side builds the page 3 times.

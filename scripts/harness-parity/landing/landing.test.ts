@@ -4,6 +4,7 @@ import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { parseVotes } from './agree.mjs';
+import { parsePort, resolvePage, revealOf } from './compare.mjs';
 import { CHECKS, contrastRatio, regressions, score } from './checks.mjs';
 import { decodePng } from './png.mjs';
 import { decide, pairVerdict, parseOptions } from './rules.mjs';
@@ -214,5 +215,40 @@ describe('the shipping check names every weekday', () => {
   const page = (body: string) => ({ errors: {}, brief: { text: 'x'.repeat(4000), headings: [{ text: 'Delivery', body }], blocks: [], subscribes: [], links: [] } });
   it.each([['We ship every Wednesday.', true], ['Roast Tuesday, ship Thursday.', true], ['Ships Saturdays.', true], ['Roasted Mon–Tue, ships Wed.', true], ['Sun-dried beans ship fast.', false], ['We ship quickly.', false], ['Wednesday-roasted, shipped the same day.', true]])('%s', (body, pass) => {
     expect(score(page(body)).shipping.pass).toBe(pass);
+  });
+});
+
+describe('the compare server', () => {
+  const runs = mkdtempSync(path.join(tmpdir(), 'landing-runs-'));
+  for (const [h, n] of [['claude', 1], ['geno', 1]] as const) {
+    mkdirSync(path.join(runs, `landing-beancraft.${h}.${n}`, 'r2'), { recursive: true });
+    writeFileSync(path.join(runs, `landing-beancraft.${h}.${n}`, 'r2', 'index.html'), `<p>${h}</p>`);
+  }
+  writeFileSync(path.join(runs, 'secret.txt'), 'outside');
+  const key = { pairs: [{ pair: 1, n: 1, A: 'geno', B: 'claude', judge: 'claude' }] };
+  it('maps a blind page address to its run folder', () => {
+    expect(resolvePage(key, runs, '/p/1-A/r2/')).toEqual({ file: path.join(runs, 'landing-beancraft.geno.1', 'r2', 'index.html') });
+    expect(resolvePage(key, runs, '/p/1-B/r2/index.html?x=1').file).toBe(path.join(runs, 'landing-beancraft.claude.1', 'r2', 'index.html'));
+  });
+  it.each([
+    ['/p/1-A/r2/../../../secret.txt', 404],
+    ['/p/1-A/r2/%2e%2e/%2e%2e/%2e%2e/secret.txt', 404],
+    ['/p/1-A/r2/..%2f..%2f..%2fsecret.txt', 403],
+    ['/p/1-A/r2/%E0%A4%A', 400],
+    ['/p/1-A/r2/index.html%00.png', 400],
+    ['/p/2-A/r2/', 404],
+    ['/p/1-C/r2/', 404],
+    ['/p/1-A/r3/', 404],
+    ['/p/1-A/r1/', 404],
+    ['/p/01-A/r2/missing.js', 404],
+    ['/etc/passwd', 404],
+  ])('refuses %s with %i', (url, status) => {
+    expect(resolvePage(key, runs, url)).toMatchObject({ status });
+  });
+  it('names the sides only in the reveal', () => {
+    expect(revealOf(key, {})).toEqual([{ pair: 1, A: 'Geno run 1', B: 'Claude Code run 1', judge: { r1: 'not judged', r2: 'not judged' } }]);
+  });
+  it.each(['0', '-1', '65536', '80.5', 'abc', ''])('refuses port %j', (p) => {
+    expect(() => parsePort(p)).toThrow(/--port/);
   });
 });
