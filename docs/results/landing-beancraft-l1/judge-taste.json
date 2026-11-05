@@ -1,0 +1,362 @@
+{
+  "pair|r2|c1|g1|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "B": {
+      "brief": 8,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      8.2,
+      6.7
+    ],
+    "winner": "A",
+    "why": "Page A holds a consistent spacing rhythm, with even card padding, a clear price hierarchy and well-separated sections; its only notable flaws are the shipping table cut off at 375px and the FAQ column sitting off the main grid. Page B has nice details like the roast meters and full mobile nav, but its scroll reveals leave whole sections blank in the motion frames, its FAQ column leaves a lopsided empty right side, and its schedule table is also clipped on mobile.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c1|g1|BA|1": {
+    "A": {
+      "brief": 8,
+      "beauty": 6,
+      "layout": 6
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "totals": [
+      6.4,
+      7.7
+    ],
+    "winner": "B",
+    "why": "Page B has the stronger hierarchy: a dark featured Duo card, a clear upcoming-cycles table and a distinct green sustainability band make each screen read at a glance, though its narrower FAQ column breaks the shared grid and its schedule table is clipped at 375px. Page A is tidy and consistent but more template-like, its shipping table is also cut off at 375px, and its scroll reveals leave whole sections blank in the motion frames.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c1|g2|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "totals": [
+      6.9,
+      7.4
+    ],
+    "winner": "B",
+    "why": "Both pages deliver every requested section, and both have a shipping table that clips at 375px. A's FAQ column is centred while the rest of the page is left-aligned, its roast cards sit at uneven heights, and the roaster image carries an awkward caption. B keeps a cleaner shared left edge, steadier section rhythm and a clearer price hierarchy, with purposeful sensory details like the acidity and body bars and the tasting-note tags.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c1|g2|BA|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "totals": [
+      7.4,
+      7.7
+    ],
+    "winner": "B",
+    "why": "Both pages deliver every requested section in a consistent warm palette. At 375px both cut off the shipping table and wrap the roaster stats awkwardly, and A's FAQ also sits as a narrow left-hung column at 1280px. B looks more intentional, with its serif display headline, origin cards, dated cycle table and confident green sustainability band, though its FAQ column is inset off the shared left edge.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c1|g3|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      7.7,
+      6.9
+    ],
+    "winner": "A",
+    "why": "A holds a steadier rhythm with clear plan hierarchy: a dark featured card, big price numerals and a distinct green sustainability band, though its FAQ column is indented off the grid and the mobile shipping table is cut off on the right. B delivers the same sections, but it leans on a flatter cream-on-cream palette with a crude roaster illustration, and it shares the off-grid FAQ and the clipped mobile schedule table, which leaves it slightly weaker.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c1|g3|BA|1": {
+    "A": {
+      "brief": 8,
+      "beauty": 6,
+      "layout": 6
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "totals": [
+      6.4,
+      7.4
+    ],
+    "winner": "B",
+    "why": "B has the clearer pricing hierarchy, with a dark highlighted Duo card and big per-bag numbers, a more refined roaster illustration and a purposeful green sustainability band, while A's crude figure illustration and narrow off-grid FAQ column feel more template-like. Both crop their schedule tables at 375px, but A's cut-off mid-word text and its weaker focal hierarchy across sections leave it slightly behind.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g1|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      8.2,
+      6.9
+    ],
+    "winner": "A",
+    "why": "Page A holds a consistent section rhythm and clean, evenly padded cards at both widths, with clear price hierarchy and a well-stacked 375px layout; its only weak spots are the narrow centred FAQ column, which breaks the shared left edge, and a schedule table that crops at mobile. Page B has strong ideas, such as the paired sourcing and cadence section and the roaster stats, but at 375px the nav wraps awkwardly, the logo is clipped and the schedule table text is cut off, and at 1280px the half-width FAQ leaves a large empty area on the right.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g1|BA|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "totals": [
+      7.4,
+      8.2
+    ],
+    "winner": "B",
+    "why": "B keeps a steadier rhythm: alternating dark and cream sections, the origins list and the cycle table give each screen a clear first element, and its tidy price cards make the choice easy at a glance. A is clean and consistent but more uniform and template-like, its 375px shipping table is cut off (B's 375px cycle table also loses its last column), and its scroll reveals leave whole sections blank mid-scroll.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g2|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      8.2,
+      6.9
+    ],
+    "winner": "A",
+    "why": "A holds a steady section rhythm, with evenly padded card rows, a clearly first serif hero, centred FAQ and sustainability blocks that sit on the grid, and a 375px stack that stays clean apart from a slightly clipped schedule table. B is competent and warm, but its FAQ hugs the left half at 1280px and leaves a large empty right side, its shipping table is cut off at 375px, and the olive sustainability band and dark featured card feel more template-like and less cohesive.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g2|BA|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 6
+    },
+    "totals": [
+      7.4,
+      7.2
+    ],
+    "winner": "A",
+    "why": "A keeps a steady spacing rhythm, consistent card padding and a clear hierarchy throughout, but its FAQ sits in a narrow left column that leaves dead space at 1280px, and its shipping table is clipped at 375px. B looks more premium with its serif headings and dark/cream alternation, yet its layout slips more: the origin cards have uneven heights, the hero eyebrow wraps awkwardly at 375px, the 'M' roaster avatar is oversized on mobile, and its schedule table is also clipped.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g3|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "B": {
+      "brief": 8,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      8.2,
+      6.7
+    ],
+    "winner": "A",
+    "why": "A holds a steady section rhythm with clear hierarchy: a strong hero, evenly padded roast and plan cards with prominent per-bag prices, and a schedule shown as both a timeline and a table, and it stacks cleanly at 375px apart from a slightly tight table edge. B is warm and competent, but its 375px schedule table clips text, the brew-guide button sits orphaned, the placeholder roaster illustration looks unfinished, and the sections feel more template-like.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c2|g3|BA|1": {
+    "A": {
+      "brief": 8,
+      "beauty": 6,
+      "layout": 6
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "totals": [
+      6.4,
+      7.7
+    ],
+    "winner": "B",
+    "why": "Page B has the stronger hierarchy and more product-grade detail: the origin list, the dated cycle table, clear plan cards and alternating warm and dark sections, though its 375px schedule table is cut off and its roast cards are uneven in height. Page A is clean and consistent but more template-like, with a placeholder roaster illustration, a narrow inset FAQ column and a 375px schedule table that clips its text.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g1|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 8
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "totals": [
+      8.2,
+      7.4
+    ],
+    "winner": "A",
+    "why": "A has the more distinctive hero, with an italic amber accent over a richer shader, and it keeps a tight, consistent section rhythm with clean plan cards and an even roaster and schedule layout, though its schedule table is cut off at 375px. B is equally complete and adds good informative detail (roast meters, roaster stats), but its schedule table also clips at 375px, its motion frames show whole sections still blank mid-scroll, and its hero and boxed FAQ read more generic.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g1|BA|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "totals": [
+      7.4,
+      7.7
+    ],
+    "winner": "B",
+    "why": "Both pages share a consistent section rhythm and warm palette, and both crop the shipping table at 375px, so layout is roughly even. B looks more intentional, with the italic accent headline, flavor-note lines on the roast cards, the dashed brew-guide callout and the distinct green sustainability band, while A's sections read more like a template.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g2|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 7
+    },
+    "totals": [
+      7.7,
+      7.4
+    ],
+    "winner": "A",
+    "why": "Page A's serif display type with the italic amber accent, its tinted section bands and its green sustainability block feel warmer and more deliberately branded, while Page B's sans headlines and stock card patterns read closer to a template, although its dark featured plan card gives the pricing a stronger hierarchy. Both keep a consistent rhythm and grid at 1280px, and at 375px both cut off the shipping table and wrap the hero bullets, with B's roaster stats also stacking awkwardly and A's oversized monogram block crowding the roaster section, so layout comes out even.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g2|BA|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 6,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      7.1,
+      6.9
+    ],
+    "winner": "A",
+    "why": "A keeps a steady section rhythm with evenly padded cards and clear price hierarchy, though its sans-serif styling feels closer to a polished template and its 375px schedule table is cut off at the edge. B looks more premium with its serif display type, italic accent and green sustainability band, but its 375px table is also clipped and the scroll frames show large empty areas where reveals have not fired.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g3|AB|1": {
+    "A": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 7,
+      "layout": 6
+    },
+    "totals": [
+      7.7,
+      6.9
+    ],
+    "winner": "A",
+    "why": "A holds a steadier vertical rhythm with consistent left edges, clear big-number plan cards and a tidy pause/roaster/schedule sequence, though its shipping table gets cut off at 375px. B covers the brief just as fully but its FAQ block is indented off the shared grid, the stock-looking avatar illustration stacks awkwardly on mobile, and its schedule table also clips at 375px.",
+    "via": "api",
+    "rubric": "taste"
+  },
+  "pair|r2|c3|g3|BA|1": {
+    "A": {
+      "brief": 8,
+      "beauty": 6,
+      "layout": 6
+    },
+    "B": {
+      "brief": 9,
+      "beauty": 8,
+      "layout": 7
+    },
+    "totals": [
+      6.4,
+      7.7
+    ],
+    "winner": "B",
+    "why": "B has the stronger hierarchy and a more intentional look: an eyebrow and accent-italic hero, per-shipment price lines on the plan cards, a numbered delivery timeline, a monogram roaster card with chips, and a distinct green sustainability band. A is clean, but its crude placeholder roaster illustration, oddly placed brew-guide link, narrow centred FAQ column, and schedule table cut off at 375px make it feel more template-like. B's mobile table also overflows and its FAQ leaves empty space at 1280px, but overall it holds a more consistent rhythm.",
+    "via": "api",
+    "rubric": "taste"
+  }
+}

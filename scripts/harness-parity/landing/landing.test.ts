@@ -5,6 +5,7 @@ import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { parseVotes } from './agree.mjs';
 import { parsePort, resolvePage, revealOf } from './compare.mjs';
+import { calibration } from './rejudge.mjs';
 import { CHECKS, contrastRatio, regressions, score } from './checks.mjs';
 import { decodePng } from './png.mjs';
 import { budgetStep, decide, pairStep, pairVerdict, parseOptions } from './rules.mjs';
@@ -303,5 +304,27 @@ describe('genoCapped', () => {
     expect(genoCapped('budget: stopped at an estimated $3.012000, past --max-cost 3')).toBe(true);
     expect(genoCapped('max-turns: stopped after 125 model calls (--max-turns 125)')).toBe(false);
     expect(genoCapped('a plan for every budget: stopped at nothing')).toBe(false);
+  });
+});
+
+describe('calibration', () => {
+  const pick = (ab: string, ba: string) => ({ AB: { winner: ab }, BA: { winner: ba } });
+  const judged = (verdicts: Record<string, { AB: { winner: string }; BA: { winner: string } }>) =>
+    Object.fromEntries(Object.entries(verdicts).flatMap(([pair, v]) => [[`pair|r2|${pair}|AB|1`, v.AB], [`pair|r2|${pair}|BA|1`, v.BA]]));
+  const pairs = [[1, 1], [1, 2], [2, 2]];
+  const owner = [{ pair: 1, n: 1, owner: 'geno' }, { pair: 2, n: 2, owner: 'tie' }];
+  it('counts agreement with the owner and the pairs a new rubric decides differently', () => {
+    const base = judged({ 'c1|g1': pick('A', 'B'), 'c1|g2': pick('A', 'B'), 'c2|g2': pick('A', 'B') });
+    const next = judged({ 'c1|g1': pick('B', 'A'), 'c1|g2': pick('A', 'B'), 'c2|g2': pick('A', 'A') });
+    const r = calibration(base, next, owner, pairs);
+    expect(r.owner).toEqual({ base: 0, next: 2, of: 2 });
+    expect(r.changed).toEqual(['C1-G1: claude → geno', 'C2-G2: claude → tie']);
+    expect(r.tally.next).toEqual({ claude: 1, geno: 1, tie: 1 });
+    expect(r.missed).toEqual([]);
+  });
+  it('leaves a pair only one rubric judged out of the change count', () => {
+    const r = calibration(judged({ 'c1|g1': pick('A', 'B') }), {}, owner, pairs);
+    expect([r.changed, r.judged, r.owner.next]).toEqual([[], 0, 0]);
+    expect(r.missed).toEqual([{ pair: 1, owner: 'geno', judge: 'not judged' }, { pair: 2, owner: 'tie', judge: 'not judged' }]);
   });
 });
