@@ -74,9 +74,13 @@ export class ToolError extends Error {}
 /** What settled a call before it ran: its approval, and what it lets the rest of the session do. */
 export type Decided = { readonly approval?: ApprovalRecord | undefined; readonly allows?: readonly SessionAllowance[] | undefined };
 
-/** A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it; a stopped one still stops. */
+/**
+ * A call that failed once it got past its checks still logs what settled it, so a later run of the session knows it.
+ * A stopped call still stops, and a later refusal, such as of a secret file below an allowed directory, keeps its own.
+ */
 export function failedAfterChecks(error: unknown, decided: Decided, signal: AbortSignal): ToolReply {
-  if (signal.aborted || !(error instanceof ToolError) || (decided.approval === undefined && decided.allows === undefined)) throw error;
+  if (signal.aborted || !(error instanceof ToolError) || error instanceof ToolRejected || error instanceof ToolDenied) throw error;
+  if (decided.approval === undefined && decided.allows === undefined) throw error;
   return { text: error.message, status: 'error', ...decided };
 }
 
