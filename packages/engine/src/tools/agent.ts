@@ -235,6 +235,9 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
     return `denied: \`${command}\` matches ${reason}. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
   if (rule === 'workspace-ask') {
+    if (mode === 'plan') {
+      return `denied: \`${command}\` matches ${reason}. Plan mode asks nobody; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, or say in your answer what you need.`;
+    }
     return `denied: \`${command}\` matches ${reason}, and nobody can answer here. ${DONT_ASK}`;
   }
   // A path the user must allow is not a tool-specific block, so it gets no invitation to try another tool on it.
