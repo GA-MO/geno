@@ -50,6 +50,23 @@ describe('schedule_task in Plan', () => {
     }
   });
 
+  it('refuses a change the user allowed on its card while the session switched to Plan, and keeps "Allow for this chat"', async () => {
+    for (const answer of ['allow', 'allow-session'] as const) {
+      const { tools, changed } = recording();
+      let mode: ApprovalMode = 'ask';
+      const executor = scheduleExecutor({ ...tools, approve: async () => ((mode = 'plan'), answer) }, () => mode);
+      const reply = await executor.run({ action: 'create', prompt: '/review', when: 'in 1h' }, ctx).then(
+        (ok) => ok,
+        (error: unknown) => ({ text: (error as Error).message }),
+      );
+      expect(reply, answer).toEqual({
+        text: `schedule_task create ${PLAN_REFUSAL}`,
+        ...(answer === 'allow-session' ? { status: 'error', allows: [{ kind: 'schedule' }] } : {}),
+      });
+      expect(changed, answer).toEqual([]);
+    }
+  });
+
   it('makes the change in Ask, after asking', async () => {
     expect(await run('ask', { action: 'create', prompt: '/review', when: 'in 1h' })).toMatchObject({ changed: ['asked', 'create'] });
   });

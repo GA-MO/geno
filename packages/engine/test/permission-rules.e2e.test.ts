@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -15,6 +15,7 @@ import {
   type PermissionRemoveRequest,
   type PermissionsRequest,
   type PermissionsResponse,
+  type TurnEvent,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -25,6 +26,7 @@ import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
+type ModeEvent = Extract<TurnEvent, { kind: 'mode' }>;
 let nextId = 0;
 const bash = (command: string): FakeToolUse => ({ id: `tu_rule_${nextId++}`, name: 'bash', input: { command } });
 const read = (file: string): FakeToolUse => ({ id: `tu_rule_${nextId++}`, name: 'read', input: { path: file } });
@@ -54,10 +56,12 @@ async function setup(replies: readonly Reply[]) {
   const permissions: acp.RequestPermissionRequest[] = [];
   let optionId = 'reject';
   let comment: string | undefined;
+  let whileAsking: ((params: acp.RequestPermissionRequest) => Promise<void>) | undefined;
   const client = acp
     .client({ name: 'test-editor' })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+    .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       permissions.push(params);
+      await whileAsking?.(params);
       return { outcome: { outcome: 'selected', optionId, ...(comment === undefined ? {} : { _meta: { [PERMISSION_COMMENT_META]: comment } }) } };
     })
     .onNotification(acp.methods.client.session.update, () => {});
@@ -86,7 +90,7 @@ async function setup(replies: readonly Reply[]) {
         (r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: string }[]).flatMap((b) => (b.type === 'tool_result' ? [[b.tool_use_id!, b.content!] as const] : [])),
       ),
     );
-  return { workspace, home, store, transport, permissions, session, sessionless, prompt, results, answerWith: (id: string, said?: string) => ((optionId = id), (comment = said)) };
+  return { workspace, home, store, transport, permissions, session, sessionless, prompt, results, answerWith: (id: string, said?: string) => ((optionId = id), (comment = said)), beforeAnswering: (work: typeof whileAsking) => void (whileAsking = work) };
 }
 
 const list = (ctx: acp.ClientContext, cwd: string) => ctx.request<PermissionsResponse, PermissionsRequest>(PERMISSIONS_METHOD, { cwd });
@@ -204,6 +208,41 @@ describe('remembered permission rules', () => {
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls -t', reason: 'the workspace rule that asks before `ls`, which the user set in Settings under Permissions' });
     expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject', 'reject-with-comment']);
     expect(transport.requests.filter((r) => r.body.tool_choice !== undefined), 'the classifier is not called').toEqual([]);
+  });
+
+  it('refuses a command or an edit the user allowed on a card while the session switched to Plan, and keeps the rule the card saved', async () => {
+    const listing = bash('ls -t ..');
+    const editing: FakeToolUse = { id: `tu_rule_${nextId++}`, name: 'edit', input: { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' } };
+    const { workspace, store, permissions, session, prompt, results, answerWith, beforeAnswering } = await setup([
+      toolCall('Listing.', [listing], usage),
+      answer('Not listed.', usage),
+      toolCall('Editing.', [read('a.ts'), editing], usage),
+      answer('Not edited.', usage),
+    ]);
+    const rules = await session(async (ctx, sessionId) => {
+      await add(ctx, workspace, 'ask', 'Edit(a.ts)');
+      // The card's handler cannot await the engine's reply, so it answers once the session's log shows Plan.
+      const switched: Promise<unknown>[] = [];
+      const inPlan = async () => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events.findLast((e): e is ModeEvent => e.kind === 'mode')?.mode === 'plan';
+      beforeAnswering(async () => {
+        switched.push(ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' }));
+        while (!(await inPlan())) await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      answerWith('allow-workspace');
+      await prompt(ctx, sessionId, 'List the parent');
+      await Promise.all(switched);
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      answerWith('allow');
+      await prompt(ctx, sessionId, 'Edit it');
+      await Promise.all(switched);
+      return (await list(ctx, workspace)).rules;
+    });
+
+    expect(permissions.map((p) => p.toolCall.rawInput)).toMatchObject([{ command: 'ls -t ..' }, { command: 'edit a.ts' }]);
+    expect(results().get(listing.id)).toBe('`ls -t ..` is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.');
+    expect(results().get(editing.id)).toBe('edit is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.');
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+    expect(rules, '"Always allow in this workspace" is kept, though Plan refused the call').toContainEqual(expect.objectContaining({ effect: 'allow', pattern: ['ls', '-t', '..'] }));
   });
 
   it('still asks before a hard ask that an allow rule names, offers no rule for it, and refuses to save an allow rule for one', async () => {
