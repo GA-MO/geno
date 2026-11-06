@@ -245,6 +245,27 @@ describe('remembered permission rules', () => {
     expect(rules, '"Always allow in this workspace" is kept, though Plan refused the call').toContainEqual(expect.objectContaining({ effect: 'allow', pattern: ['ls', '-t', '..'] }));
   });
 
+  it('runs a read-only command the user allowed on an ask rule\'s card while the session switched to Plan, as Plan runs it unasked', async () => {
+    const listing = bash('ls');
+    const { workspace, store, permissions, session, prompt, results, answerWith, beforeAnswering } = await setup([toolCall('Listing.', [listing], usage), answer('Listed.', usage)]);
+    await session(async (ctx, sessionId) => {
+      await add(ctx, workspace, 'ask', 'Bash(ls *)');
+      const switched: Promise<unknown>[] = [];
+      const inPlan = async () => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events.findLast((e): e is ModeEvent => e.kind === 'mode')?.mode === 'plan';
+      beforeAnswering(async () => {
+        switched.push(ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' }));
+        while (!(await inPlan())) await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      answerWith('allow');
+      await prompt(ctx, sessionId, 'List the workspace');
+      await Promise.all(switched);
+    });
+
+    expect(permissions.map((p) => p.toolCall.rawInput), 'Ask asked about it').toMatchObject([{ command: 'ls' }]);
+    expect(results().get(listing.id)).not.toContain('not available');
+    expect(results().get(listing.id)).toContain('a.ts');
+  });
+
   it('still asks before a hard ask that an allow rule names, offers no rule for it, and refuses to save an allow rule for one', async () => {
     const forced = bash('git push --force origin main');
     const { workspace, permissions, transport, session, prompt, results } = await setup([toolCall('Pushing.', [forced], usage), answer('Not pushed.', usage)]);
