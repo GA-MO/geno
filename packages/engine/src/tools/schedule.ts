@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  modeRefusal,
   parseScheduleTask,
   SCHEDULE_TASK_TOOL,
   scheduleListText,
@@ -13,6 +12,7 @@ import {
   type ScheduledTask,
   type ScheduleToolInput,
 } from '@g-code/core';
+import { planRefusal } from './agent.js';
 import { executor, failedAfterChecks, ToolError, type Decided, type Executor, type ToolContext, type ToolReply } from './context.js';
 
 /** The user's answer to a change: once, for the rest of the chat, or no. */
@@ -49,13 +49,18 @@ export function scheduleExecutor(tools: ScheduleTools, mode: () => ApprovalMode)
     return z.NEVER;
   });
   const line = (task: ScheduledTask) => taskLine(task, tools.zone(), tools.now());
-  /** Makes a change once the user allowed it, which they need not do again in a chat where they allowed every change, in this run or an earlier one. */
+  /**
+   * Makes a change once the user allowed it, which they need not do again in a chat where they allowed every change, in
+   * this run or an earlier one. A switch to Plan while the card shows refuses it, and keeps the user's answer.
+   */
   const change = async (proposed: ScheduleChange, ctx: ToolContext, apply: () => Promise<string>): Promise<ToolReply> => {
     let decided: Decided = {};
     if (!sessionAllowances(ctx.events()).schedule) {
       const answer = await tools.approve(proposed, ctx.signal);
       if (answer === 'reject') return DECLINED;
       if (answer === 'allow-session') decided = { allows: [{ kind: 'schedule' }] };
+      const plan = planRefusal(mode(), `${SCHEDULE_TASK_TOOL} ${proposed.kind}`);
+      if (plan !== undefined) return failedAfterChecks(plan, decided, ctx.signal);
     }
     try {
       return { text: await apply(), ...decided };
@@ -67,7 +72,8 @@ export function scheduleExecutor(tools: ScheduleTools, mode: () => ApprovalMode)
     input,
     describe: describeInput,
     async run(request, ctx) {
-      if (request.action !== 'list' && mode() === 'plan') throw new ToolError(modeRefusal(`${SCHEDULE_TASK_TOOL} ${request.action}`, 'plan'));
+      const plan = request.action === 'list' ? undefined : planRefusal(mode(), `${SCHEDULE_TASK_TOOL} ${request.action}`);
+      if (plan !== undefined) throw plan;
       switch (request.action) {
         case 'list':
           return scheduleListText(await tools.list(), tools.zone(), tools.now());

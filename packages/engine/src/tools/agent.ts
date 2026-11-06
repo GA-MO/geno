@@ -159,13 +159,21 @@ async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInp
 }
 
 /**
+ * Plan's refusal of a change, undefined in every other mode. A change meets it at the call, and again once the
+ * classifier, a hook or the user allowed it, since the session may switch to Plan while the call waits.
+ */
+export const planRefusal = (mode: ApprovalMode, change: string): ToolError | undefined => (mode === 'plan' ? new ToolError(modeRefusal(change, mode)) : undefined);
+
+/**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
  * In Auto the classifier's allow runs the command. Its deny or ask, or a call it could not evaluate, refuses it, with
  * the reason going back to the model, until the session has had too many such blocks in a row or in all
  * (`autoFallsBack`): then the user's card decides. A classifier that cannot judge anything, being off or not set up or
  * refused for its key or model, puts the card to the user. `keep` runs, and is awaited, when the user's yes
  * outlives the call. Where the card would show, or where a run nobody can answer would refuse only for that, the
- * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them.
+ * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them. A `change`, named
+ * as Plan's refusal names it, is refused once allowed if the session switched to Plan meanwhile; the user's kept
+ * answer is kept all the same.
  */
 export async function settle(
   approval: Approval,
@@ -174,6 +182,7 @@ export async function settle(
   input: () => ClassifierInput | Promise<ClassifierInput>,
   call: CallScope,
   keep: (answer: KeptAnswer) => void | Promise<void> = () => {},
+  change?: string,
 ): Promise<ApprovalRecord> {
   const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command, ...(denial.line === undefined ? {} : { line: denial.line }) };
   const refused: ApprovalRecord = { ...record, decidedBy: 'rule', verdict: 'deny' };
@@ -185,18 +194,23 @@ export async function settle(
     return { ...record, decidedBy: 'hook', verdict: 'allow' };
   };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
+  const unlessPlanNow = (decided: ApprovalRecord): ApprovalRecord => {
+    const plan = decided.verdict === 'allow' && change !== undefined ? planRefusal(modeOf(approval), change) : undefined;
+    if (plan !== undefined) throw plan;
+    return decided;
+  };
   const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
-  if (classifier?.verdict === 'allow') return { ...record, classifier, decidedBy: 'classifier', verdict: 'allow' };
+  if (classifier?.verdict === 'allow') return unlessPlanNow({ ...record, classifier, decidedBy: 'classifier', verdict: 'allow' });
   // A classifier that cannot judge anything would refuse every such call, so the user's card stands in for it.
   if (classifier !== undefined && classifier.failure !== 'unavailable' && !autoFallsBack(autoBlocksOf(call.events()))) return { ...record, classifier, decidedBy: 'classifier', verdict: 'deny' };
   const byHook = await hooked();
-  if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
+  if (byHook !== undefined) return unlessPlanNow({ ...byHook, ...(classifier === undefined ? {} : { classifier }) });
   const answer = await approval.approve(denial, classifier);
   if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
   const allowed = typeof answer === 'string' && answer !== 'reject';
   const comment = typeof answer === 'string' ? {} : { comment: answer.comment };
   const kept = answer === 'allow-session' ? { kept: 'session' as const } : answer === 'allow-workspace' ? { kept: 'workspace' as const } : {};
-  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...kept, ...comment };
+  return unlessPlanNow({ ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...kept, ...comment });
 }
 
 export function denialText({ mode, rule, command, reason, classifier, decidedBy, message, interrupt, comment }: ApprovalRecord): string {
@@ -588,7 +602,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const mode = modeOf(tools.approval);
     const ruled = userRuleDenial(rule, `${tool} ${displayPath(ctx, real)}`);
     const denial = mode === 'plan' ? { ...ruled, verdict: 'deny' as const } : ruled;
-    const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx);
+    const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx, undefined, tool === 'edit' ? 'edit' : undefined);
     if (approval.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
@@ -754,7 +768,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
-      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep);
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep, `\`${command}\``);
     if (approval?.verdict === 'deny') {
       if (approval.rule === 'path-outside-workspace') throw outsideRefusal(approval, readableDirs(ctx));
       throw approval.rule === 'process-kill' && approval.decidedBy !== 'user' ? refusalOf(approval, `${denialText(approval)}${killHint()}`) : refusalOf(approval);
