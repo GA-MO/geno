@@ -10,7 +10,7 @@ import { DISK_FILES } from '../src/files.js';
 import { permissionStore } from '../src/permissions.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { openStore } from '../src/store.js';
-import { agentExecutors, type Approval } from '../src/tools/agent.js';
+import { agentExecutors, denialText, type Approval } from '../src/tools/agent.js';
 import { runTool, type ToolContext } from '../src/tools/index.js';
 import { ruleAttacher } from '../src/tools/rules.js';
 import { rgCommand } from './helpers.js';
@@ -134,6 +134,19 @@ describe('a command in Plan that reads a path a Read rule covers', () => {
     expect(grep.status).toBe('denied');
     expect(grep.text).not.toContain('TODO: ship');
     expect(grep.text, 'the Read rule refused it').toContain('Read(notes.md)');
+  });
+
+  it('tells the model, for a rule that asks, that the user is asked in Ask or Auto, with one text for read and bash', async () => {
+    const { bash, call } = await switchingToPlan({ effect: 'ask', tool: 'read', path: 'notes.md' }, 'plan');
+    const rule = 'the workspace rule that asks before `Read(notes.md)`, which the user set in Settings under Permissions';
+    const advice = 'Plan mode asks nobody; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, or say in your answer what you need.';
+    expect((await call('read', { path: 'notes.md' })).text).toBe(`denied: \`read notes.md\` matches ${rule}. ${advice}`);
+    expect((await bash('grep -n TODO notes.md')).text).toBe(`denied: \`grep -n TODO notes.md\` matches ${rule}. ${advice}`);
+  });
+
+  it('still says nobody can answer a rule that asks in a run nobody watches', () => {
+    const text = denialText({ mode: 'non-interactive', rule: 'workspace-ask', reason: 'the workspace rule that asks before `ls`', command: 'ls', decidedBy: 'rule', verdict: 'deny' });
+    expect(text).toContain('nobody can answer here');
   });
 
   it('runs when no Read rule covers the path', async () => {
