@@ -98,11 +98,18 @@ describe('a command the user allowed on its card while the session switched to P
     expect(run.approval).toMatchObject({ decidedBy: 'user', verdict: 'allow' });
   });
 
+  it('is refused in the background, which Plan refuses, though Plan would run it in the foreground', async () => {
+    const { bash, asked } = await switchingToPlan(['ls']);
+    const run = await bash('ls', { run_in_background: true });
+    expect(asked, 'Ask asked about it').toHaveLength(1);
+    expect(run.status).toBe('error');
+    expect(run.text).toBe(`\`ls\` ${REFUSED}`);
+  });
+
   it.each([
     ['a line Geno cannot parse', "echo 'open", {}],
     ['a command outside the sandbox', 'ls', { dangerouslyDisableSandbox: true }],
     ['a command outside the safe list', 'make build', {}],
-    ['a command in the background', 'make build', { run_in_background: true }],
   ])('is refused when Plan refuses it: %s', async (_what, command, more) => {
     const { bash, asked } = await switchingToPlan();
     const run = await bash(command, more);
