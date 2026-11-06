@@ -302,9 +302,10 @@ describe('the deny-to-approve list', () => {
     const owned: CommandScope = { ...scope, processes: new Set([4242, 4250]) };
 
     it.each(['kill 4242', 'kill -9 4242', 'kill -TERM 4242 4250', 'kill -s KILL -4242', 'kill -- -4242', 'sleep 60 & kill $!', 'sleep 60 & PID=$!; kill $PID', 'sleep 60 & kill %1'])(
-      'runs %s without asking anyone',
+      'runs %s without asking anyone, except in Plan, which leaves out task_stop',
       (command) => {
-        for (const mode of APPROVAL_MODES) expect([mode, denialFor(command, owned, mode)]).toEqual([mode, undefined]);
+        for (const mode of APPROVAL_MODES.filter((m) => m !== 'plan')) expect([mode, denialFor(command, owned, mode)]).toEqual([mode, undefined]);
+        expect(denialFor(command, owned, 'plan')).toMatchObject({ rule: 'unlisted', verdict: 'deny' });
       },
     );
 
