@@ -127,7 +127,7 @@ scenario:
                   to: engine
                 do: >-
                   ผู้ใช้ตั้งกฎ ask `pnpm publish` ไว้ใน Settings `caughtBy` เจอกฎนี้ก่อนกฎในตัว จึงคืน denial `workspace-ask`
-                  คำตัดสินเป็น `ask` ในโหมด Auto เช่นเดียวกับ Ask ไม่ส่งให้ classifier (ในโหมด Plan กฎของ workspace ไม่ถูกอ่าน คำสั่งถูกปฏิเสธตามกฎในตัว)
+                  คำตัดสินเป็น `ask` ในโหมด Auto เช่นเดียวกับ Ask ไม่ส่งให้ classifier (ในโหมด Plan กฎคำสั่งของ workspace ไม่ถูกอ่าน คำสั่งถูกปฏิเสธตามกฎในตัว)
                 ref: packages/core/src/permission-rules.ts#ruleDenial
                 emits: [workspace-ask]
 
