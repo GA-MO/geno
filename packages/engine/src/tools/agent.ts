@@ -95,6 +95,7 @@ import {
   ToolDenied,
   ToolError,
   PermissionRerun,
+  PlanRefused,
   ToolRejected,
   type Decided,
   type Executor,
@@ -172,7 +173,8 @@ export const planRefusal = (mode: ApprovalMode, change: string): ToolError | und
  * refused for its key or model, puts the card to the user. `keep` runs, and is awaited, when the user's yes
  * outlives the call. Where the card would show, or where a run nobody can answer would refuse only for that, the
  * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them. A `change`, named
- * as Plan's refusal names it, is refused once allowed if the session switched to Plan meanwhile, after `keep` ran.
+ * as Plan's refusal names it, is refused once allowed if the session switched to Plan meanwhile, after `keep` ran: the
+ * `PlanRefused` it throws carries the approval to the call's result.
  */
 export async function settle(
   approval: Approval,
@@ -194,8 +196,7 @@ export async function settle(
   };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
   const unlessPlanNow = (decided: ApprovalRecord): ApprovalRecord => {
-    const plan = decided.verdict === 'allow' && change !== undefined ? planRefusal(modeOf(approval), change) : undefined;
-    if (plan !== undefined) throw plan;
+    if (decided.verdict === 'allow' && change !== undefined && modeOf(approval) === 'plan') throw new PlanRefused(modeRefusal(change, 'plan'), decided);
     return decided;
   };
   const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
