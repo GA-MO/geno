@@ -764,8 +764,10 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
+    const ruledInPlan = ruledDenial(command, judged, 'plan', rules, ctx.hookAllowed === true);
+    const inPlan = background || (unsandboxed ? unsandboxedDenial(command, judged, 'plan', ruledInPlan) : ruledInPlan)?.verdict === 'deny';
     const approval =
-      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep, `\`${command}\``);
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep, inPlan ? `\`${command}\`` : undefined);
     if (approval?.verdict === 'deny') {
       if (approval.rule === 'path-outside-workspace') throw outsideRefusal(approval, readableDirs(ctx));
       throw approval.rule === 'process-kill' && approval.decidedBy !== 'user' ? refusalOf(approval, `${denialText(approval)}${killHint()}`) : refusalOf(approval);
