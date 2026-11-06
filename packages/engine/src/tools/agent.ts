@@ -159,10 +159,7 @@ async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInp
   return domains.length === 0 ? input : { ...(await input), trustedDomains: domains };
 }
 
-/**
- * Plan's refusal of a change, undefined in every other mode. A change meets it at the call, and again once the
- * classifier, a hook or the user allowed it, since the session may switch to Plan while the call waits.
- */
+/** Plan's refusal of a change, undefined in every other mode; `settle` throws `PlanRefused`, which carries the approval, instead. */
 export const planRefusal = (mode: ApprovalMode, change: string): ToolError | undefined => (mode === 'plan' ? new ToolError(modeRefusal(change, mode)) : undefined);
 
 /**
