@@ -433,6 +433,10 @@ describe('ruledDenial under a PreToolUse hook allow', () => {
     ['auto', 'rm -rf ~', [], 'asks'],
     ['plan', 'git push', [], 'denied'],
     ['non-interactive', 'git push', [], 'denied'],
+    ['ask', "echo 'open", [], 'runs'],
+    ['plan', "echo 'open", [], 'denied'],
+    ['plan', LONG, [], 'denied'],
+    ['plan', 'ls', [], 'runs'],
   ];
   it.each(HOOK_ALLOWS)('%s: %s with %j %s', (mode, command, rules, outcome) => {
     expect(outcomeOf(ruledDenial(command, scope, mode, rules, true))).toBe(outcome);
