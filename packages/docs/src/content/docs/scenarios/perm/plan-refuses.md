@@ -209,7 +209,7 @@ Plan ปฏิเสธตอน call รันแทน และประก�
 | call | ถูกปฏิเสธที่ | สถานะ | แผงแสดง |
 | --- | --- | --- | --- |
 | คำสั่งนอก safe list รวมถึง `kill` ของงานที่ session เริ่มเอง | กฎในตัว (`unlisted`) | `denied` | Denied by a rule |
-| คำสั่งที่อ่าน path ที่กฎ Read แบบ ask หรือ deny ครอบ เช่น `grep TODO notes.md` | กฎ Read ของ workspace | `denied` | Denied by a rule |
+| คำสั่งที่มีคำเป็น path ที่กฎ Read แบบ ask หรือ deny ครอบ เช่น `grep TODO notes.md` | กฎ Read ของ workspace | `denied` | Denied by a rule |
 | `edit`, `notebook_edit`, `monitor`, `task_stop` และ tool ที่เปลี่ยนสถานะอื่นๆ | `inMode` | `error` | ล้มเหลว |
 | `bash` แบบ `run_in_background` | `approveCommand` | `error` | ล้มเหลว |
 | `schedule_task` แบบ `create`, `update` และ `delete` | `scheduleExecutor` | `error` | ล้มเหลว |

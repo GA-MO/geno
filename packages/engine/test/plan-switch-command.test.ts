@@ -37,7 +37,7 @@ afterAll(async () => {
 
 let sessions = 0;
 
-/** A session in `start` whose user switches it to Plan while each card shows, then allows the call. */
+/** A session in `start`, Ask unless named; a card the user sees switches it to Plan, and the user then allows the call. */
 async function switchingToPlan(rule?: NewRule, start: SessionMode = 'ask') {
   let mode = start;
   const asked: Denial[] = [];
@@ -133,7 +133,7 @@ describe('a command in Plan that reads a path a Read rule covers', () => {
     expect(read.status, 'read refuses it in Plan').toBe('denied');
     expect(grep.status).toBe('denied');
     expect(grep.text).not.toContain('TODO: ship');
-    expect(grep.text).toContain('notes.md');
+    expect(grep.text, 'the Read rule refused it').toContain('Read(notes.md)');
   });
 
   it('runs when no Read rule covers the path', async () => {
