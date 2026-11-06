@@ -107,8 +107,9 @@ const commandRules = (rules: readonly PermissionRule[]): readonly CommandRule[] 
 export type PermissionsFile = { readonly version: 1; readonly workspace: string; readonly rules: readonly PermissionRule[] };
 
 /**
- * Which rules each mode honours. Plan stays read-only whatever the rules say; it reads only the `read` path rules, to refuse. A run with nobody to ask still obeys a
- * deny, but no allow: the user saved that allow while watching a session, not for an unattended run.
+ * Which rules each mode honours. Plan stays read-only whatever the rules say; it reads only the `read` path rules, to
+ * refuse. A run with nobody to ask still obeys a deny, but no allow: the user saved that allow while watching a session,
+ * not for an unattended run.
  *
  * The decision for a line, in order:
  * 1. Plan: refused when a word names a path a `read` deny or ask rule covers, as `read` refuses it; else the built-in verdict.

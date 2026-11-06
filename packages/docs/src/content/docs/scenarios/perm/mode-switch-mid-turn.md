@@ -206,7 +206,7 @@ scenario:
   การสลับโหมดจึงไม่เปลี่ยนไบต์ของ system prompt และรายการ tool
 - **การ์ดที่เปิดอยู่ไม่เปลี่ยน** ถ้าการ์ดขออนุญาตรออยู่ตอนสลับเป็น Auto การ์ดนั้นยังรอผู้ใช้ตอบ โหมดใหม่มีผลกับ call ที่ถูกตัดสินหลังจากนี้ ยกเว้นการสลับเป็น Plan ในข้อถัดไป
 - **สลับเป็น Plan ระหว่างการ์ดรอ แล้วกด Allow สิ่งที่ขอไม่เกิด** หลังได้คำตอบ `settle` อ่านโหมดอีกครั้ง
-  ถ้าตอนนี้เป็น Plan สิ่งที่ Plan ปฏิเสธก็ไม่เกิด ทั้งคำสั่ง `bash` ที่ Plan ปฏิเสธ (คำสั่งใน safe list ที่ติดกฎคำสั่งแบบ ask ของ workspace ยังรัน ส่วนที่มี path ที่กฎ Read ครอบถูกปฏิเสธ) การแก้ไฟล์ที่กฎ ask ของ workspace ถาม การเปลี่ยน `schedule_task`
+  ถ้าตอนนี้เป็น Plan สิ่งที่ Plan ปฏิเสธก็ไม่เกิด ทั้งคำสั่ง `bash` ที่ Plan ปฏิเสธ (คำสั่งใน safe list ที่ติดกฎคำสั่งแบบ ask ของ workspace ยังรัน ส่วนที่มีคำเป็น path ที่กฎ Read ครอบถูกปฏิเสธ) การแก้ไฟล์ที่กฎ ask ของ workspace ถาม การเปลี่ยน `schedule_task`
   call ของ tool MCP หรือ browser ที่ Plan ปฏิเสธ (call ที่อ่านอย่างเดียวยังรัน) และคำขอของ external agent
   ผลเป็น `error` ที่บอกว่าโหมด Plan ทำไม่ได้ เช่น `` `rm -rf build` is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it. `` และ turn ทำต่อ
   ต่างจากคำสั่งที่ Plan ปฏิเสธตั้งแต่ต้น ซึ่งได้ผล `denied` ส่วน external agent ได้คำตอบ no สถานะของผลมาจาก agent และข้อความเป็นของ Plan เว้นแต่ agent ส่งข้อความของตัวเองมา

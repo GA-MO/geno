@@ -37,7 +37,7 @@ afterAll(async () => {
 
 let sessions = 0;
 
-/** A session in `start`, Ask unless named; a card the user sees switches it to Plan, and the user then allows the call. */
+/** A session in `start` (Ask unless named) whose user, shown a card, switches it to Plan and then allows the call. */
 async function switchingToPlan(rule?: NewRule, start: SessionMode = 'ask') {
   let mode = start;
   const asked: Denial[] = [];
