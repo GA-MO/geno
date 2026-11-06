@@ -416,6 +416,34 @@ describe('ruledDenial with an exact allow', () => {
   });
 });
 
+describe('ruledDenial in Plan, as read refuses', () => {
+  // Plan reads no command rule, but a command that reads a path a Read rule covers is refused there, as `read` is.
+  it.each([
+    ['grep -n TODO notes/plan.md', pathRule('ask', 'read', 'notes/*.md'), 'workspace-ask'],
+    ['wc -l config/prod.json', pathRule('deny', 'read', 'config/prod.json'), 'workspace-deny'],
+    ['ls && grep -r key private', pathRule('deny', 'read', 'private/**'), 'workspace-deny'],
+  ] as const)('refuses %s under %j', (command, rule, id) => {
+    expect(ruledDenial(command, scope, 'plan', [rule])).toMatchObject({ rule: id, verdict: 'deny' });
+    expect(ruledDenial(command, scope, 'plan', [rule], true), "a hook's allow does not undo it").toMatchObject({ rule: id, verdict: 'deny' });
+  });
+
+  it('runs what no Read rule covers, and leaves Ask and Auto as they were', () => {
+    expect(ruledDenial('grep -n TODO src/a.ts', scope, 'plan', [pathRule('ask', 'read', 'notes/*.md')])).toBeUndefined();
+    expect(ruledDenial('grep -n TODO notes/plan.md', scope, 'plan', [pathRule('deny', 'edit', 'notes/*.md')])).toBeUndefined();
+    expect(outcomeOf(ruledDenial('grep -n TODO notes/plan.md', scope, 'ask', [pathRule('ask', 'read', 'notes/*.md')]))).toBe('rule-asks');
+    expect(outcomeOf(ruledDenial('grep -n TODO notes/plan.md', scope, 'auto', [pathRule('ask', 'read', 'notes/*.md')]))).toBe('rule-asks');
+  });
+
+  it('refuses a kill of what the session started, as it leaves out task_stop, and Ask and Auto still run it', () => {
+    const own: CommandScope = { ...scope, processes: new Set([4242]) };
+    for (const command of ['kill 4242', 'kill -TERM 4242', 'kill %1']) {
+      expect(outcomeOf(ruledDenial(command, own, 'plan', [])), command).toBe('denied');
+      expect(outcomeOf(ruledDenial(command, own, 'ask', [])), command).toBe('runs');
+      expect(outcomeOf(ruledDenial(command, own, 'auto', [])), command).toBe('runs');
+    }
+  });
+});
+
 describe('ruledDenial under a PreToolUse hook allow', () => {
   // A hook allow answers the question and skips the classifier; it never beats a refusal or what Geno always asks.
   const HOOK_ALLOWS: readonly Row[] = [
