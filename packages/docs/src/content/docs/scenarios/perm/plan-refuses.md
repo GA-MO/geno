@@ -77,12 +77,12 @@ scenario:
                 beat:
                   title: "กฎในตัวของโหมด Plan ปฏิเสธคำสั่ง"
                   text: >-
-                    โหมด Plan ใช้แค่กฎในตัว ไม่อ่านกฎของ workspace `pnpm add zod` ไม่อยู่ในรายการคำสั่งปลอดภัยจึงถูกปฏิเสธ
+                    โหมด Plan ใช้แค่กฎในตัว ไม่อ่านกฎคำสั่งของ workspace (อ่านเฉพาะกฎ Read) `pnpm add zod` ไม่อยู่ในรายการคำสั่งปลอดภัยจึงถูกปฏิเสธ
                     ไม่ถามคุณและไม่มี classifier (model ตัวช่วยที่โหมด Auto ใช้ตัดสินคำสั่ง) ผลบอกให้เปลี่ยนเป็น Ask หรือ Auto ถ้าจะแก้อะไร
                   from: engine
                   to: engine
                 do: >-
-                  `ruledDenial` ในโหมด Plan ใช้แค่คำตัดสินในตัว ไม่อ่านกฎของ workspace กฎ `unlisted` ในโหมด Plan คือ `deny`
+                  `ruledDenial` ในโหมด Plan ใช้แค่คำตัดสินในตัว ไม่อ่านกฎคำสั่งของ workspace (กฎ Read ที่ครอบ path ของคำสั่งทำให้ปฏิเสธ) กฎ `unlisted` ในโหมด Plan คือ `deny`
                 ref: packages/core/src/permission-rules.ts#ruledDenial
                 emits: [unlisted]
               - lane: policy
@@ -208,7 +208,8 @@ Plan ปฏิเสธตอน call รันแทน และประก�
 
 | call | ถูกปฏิเสธที่ | สถานะ | แผงแสดง |
 | --- | --- | --- | --- |
-| คำสั่งนอก safe list | กฎในตัว (`unlisted`) | `denied` | Denied by a rule |
+| คำสั่งนอก safe list รวมถึง `kill` ของงานที่ session เริ่มเอง | กฎในตัว (`unlisted`) | `denied` | Denied by a rule |
+| คำสั่งที่อ่าน path ที่กฎ Read แบบ ask หรือ deny ครอบ เช่น `grep TODO notes.md` | กฎ Read ของ workspace | `denied` | Denied by a rule |
 | `edit`, `notebook_edit`, `monitor`, `task_stop` และ tool ที่เปลี่ยนสถานะอื่นๆ | `inMode` | `error` | ล้มเหลว |
 | `bash` แบบ `run_in_background` | `approveCommand` | `error` | ล้มเหลว |
 | `schedule_task` แบบ `create`, `update` และ `delete` | `scheduleExecutor` | `error` | ล้มเหลว |
