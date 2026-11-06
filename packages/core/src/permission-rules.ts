@@ -328,7 +328,8 @@ function lineVerdict(command: string, scope: CommandScope, mode: ApprovalMode, r
   const flags = flagsOf(parsed, scope, mode);
   if (flags.kind === 'deny') return flags.denial;
   const line = lineDenial(command, mode);
-  if (line !== undefined && !hookAllows) return line;
+  // A hook's allow answers a question; Plan's refusal is none.
+  if (line !== undefined && (!hookAllows || line.verdict === 'deny')) return line;
   const denial = mergedDenial(command, flags.flags);
   if (denial === undefined || !honours.allow) return denial;
   const flagged = flaggedCommands(flags.flags);
