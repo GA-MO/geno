@@ -204,7 +204,9 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
         recallAllowances(ctx.events(), allowed, browserState);
         const mode = modeOf(approval);
         const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly, args };
-        const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);
+        const rules = (await ctx.permissions?.list()) ?? [];
+        const denial = mcpCallDenial(call, mode, allowed.has(name), rules);
+        const inPlan = mcpCallDenial(call, 'plan', allowed.has(name), rules);
         const record =
           denial === undefined
             ? undefined
@@ -215,6 +217,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
                 () => ({ ...classifierInputOf(ctx.events(), name, denial), mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args) } }),
                 ctx,
                 (answer) => keepMcpAnswer(answer, call, allowed, ctx),
+                inPlan?.verdict === 'deny' ? name : undefined,
               );
         if (record?.verdict === 'deny') throw refusalOf(record);
         let ran: Awaited<ReturnType<typeof callTool>>;

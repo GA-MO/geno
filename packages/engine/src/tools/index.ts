@@ -1,6 +1,6 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { invalidInputError, toolText, type ApprovalRecord, type ChapterMark, type HelperSpend, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type SessionAllowance, type ToolStatus, type WidgetRef } from '@g-code/core';
-import { LoadedToolError, ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
+import { LoadedToolError, PlanRefused, ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
 import { list } from './list.js';
@@ -70,6 +70,7 @@ async function runExecutor(use: ToolUseBlock, ctx: ToolContext, executors: Execu
     if (error instanceof ToolRejected) return { status: 'rejected', text: error.message, approval: error.approval };
     if (error instanceof ToolDenied) return { status: 'denied', text: error.message, approval: error.approval };
     if (error instanceof LoadedToolError) return { status: 'error', text: error.message, loaded: error.loaded };
+    if (error instanceof PlanRefused) return { status: 'error', text: error.message, approval: error.approval };
     if (error instanceof ToolError) return { status: 'error', text: error.message };
     if (isFsError(error)) return { status: 'error', text: `${use.name} failed: ${error.message}` };
     throw error;

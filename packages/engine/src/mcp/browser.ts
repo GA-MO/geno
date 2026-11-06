@@ -265,11 +265,13 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       const pageUrl = pageOf(state, args);
       const mode = modeOf(approval);
       const rules = (await ctx.permissions?.list()) ?? [];
-      const denial = browserDenialFor(
-        { name, tool: info.tool, args: judged, readOnly: info.readOnly },
-        mode,
-        { workspace: ctx.workspace, allowedForSession: allowed.has(name), page: browserPage(state, pageUrl, ctx.workspace), rules },
-      );
+      const judge = (as: ApprovalMode) =>
+        browserDenialFor(
+          { name, tool: info.tool, args: judged, readOnly: info.readOnly },
+          as,
+          { workspace: ctx.workspace, allowedForSession: allowed.has(name), page: browserPage(state, pageUrl, ctx.workspace), rules },
+        );
+      const denial = judge(mode);
       let record: ApprovalRecord | undefined;
       if (denial !== undefined) {
         record = await settle(
@@ -284,6 +286,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
           async (answer) => {
             if (isMcpRule(denial.rule)) await keepMcpAnswer(answer, { name, server: info.server, tool: info.tool }, allowed, ctx);
           },
+          judge('plan')?.verdict === 'deny' ? name : undefined,
         );
         if (record.verdict === 'deny') {
           const text = denial.rule === 'browser-refused-url' ? `denied: the browser may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record);

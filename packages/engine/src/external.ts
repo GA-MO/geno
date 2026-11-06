@@ -35,6 +35,7 @@ import { exitText, findBackend, openAgentSession, probeDir, startAgent, type Age
 import { appendEvent, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
 import { settle, type Approval } from './tools/agent.js';
+import { PlanRefused } from './tools/context.js';
 
 /** One Geno session's agent: its process, the session that runs its turns once one has, and what it offers. */
 type Link = {
@@ -400,10 +401,12 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
     const mode = approval.kind === 'interactive' ? approval.mode() : 'non-interactive';
     const denial = externalDenialFor(call, scope, mode);
     let verdict: 'allow' | 'deny' = 'allow';
+    let refusedInPlan: string | undefined;
     if (denial !== undefined) {
       const { name, input } = externalToolUse(call, cwd);
       const command = String(input['command'] ?? externalTitle({ name, input }));
       const access = accessOf(call, cwd);
+      const inPlan = externalDenialFor(call, scope, 'plan');
       const record = await settle(
         approval,
         mode,
@@ -413,13 +416,20 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
           ...(access === 'command' ? {} : { mcp: { server: backend.label, tool: call.kind, arguments: JSON.stringify(call.rawInput ?? { title: call.title }) } }),
         }),
         { signal, events: () => events },
-      );
+        undefined,
+        inPlan?.verdict === 'deny' ? `\`${command}\`` : undefined,
+      ).catch((error: unknown) => {
+        if (!(error instanceof PlanRefused)) throw error;
+        refusedInPlan = error.message;
+        return error.approval;
+      });
       known.approval = record;
-      verdict = record.verdict;
+      verdict = refusedInPlan === undefined ? record.verdict : 'deny';
     }
     if (signal.aborted) return { outcome: { outcome: 'cancelled' } };
     const optionId = externalAnswer(request.options, verdict);
-    if (verdict === 'deny' || optionId === undefined) known.output = `denied: ${known.approval?.decidedBy === 'classifier' ? `the safety classifier refused it: ${known.approval.classifier?.reason}` : 'refused'}`;
+    if (refusedInPlan !== undefined) known.output = refusedInPlan;
+    else if (verdict === 'deny' || optionId === undefined) known.output = `denied: ${known.approval?.decidedBy === 'classifier' ? `the safety classifier refused it: ${known.approval.classifier?.reason}` : 'refused'}`;
     return optionId === undefined ? { outcome: { outcome: 'cancelled' } } : { outcome: { outcome: 'selected', optionId } };
   };
 

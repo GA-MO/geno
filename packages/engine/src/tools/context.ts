@@ -104,6 +104,19 @@ export class ToolRejected extends ToolError {
   }
 }
 
+/**
+ * A change the classifier, a hook or the user allowed, refused before it ran because the session switched to Plan
+ * meanwhile. It becomes an `error` result that keeps the approval, so an answer kept for the session reads back from the log.
+ */
+export class PlanRefused extends ToolError {
+  constructor(
+    message: string,
+    readonly approval: ApprovalRecord,
+  ) {
+    super(message);
+  }
+}
+
 /** A command that was refused before it ran. It becomes a `denied` tool result. */
 export class ToolDenied extends ToolError {
   constructor(
