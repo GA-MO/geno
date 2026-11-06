@@ -317,3 +317,20 @@ describe('lastUrlOf', () => {
     expect(lastUrlOf([{ ...listing(2, 'file:///a.html'), name: 'bash' } as TurnEvent], 2)).toBeUndefined();
   });
 });
+
+describe('a browser call the user allowed while the session switched to Plan', () => {
+  it('opens nothing, says Plan refused it, and keeps the approval', async () => {
+    let mode: 'ask' | 'plan' = 'ask';
+    const approval: Approval = { kind: 'interactive', mode: () => mode, approve: async () => ((mode = 'plan'), 'allow'), classify: async () => {
+        throw new Error('Ask sends nothing to the classifier');
+      },
+    };
+    const { run, opened } = setup([{ id: 1, url: 'about:blank' }], [], { server: 'browser', tool: 'new_page', readOnly: false } as McpToolInfo, { approval, allowed: new Set() });
+    const reply = await run({ url: 'https://example.com/' }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(reply).toMatchObject({ message: 'mcp__browser__new_page is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.', approval: { decidedBy: 'user', verdict: 'allow' } });
+    expect(opened).toEqual([]);
+  });
+});

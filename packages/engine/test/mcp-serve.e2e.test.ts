@@ -13,10 +13,13 @@ import {
   type McpEnableRequest,
   type McpServersResponse,
   type McpTrustRequest,
+  type TurnEvent,
+  asSessionId,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { mcpSessions, type McpSessions } from '../src/mcp/sessions.js';
 import { gcodeAgent } from '../src/serve.js';
+import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { rgCommand } from './helpers.js';
@@ -24,6 +27,7 @@ import { rgCommand } from './helpers.js';
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
+type ModeEvent = Extract<TurnEvent, { kind: 'mode' }>;
 
 const sessions: McpSessions[] = [];
 afterEach(async () => {
@@ -60,10 +64,12 @@ async function setup(replies: readonly Reply[], mcpJson?: unknown) {
   const permissions: acp.RequestPermissionRequest[] = [];
   const updates: acp.SessionUpdate[] = [];
   let optionId = 'allow-session';
+  let whileAsking: (() => Promise<void>) | undefined;
   const client = acp
     .client({ name: 'test-editor' })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+    .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       permissions.push(params);
+      await whileAsking?.();
       return { outcome: { outcome: 'selected', optionId } };
     })
     .onNotification(acp.methods.client.session.update, ({ params }) => {
@@ -85,7 +91,7 @@ async function setup(replies: readonly Reply[], mcpJson?: unknown) {
       return work(ctx, sessionId);
     });
   };
-  return { workspace, transport, permissions, updates, connect, setAnswer: (id: string) => (optionId = id), setGate: (next: typeof gate) => (gate = next) };
+  return { workspace, store, transport, permissions, updates, connect, setAnswer: (id: string) => (optionId = id), setGate: (next: typeof gate) => (gate = next), beforeAnswering: (work: typeof whileAsking) => void (whileAsking = work) };
 }
 
 /** Asks for the servers until `ready` holds of them, as the panel does while one is starting. */
@@ -172,6 +178,52 @@ describe('gcode serve with MCP', () => {
     const other = await connect([editorServer()], echoOnce('echo three'));
     expect(other).not.toBe(first);
     expect(permissions, 'a new session asks').toHaveLength(2);
+  });
+
+  it('refuses a tool that is not read-only once the session switched to Plan while its card showed, and keeps "Allow for this chat" for a new engine', async () => {
+    const env = (n: number) => ({ id: `tu_env_${n}`, name: 'mcp__fake__env', input: {} });
+    const echo = { id: 'tu_plan_echo', name: 'mcp__fake__echo', input: { text: 'read only' } };
+    const { store, transport, permissions, connect, beforeAnswering } = await setup([
+      toolCall('', [loadTools('mcp__fake__env', 'mcp__fake__echo')], usage),
+      toolCall('Echoing.', [echo], usage),
+      answer('Echoed.', usage),
+      toolCall('Reading the environment.', [env(1)], usage),
+      answer('Done.', usage),
+      toolCall('Again.', [env(2)], usage),
+      answer('Done.', usage),
+    ]);
+    const first = await connect([editorServer()], async (ctx, sessionId) => {
+      await serversUntil(ctx, sessionId, allReady);
+      // The card's handler cannot await the engine's reply, so it answers once the session's log shows Plan.
+      const inPlan = async () => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events.findLast((e): e is ModeEvent => e.kind === 'mode')?.mode === 'plan';
+      const switched: Promise<unknown>[] = [];
+      beforeAnswering(async () => {
+        switched.push(ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' }));
+        while (!(await inPlan())) await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      for (const text of ['echo it', 'show the environment']) {
+        await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
+        await Promise.all(switched);
+        await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      }
+      beforeAnswering(undefined);
+      return sessionId;
+    });
+    await connect(
+      [editorServer()],
+      async (ctx, sessionId) => {
+        await serversUntil(ctx, sessionId, allReady);
+        await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'again' }] });
+      },
+      first,
+    );
+
+    const resultOf = (id: string) => transport.requests.flatMap((r) => r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: unknown }[]).find((b) => b.type === 'tool_result' && b.tool_use_id === id)?.content;
+    expect(permissions.map((p) => p.toolCall.rawInput)).toMatchObject([{ command: 'mcp__fake__echo' }, { command: 'mcp__fake__env' }]);
+    expect(JSON.stringify(resultOf('tu_env_1'))).toContain('mcp__fake__env is not available: Plan mode is read-only; switch to Ask or Auto to make changes. Do not retry it.');
+    expect(JSON.stringify(resultOf('tu_plan_echo')), 'Plan runs a read-only tool the user allowed').toContain('read only');
+    expect(permissions, '"Allow for this chat" holds in a new engine, though Plan refused the call').toHaveLength(2);
+    expect(JSON.stringify(resultOf('tu_env_2'))).not.toContain('not available');
   });
 
   it('keeps a tool allowed for the session in a new engine even when its allowed call failed', async () => {

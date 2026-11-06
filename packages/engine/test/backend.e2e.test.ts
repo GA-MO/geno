@@ -24,6 +24,7 @@ import {
   type ArenaUpdate,
   type BackendsResponse,
   type TaskUpdate,
+  type TurnEvent,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { mcpSessions } from '../src/mcp/sessions.js';
@@ -114,6 +115,7 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
   const tasks: TaskUpdate[] = [];
   const asked: acp.RequestPermissionRequest[] = [];
   const answers: ('allow' | 'reject')[] = [];
+  const whileAsking: (() => Promise<void>)[] = [];
   const writes: acp.WriteTextFileRequest[] = [];
   const arenas: ArenaUpdate[] = [];
   const window = acp
@@ -124,8 +126,9 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
       writeFileSync(params.path, params.content);
       return {};
     })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+    .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       asked.push(params);
+      await whileAsking.at(0)?.();
       const answer = answers.shift() ?? 'reject';
       return { outcome: { outcome: 'selected', optionId: answer } };
     })
@@ -146,7 +149,7 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
     agent.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }], ...(meta === undefined ? {} : { _meta: meta }) });
   const shown = (sessionId: string) => updates.filter((u) => u.sessionId === sessionId).map((u) => u.update);
   const events = (sessionId: string) => readSessionLog(sessionFile(store, sessionId as never)).then((log) => log.events);
-  return { repo, home, open, agentCalls, prompt, shown, events, asked, answers, writes, tasks, shared, transport, arenas };
+  return { repo, home, open, agentCalls, prompt, shown, events, asked, answers, whileAsking, writes, tasks, shared, transport, arenas };
 }
 
 const text = (updates: readonly acp.SessionUpdate[]) => updates.flatMap((u) => (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text' ? [u.content.text] : [])).join('');
@@ -270,6 +273,28 @@ describe('an external ACP agent as a backend', () => {
     expect(replay).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: 'r1', title: 'read a.ts', kind: 'read' }));
     expect(replay).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: 'e1', title: 'edit a.ts', kind: 'edit' }));
     t.shared.externals.closeAll();
+  });
+
+  it('answers no for the agent when the user allowed its edit after the session switched to Plan, and logs the user\'s yes', async () => {
+    const t = await setup();
+    const agent = await t.open();
+    const chat = (await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [], _meta: { [BACKEND_META]: { id: 'cursor' } } })).sessionId;
+    await t.prompt(agent, chat, 'Please read a.ts');
+    // The card's handler cannot await the engine's reply, so it answers once the session's log shows Plan.
+    const switched: Promise<unknown>[] = [];
+    t.whileAsking.push(async () => {
+      switched.push(agent.request(acp.methods.agent.session.setMode, { sessionId: chat, modeId: 'plan' }));
+      const inPlan = async () => (await t.events(chat)).findLast((e): e is Extract<TurnEvent, { kind: 'mode' }> => e.kind === 'mode')?.mode === 'plan';
+      while (!(await inPlan())) await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    t.answers.push('allow');
+    await t.prompt(agent, chat, 'Now edit it');
+    await Promise.all(switched);
+
+    expect(t.asked).toHaveLength(1);
+    expect(t.agentCalls().filter((c) => c['permission']).map((c) => c['permission'].outcome)).toEqual([{ outcome: 'selected', optionId: 'reject-once' }]);
+    const result = (await t.events(chat)).find((e) => e.kind === 'tool-result' && e.toolUseId === 'e1');
+    expect(result, "the agent's answer has no room for Geno's words, so the log keeps the user's yes and the agent's own failure").toMatchObject({ status: 'error', approval: expect.objectContaining({ decidedBy: 'user', verdict: 'allow' }) });
   });
 
   it('lets the classifier settle Auto: a safe command runs, a gray edit it allows runs, and one it is unsure of is refused with no card', async () => {
