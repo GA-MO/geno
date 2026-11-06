@@ -111,7 +111,7 @@ export type PermissionsFile = { readonly version: 1; readonly workspace: string;
  * deny, but no allow: the user saved that allow while watching a session, not for an unattended run.
  *
  * The decision for a line, in order:
- * 1. Plan: the built-in verdict.
+ * 1. Plan: refused when a word names a path a `read` deny or ask rule covers, as `read` refuses it; else the built-in verdict.
  * 2. A deny rule matches any simple command, or a word names a path a `read` deny rule covers: denied, without asking or classifying.
  * 3. An ask rule matches the same way: the user is asked, in Auto too, and nobody asked refuses it.
  * 4. The line is over 10,000 characters or does not parse: the line rule's verdict, which no allow rule covers.
@@ -324,6 +324,12 @@ function lineVerdict(command: string, scope: CommandScope, mode: ApprovalMode, r
   for (const effect of ['deny', 'ask'] as const) {
     const caught = honours[effect] ? caughtBy(effect, parsed, rules, scope) : undefined;
     if (caught !== undefined) return caught;
+  }
+  if (mode === 'plan') {
+    // Plan reads no command rule, but refuses a path a Read rule covers, as `read` does there.
+    const paths = rules.filter(isPathRule);
+    const read = caughtBy('deny', parsed, paths, scope) ?? caughtBy('ask', parsed, paths, scope);
+    if (read !== undefined) return { ...read, verdict: 'deny' };
   }
   const flags = flagsOf(parsed, scope, mode);
   if (flags.kind === 'deny') return flags.denial;

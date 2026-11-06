@@ -91,7 +91,7 @@ export type Verdicts = {
 type DenyRule = {
   readonly reason: string;
   readonly verdicts: Verdicts;
-  matches(command: SimpleCommand, scope: CommandScope): boolean;
+  matches(command: SimpleCommand, scope: CommandScope, mode: ApprovalMode): boolean;
 };
 
 /** What a question asks about when it is not a command line, so its card can name it: a path, a host or an MCP tool. */
@@ -579,7 +579,8 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   unlisted: {
     reason: 'a command not on the safe list',
     verdicts: { plan: 'deny', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' },
-    matches: (command, scope) => !isClearlySafe(command) && !killsOnlyOwn(command, scope),
+    // Plan leaves out task_stop, so it stops nothing the session started either.
+    matches: (command, scope, mode) => !isClearlySafe(command) && (mode === 'plan' || !killsOnlyOwn(command, scope)),
   },
   // What the sandbox does not hold back of an unlisted command: a search for credentials by name prints what it finds,
   // .env included, to the model. Every other mode meets the same search as unlisted.
@@ -1033,7 +1034,7 @@ export function flagsOf(parsed: readonly ParsedCommand[], scope: CommandScope, m
       for (const rule of DENY_RULE_IDS) {
         const { reason, verdicts, matches } = DENY_RULES[rule];
         const verdict = verdicts[mode];
-        if (verdict === 'allow' || !matches(simple, scope)) continue;
+        if (verdict === 'allow' || !matches(simple, scope, mode)) continue;
         const denial = { rule, reason, command: words.join(' '), verdict };
         if (verdict === 'deny') return { kind: 'deny', denial };
         flags.push({ ...denial, at });
@@ -1134,7 +1135,7 @@ export function withLine(denial: Denial | undefined, command: string): Denial | 
 
 /** The rules that flag one simple command on its own in this mode. */
 export const flaggingRules = (simple: SimpleCommand, scope: CommandScope, mode: ApprovalMode): ReadonlySet<DenyRuleId> =>
-  new Set(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts[mode] !== 'allow' && DENY_RULES[rule].matches(simple, scope)));
+  new Set(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts[mode] !== 'allow' && DENY_RULES[rule].matches(simple, scope, mode)));
 
 const PUSH_REWRITES = /^(?:-f|--force|--force-with-lease(?:=.*)?|--force-if-includes|--mirror|--delete|-d|--prune|--all|--tags)$/;
 // A push to a URL or an scp-style address rather than a named remote can send the repository anywhere.
