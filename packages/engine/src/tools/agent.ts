@@ -236,7 +236,7 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   }
   if (rule === 'workspace-ask') {
     if (mode === 'plan') {
-      return `denied: \`${command}\` matches ${reason}. Plan mode refuses what this rule asks about, with no card; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, ask the user to switch modes, or say in your answer what you need the user to allow.`;
+      return `denied: \`${command}\` matches ${reason}. Plan mode refuses what this rule asks about, with no card; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, or say in your answer what you need the user to allow.`;
     }
     return `denied: \`${command}\` matches ${reason}, and nobody can answer here. ${DONT_ASK}`;
   }

@@ -139,7 +139,7 @@ describe('a command in Plan that reads a path a Read rule covers', () => {
   it('tells the model, for a rule that asks, that the user is asked in Ask or Auto, with one text for read and bash', async () => {
     const { bash, call } = await switchingToPlan({ effect: 'ask', tool: 'read', path: 'notes.md' }, 'plan');
     const rule = 'the workspace rule that asks before `Read(notes.md)`, which the user set in Settings under Permissions';
-    const advice = 'Plan mode refuses what this rule asks about, with no card; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, ask the user to switch modes, or say in your answer what you need the user to allow.';
+    const advice = 'Plan mode refuses what this rule asks about, with no card; in Ask or Auto Geno asks the user first, so the user can switch modes to allow it. Do not retry it in Plan; find another way, or say in your answer what you need the user to allow.';
     expect((await call('read', { path: 'notes.md' })).text).toBe(`denied: \`read notes.md\` matches ${rule}. ${advice}`);
     expect((await bash('grep -n TODO notes.md')).text).toBe(`denied: \`grep -n TODO notes.md\` matches ${rule}. ${advice}`);
   });
