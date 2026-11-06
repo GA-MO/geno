@@ -172,8 +172,7 @@ export const planRefusal = (mode: ApprovalMode, change: string): ToolError | und
  * refused for its key or model, puts the card to the user. `keep` runs, and is awaited, when the user's yes
  * outlives the call. Where the card would show, or where a run nobody can answer would refuse only for that, the
  * call's PermissionRequest hooks answer first; a refusal that holds whoever answers never reaches them. A `change`, named
- * as Plan's refusal names it, is refused once allowed if the session switched to Plan meanwhile; the user's kept
- * answer is kept all the same.
+ * as Plan's refusal names it, is refused once allowed if the session switched to Plan meanwhile, after `keep` ran.
  */
 export async function settle(
   approval: Approval,
