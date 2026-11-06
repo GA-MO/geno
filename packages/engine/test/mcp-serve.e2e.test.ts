@@ -226,6 +226,34 @@ describe('gcode serve with MCP', () => {
     expect(JSON.stringify(resultOf('tu_env_2'))).not.toContain('not available');
   });
 
+  it('keeps "Allow for this chat" for a tool that was not loaded yet when Plan refused it after its card', async () => {
+    const env = (n: number) => ({ id: `tu_unloaded_${n}`, name: 'mcp__fake__env', input: {} });
+    const { store, permissions, connect, beforeAnswering } = await setup([toolCall('Reading.', [env(1)], usage), answer('Refused.', usage), toolCall('Again.', [env(2)], usage), answer('Done.', usage)]);
+    const prompt = (text: string) => async (ctx: acp.ClientContext, sessionId: string) => {
+      await serversUntil(ctx, sessionId, allReady);
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
+      return sessionId;
+    };
+    const first = await connect([editorServer()], async (ctx, sessionId) => {
+      const inPlan = async () => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events.findLast((e): e is ModeEvent => e.kind === 'mode')?.mode === 'plan';
+      const switched: Promise<unknown>[] = [];
+      beforeAnswering(async () => {
+        switched.push(ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' }));
+        while (!(await inPlan())) await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await prompt('show the environment')(ctx, sessionId);
+      await Promise.all(switched);
+      beforeAnswering(undefined);
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      return sessionId;
+    });
+    const refused = (await readSessionLog(sessionFile(store, asSessionId(first)))).events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_unloaded_1');
+    expect(refused).toMatchObject({ status: 'error', approval: { kept: 'session', verdict: 'allow' }, output: expect.stringContaining('mcp__fake__env is not available: Plan mode is read-only') });
+    expect(refused, 'a refusal loads nothing').not.toHaveProperty('loaded');
+    await connect([editorServer()], prompt('again'), first);
+    expect(permissions, '"Allow for this chat" holds in a new engine').toHaveLength(1);
+  });
+
   it('keeps a tool allowed for the session in a new engine even when its allowed call failed', async () => {
     const fail = (n: number) => ({ id: `tu_fail_${n}`, name: 'mcp__fake__fail', input: {} });
     const { permissions, connect } = await setup([toolCall('', [loadTools('mcp__fake__fail')], usage), toolCall('Trying.', [fail(1)], usage), answer('It broke.', usage), toolCall('Again.', [fail(2)], usage), answer('Still broke.', usage)]);
