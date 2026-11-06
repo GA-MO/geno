@@ -211,13 +211,18 @@ Plan ปฏิเสธตอน call รันแทน และประก�
 | คำสั่งนอก safe list | กฎในตัว (`unlisted`) | `denied` | Denied by a rule |
 | `edit`, `notebook_edit`, `monitor`, `task_stop` และ tool ที่เปลี่ยนสถานะอื่นๆ | `inMode` | `error` | ล้มเหลว |
 | `bash` แบบ `run_in_background` | `approveCommand` | `error` | ล้มเหลว |
-| คำสั่งใน safe list, `read`, `grep`, `web_fetch` | ไม่ปฏิเสธ | `ok` | ปกติ |
+| `schedule_task` แบบ `create`, `update` และ `delete` | `scheduleExecutor` | `error` | ล้มเหลว |
+| คำสั่งใน safe list, `read`, `grep`, `web_fetch`, `schedule_task` แบบ `list` | ไม่ปฏิเสธ | `ok` | ปกติ |
 
 สิ่งที่ควรสังเกต
 
 - **การแก้ไฟล์ที่ถูกปฏิเสธดูเหมือนล้มเหลว** `inMode` โยน `ToolError` ซึ่งเป็นสถานะ `error` แผงจึงแสดงเหมือนการแก้ที่ล้มเหลวจริง
   ไม่ได้ขึ้นป้าย "Denied" แบบคำสั่งที่ถูกปฏิเสธ ผู้ใช้ต้องเปิดผลดูจึงรู้ว่าเป็นเพราะโหมด
 - **Plan ไม่ถามผู้ใช้เรื่องคำสั่ง** ไม่มีการ์ดในโหมด Plan สำหรับคำสั่ง ทุกคำสั่งที่ไม่ปลอดภัยถูกปฏิเสธทันที
-- **turn ไม่จบ** การปฏิเสธทั้งสามแบบเป็นผลที่ model อ่านแล้วทำต่อได้ ต่างจากผู้ใช้กด Deny
+- **สิ่งที่อนุญาตไว้ก่อนไม่ชนะ Plan** ถ้าคุณกด "Allow schedule changes in this chat" ไว้ Plan ก็ยังปฏิเสธการเปลี่ยน `schedule_task` ด้วยข้อความแบบเดียวกับที่ปฏิเสธ `edit`
+  พอออกจาก Plan การเปลี่ยนครั้งต่อไปในแชตนี้ก็ไม่ถามอีก
+- **hook allow ไม่เปิดทางใน Plan** PreToolUse hook ที่ตอบ allow ไม่ทำให้คำสั่งที่ Plan ปฏิเสธได้รัน
+  รวมถึงบรรทัดที่ Geno แยกเป็นคำสั่งย่อยไม่ได้ หรือยาวเกิน 10,000 ตัวอักษร ซึ่งในโหมด Ask และ Auto คำตอบ allow ของ hook ทำให้รันได้
+- **turn ไม่จบ** การปฏิเสธทุกแบบในตารางเป็นผลที่ model อ่านแล้วทำต่อได้ ต่างจากผู้ใช้กด Deny
 
 เมื่อแผนเสร็จแล้ว ดู [จบแผนแล้วคุณกด Start building](/scenarios/perm/plan-start-building/)

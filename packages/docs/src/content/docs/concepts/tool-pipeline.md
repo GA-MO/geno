@@ -27,6 +27,8 @@ description: เส้นทางของ tool call ตั้งแต่ mode
    ใน Auto ทั้ง `deny` `ask` และประเมินไม่ได้ ทำให้ call ถูกปฏิเสธและเหตุผลกลับไปหา model (ดูข้อยกเว้นใต้ตารางโหมด)
    ส่วน error ที่จะล้มทุกครั้ง (เช่น API key ผิดหรือ model ที่ไม่มีอยู่) แปลว่า classifier ใช้ไม่ได้ ซึ่งขึ้นการ์ดถามคุณ
    ก่อนขึ้นการ์ด `PermissionRequest` hook มีโอกาสตอบแทนคุณ ถ้า hook ไม่ตอบ การ์ดจึงขึ้น
+   เมื่อได้คำตอบ allow แล้ว `settle` ดูโหมดอีกครั้ง ถ้า session สลับเป็น Plan ระหว่างรอ call ที่เปลี่ยนอะไรบางอย่างถูกปฏิเสธเป็น `error` (`PlanRefused`)
+   และคำตอบยังถูกบันทึกบนผลของ call ดู [สลับโหมดระหว่าง turn](/scenarios/perm/mode-switch-mid-turn/)
 5. **รัน** shell รันใน sandbox (ขอบเขตที่ระบบปฏิบัติการบังคับ: เขียนได้แค่ใน workspace และ temp ออกเน็ตได้แค่โดเมนที่อนุญาต) ไฟล์เขียนผ่าน buffer ของ editor
 6. **หลังรัน** `PostToolUse` hook เห็นผล ผลที่ยาวมากถูกเก็บลงไฟล์ model ได้แค่ส่วนต้น ส่วนท้าย และ path ของไฟล์
    เมื่อทั้งชุดเสร็จ Geno บันทึกผลลง log ตามลำดับที่ model ขอ ส่งสถานะให้แผงแชต แล้วถึงจุดปลอดภัยก่อนเรียก model ครั้งถัดไป
@@ -55,6 +57,7 @@ flowchart TD
   CL -- "classifier ใช้ไม่ได้" --> PRH2
   ST -- "ask" --> PRH2["PermissionRequest hook"] --> CARD["การ์ดขออนุญาต<br/>session/request_permission"]
   CARD -- "Allow / session / workspace" --> RUN
+  CARD -- "Allow แต่ตอนนี้เป็น Plan" --> PLR["PlanRefused: error ที่เก็บคำตอบไว้ (model ทำต่อ)"]
   CARD -- "No + ข้อความ" --> DEN
   CARD -- "Deny / ยกเลิก" --> REJ["ToolRejected: batch หยุด,<br/>call ที่เหลือได้ 'user rejected', turn จบ"]
   RUN --> POST["PostToolUse hooks; ผลยาวเก็บลงไฟล์"]
@@ -96,6 +99,8 @@ flowchart TD
 - **classifier ที่ใช้ไม่ได้เลยขึ้นการ์ดทุก call** คือปิดอยู่ ไม่มี key หรือ provider ปฏิเสธ key หรือ model กรณีนี้ไม่นับเป็น block ถ้าไม่มี key หรือ key ถูกปฏิเสธ Geno บอกคุณครั้งเดียวต่อ session (ถ้าคุณปิดเองจะไม่มีข้อความ)
 - **คำสั่งที่ย้อนไม่ได้ถามคุณเสมอแม้ใน Auto** เช่น `rm -rf` ของโฟลเดอร์ workspace ทั้งโฟลเดอร์ หรือของ `.git`
   กฎ allow ที่คุณบันทึกไว้ก็ครอบคลุมคำสั่งพวกนี้ไม่ได้
+- **สิ่งที่อนุญาตไว้ทั้ง session อยู่ใน log** การอนุญาต tool MCP ทั้ง session โฟลเดอร์นอก workspace ทั้ง session "Allow schedule changes in this chat" และ host ที่ browser เปิดได้หลังผ่านการตรวจ
+  ถูกบันทึกบนผลของ call (`kept` บน approval หรือ `allows`) engine ตัวใหม่ที่เปิด session เดิมอ่านจาก log จึงยังถือคำตอบเหล่านี้ ส่วน session ใหม่และ fork ไม่ได้คำตอบเหล่านี้ไป
 - **การอนุญาตไม่ได้ยกเว้น sandbox** คำสั่งที่คุณกด Allow แล้วก็ยังเขียนได้แค่ใน workspace และ temp และออกเน็ตได้เฉพาะโดเมนที่อนุญาต
 - **ทางเดียวที่คำสั่งออกนอก sandbox** คือ model ขอด้วย `dangerouslyDisableSandbox: true` แล้วได้รับอนุญาต
   ใน Ask การ์ดขึ้นทุกครั้ง ใน Auto classifier ตัดสินก่อน แต่ถ้าคำสั่งแตะที่เก็บ credential ของเครื่อง (เช่น `~/.ssh` `~/.aws`) หรือเป็น `rm -rf` นอก workspace การ์ดก็ยังขึ้น

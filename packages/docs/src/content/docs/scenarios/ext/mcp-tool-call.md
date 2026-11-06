@@ -161,7 +161,8 @@ scenario:
                 at: settle
                 do: >-
                   `permissionAnswerOf` ได้ `allow-session` `settle` คืนบันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อ tool
-                  ลงชุด `allowed` ของ session call ถัดไปของ tool นี้ไม่ถาม จนกว่า session จะปิด
+                  ลงชุด `allowed` ของ session และ `settle` บันทึก `kept: session` บน approval ของผล call ถัดไปของ tool นี้ใน session นี้ไม่ถาม
+                  แม้ engine เริ่มใหม่หรือเปิด session นี้อีกครั้งในภายหลัง
                 ref: packages/engine/src/mcp/browser.ts#keepMcpAnswer
                 phase: running-tools
 
@@ -279,4 +280,11 @@ tool [MCP](/start/glossary/) ใช้ทางของ tool ทั่วไป
   การ์ดบอกเหตุผลว่า "a tool its MCP server calls read-only, which Geno cannot check" ส่วน Auto และ Plan รัน tool นั้นโดยไม่ถาม
 - **"Allow this tool for the session" อยู่กับ session ไม่ใช่กับ process** คำตอบถูกบันทึกเป็น `kept` บน approval record ใน session log
   engine ตัวใหม่ที่เปิด session เดิมอ่านจาก log ก่อนทุก call จึงไม่ถามซ้ำ ส่วน session ใหม่และ fork ไม่ได้คำตอบนี้ไป และไม่มีอะไรถูกเขียนลง config
+- **browser ของ Geno เริ่มใหม่ทุก run แต่ log จำได้** browser เป็น MCP server ในตัวของ Geno
+  เมื่อ call ที่เปิดหน้าของ host อื่นผ่านการตรวจแล้ว Geno บันทึก host นั้นใน `allows` ของผล
+  engine ตัวใหม่จึงยังนับ host นั้นว่าอนุญาตแล้ว คำถามว่ากำลังทำบนหน้าของ host อื่นที่คุณยังไม่อนุญาตจึงไม่กลับมา
+  ส่วนคำถามของแต่ละ tool เช่น click ใน Ask และการเปิด URL ใหม่ ยังเหมือนเดิม
+- **หน้าที่ browser หายถูกเปิดคืนที่ URL เดิม** ถ้า model เรียก page id ที่ browser ใหม่ไม่มี Geno เปิดหน้านั้นคืนที่ URL ที่รายการหน้าล่าสุดแสดง
+  เฉพาะหน้าบนเครื่องนี้ หน้าของ host ที่อนุญาตแล้วใน session หรือ host ที่กฎ `Browser(domain:...)` อนุญาต และไม่เปิดคืนในโหมด Plan ซึ่งไม่เปิดหน้าใหม่เลย
+  call ที่อ่านอย่างเดียวรันบนหน้าที่เปิดคืนเลย ส่วน call ที่เปลี่ยนหน้าได้ error ที่บอก page id ใหม่ ให้ model เรียกซ้ำเอง
 - **ข้อความจาก server เป็นข้อมูล** คำแนะนำที่ server ส่งมาถูกล้อมใน `<mcp_instructions>` และบอก model ว่าไม่ได้มาจากผู้ใช้
