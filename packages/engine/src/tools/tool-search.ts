@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { autoLoadedFailure, autoLoadedText, coerceToSchema, loadedTools, offersToolSearch, searchTools, TOOL_SEARCH_TOOL, unloadedInputError, type ToolRoster, type TurnEvent } from '@g-code/core';
-import { ALWAYS, executor, LoadedToolError, ToolDenied, ToolError, ToolRejected, type Executor, type ToolReply } from './context.js';
+import { ALWAYS, executor, LoadedToolError, PlanRefused, ToolDenied, ToolError, ToolRejected, type Executor, type ToolReply } from './context.js';
 import type { Executors } from './index.js';
 
 const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional(), query: z.string().min(1).optional() });
@@ -30,9 +30,9 @@ function gate(roster: ToolRoster, name: string, inner: Executor): Executor {
       try {
         reply = await inner.run(input, ctx);
       } catch (error) {
-        // A refusal or a denial keeps its own class and approval record and loads nothing; a call that ran and failed
+        // A refusal, a denial or Plan's refusal keeps its own class and approval record and loads nothing; a call that ran and failed
         // loads the tool, so the next call does not get the definition again.
-        if (error instanceof ToolError && !(error instanceof ToolRejected || error instanceof ToolDenied)) throw new LoadedToolError(autoLoadedFailure(definition, error.message), [name]);
+        if (error instanceof ToolError && !(error instanceof ToolRejected || error instanceof ToolDenied || error instanceof PlanRefused)) throw new LoadedToolError(autoLoadedFailure(definition, error.message), [name]);
         throw error;
       }
       if (typeof reply === 'string') return { text: autoLoadedText(definition, reply), loaded: [name] };
