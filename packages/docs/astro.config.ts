@@ -24,7 +24,7 @@ const base = process.env['DOCS_BASE'] || '/';
 if (!base.startsWith('/')) throw new Error(`DOCS_BASE is a path such as /geno, not ${base}`);
 // Code links on the published site open the commit's files on GitHub; src/scenario/refs.ts reads this.
 const source = process.env['DOCS_SOURCE_URL'];
-if (source !== undefined && source !== '' && !/^https:\/\/[^/]+\/\S+$/.test(source)) throw new Error(`DOCS_SOURCE_URL is a URL such as https://github.com/GA-MO/geno/blob/<sha>, not ${source}`);
+if (source !== undefined && source !== '' && !/^https:\/\/[^/]+\/[^/]+\/[^/]+\/blob\/[^/\s]+\/?$/.test(source)) throw new Error(`DOCS_SOURCE_URL is a URL such as https://github.com/GA-MO/geno/blob/<sha>, not ${source}`);
 
 const THAI_FONT = ['400', '600'].map((weight) => pathToFileURL(createRequire(import.meta.url).resolve(`@fontsource/noto-sans-thai/${weight}.css`)));
 

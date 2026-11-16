@@ -7,7 +7,7 @@ Geno is a coding agent for VS Code. You describe a task in plain language, and G
 ## Features
 
 - **Chat agent in VS Code.** Geno works in your folder with file, search, edit and shell tools, and streams each step into the chat panel.
-- **Approval modes.** Plan reads and runs only clearly safe commands, and changes nothing. Ask asks you before any command that is not on the safe list or a saved allow rule. Auto runs safe commands itself, runs in the sandbox any command that no rule flags, and has a classifier model judge the rest; it still asks before it deletes the workspace, its `.git`, or a path outside it. Ask and Auto apply edits without asking; the sandbox and checkpoints cover them.
+- **Approval modes.** Plan reads and runs only clearly safe commands, and changes nothing. Ask asks you before any command that is not on the safe list or a saved allow rule. Auto runs safe commands itself, runs in the sandbox any command that no rule flags, and has a classifier model judge the rest; it still asks before it deletes the workspace, its `.git`, or a path outside it. Ask and Auto apply edits inside the workspace without asking, unless an `Edit` rule says otherwise, and checkpoints cover them.
 - **Review and undo.** Keep or undo each change by hunk, by file or for the whole session, compare a file with its checkpoint, or undo a whole turn.
 - **Cmd-K and Tab.** Edit a selection in place with Cmd-K Cmd-I (Ctrl-K Ctrl-I). Tab shows ghost-text completions from a local model that `llama-server` serves.
 - **Claude Code compatible configuration.** Geno reads settings, slash commands, skills, agent definitions and hooks from `.claude` as well as from its own `.g-code` and the vendor-neutral `.agents`, so a setup written for Claude Code works unchanged. See [docs/config.md](docs/config.md) and [docs/hooks.md](docs/hooks.md).
@@ -17,7 +17,7 @@ Geno is a coding agent for VS Code. You describe a task in plain language, and G
 
 ## Install
 
-Requirements: Node.js 22.12 or later, pnpm 11 (Corepack picks the version in `package.json`), and VS Code 1.95 or later.
+Requirements: Node.js 22.12 or later, pnpm 9.7 or later (it switches itself to the pnpm 11 that `package.json` names), and VS Code 1.95 or later.
 
 ```sh
 pnpm install

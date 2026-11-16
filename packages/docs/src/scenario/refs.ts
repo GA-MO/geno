@@ -10,7 +10,7 @@ import type { CodeRef } from './model.js';
 export function codeUrl(repoRoot: string, file: string, line?: number): string {
   const source = process.env['DOCS_SOURCE_URL'];
   if (source === undefined || source === '') return `vscode://file${path.join(repoRoot, file)}${line === undefined ? '' : `:${line}`}`;
-  return `${source.replace(/\/$/, '')}/${encodeURI(file)}${line === undefined ? '' : `#L${line}`}`;
+  return `${source.replace(/\/$/, '')}/${file.split('/').map(encodeURIComponent).join('/')}${line === undefined ? '' : `#L${line}`}`;
 }
 
 export type Resolution = { readonly ok: true; readonly ref: CodeRef } | { readonly ok: false; readonly reason: string };

@@ -25,5 +25,6 @@ describe('codeUrl', () => {
   test('encodes a file name a URL cannot carry as is', () => {
     vi.stubEnv('DOCS_SOURCE_URL', 'https://github.com/GA-MO/geno/blob/abc123');
     expect(codeUrl('/x', 'docs/my notes/ไฟล์.md', 2)).toBe('https://github.com/GA-MO/geno/blob/abc123/docs/my%20notes/%E0%B9%84%E0%B8%9F%E0%B8%A5%E0%B9%8C.md#L2');
+    expect(codeUrl('/x', 'docs/a#b?c.md')).toBe('https://github.com/GA-MO/geno/blob/abc123/docs/a%23b%3Fc.md');
   });
 });
