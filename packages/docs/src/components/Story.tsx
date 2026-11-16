@@ -461,7 +461,7 @@ function Internals({ scenario, beat, laneNames }: { readonly scenario: Scenario;
                   </p>
                 )}
                 {step.ref === undefined ? null : (
-                  <a className="ref" href={step.ref.url} title="เปิดบรรทัดนี้ใน VS Code">
+                  <a className="ref" href={step.ref.url} title={step.ref.url.startsWith('vscode:') ? 'เปิดบรรทัดนี้ใน VS Code' : 'เปิดบรรทัดนี้บน GitHub'}>
                     {step.ref.path}:{step.ref.line}
                   </a>
                 )}

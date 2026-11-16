@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { codeUrl } from './refs.js';
 import type { PayloadSpec } from './schema.js';
 
 /** A long string cut at build: the part kept, where in the string it starts, and how long the string was. */
@@ -525,7 +526,7 @@ export function runFiles(repoRoot: string): RunFiles {
           provenance,
           ...(engine === undefined ? {} : { engine }),
           file,
-          url: `vscode://file${path.join(repoRoot, file)}`,
+          url: codeUrl(repoRoot, file),
         },
         ...(partial === undefined ? {} : { partial }),
       };

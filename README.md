@@ -7,9 +7,9 @@ Geno is a coding agent for VS Code. You describe a task in plain language, and G
 ## Features
 
 - **Chat agent in VS Code.** Geno works in your folder with file, search, edit and shell tools, and streams each step into the chat panel.
-- **Approval modes.** Plan reads and runs only clearly safe commands, and changes nothing. Ask asks you before any command that is not on the safe list or a saved allow rule. Auto runs safe commands and sandboxed commands that no rule flags by itself, and has a classifier model judge the rest; it still asks before it deletes the workspace, its `.git`, or a path outside it. Edits are covered by the sandbox and by checkpoints.
+- **Approval modes.** Plan reads and runs only clearly safe commands, and changes nothing. Ask asks you before any command that is not on the safe list or a saved allow rule. Auto runs safe commands itself, runs in the sandbox any command that no rule flags, and has a classifier model judge the rest; it still asks before it deletes the workspace, its `.git`, or a path outside it. Ask and Auto apply edits without asking; the sandbox and checkpoints cover them.
 - **Review and undo.** Keep or undo each change by hunk, by file or for the whole session, compare a file with its checkpoint, or undo a whole turn.
-- **Cmd-K and Tab.** Edit a selection in place with Cmd-K. Tab shows ghost-text completions from a local model that `llama-server` serves.
+- **Cmd-K and Tab.** Edit a selection in place with Cmd-K Cmd-I (Ctrl-K Ctrl-I). Tab shows ghost-text completions from a local model that `llama-server` serves.
 - **Claude Code compatible configuration.** Geno reads settings, slash commands, skills, agent definitions and hooks from `.claude` as well as from its own `.g-code` and the vendor-neutral `.agents`, so a setup written for Claude Code works unchanged. See [docs/config.md](docs/config.md) and [docs/hooks.md](docs/hooks.md).
 - **More than one thread of work.** Subagents, MCP servers, background tasks, scheduled wake-ups, workflows, and lanes: each lane is a git worktree with its own chat.
 - **Browser.** With `gcode.browser.enabled`, the agent drives Chrome through `chrome-devtools-mcp` in a fresh profile.
@@ -17,7 +17,7 @@ Geno is a coding agent for VS Code. You describe a task in plain language, and G
 
 ## Install
 
-Requirements: Node.js 22.12 or later, pnpm, and VS Code 1.95 or later.
+Requirements: Node.js 22.12 or later, pnpm 11 (Corepack picks the version in `package.json`), and VS Code 1.95 or later.
 
 ```sh
 pnpm install
@@ -25,7 +25,7 @@ pnpm package   # writes packages/extension/g-code-<version>.vsix
 code --install-extension packages/extension/g-code-<version>.vsix
 ```
 
-Then open **Geno: Models and Keys** from the gear in the chat view's title bar, or run **Geno: Set API Key** from the command palette, and set your provider's key. Keys are stored in VS Code's SecretStorage, never in settings.
+Then open **Geno: Models and Keys** from the gear in the chat view's title bar, or run **Geno: Set API Key** from the command palette, and set your provider's key. The default provider, Model Studio, also needs its endpoint: the Anthropic-compatible base URL that holds your workspace id and region. Keys are stored in VS Code's SecretStorage, never in settings.
 
 The settings, the providers and what runs where are in [docs/install.md](docs/install.md).
 
@@ -67,7 +67,7 @@ pnpm web -- --workspace <dir>     # the chat panel in a browser
 
 | Command | What it does |
 | --- | --- |
-| `pnpm build` | Builds every package |
+| `pnpm build` | Builds the engine, the extension and the web host |
 | `pnpm typecheck` | Type-checks every package |
 | `pnpm test` | Runs the Vitest suites |
 | `pnpm lint:deps` | Checks the import boundaries between packages |

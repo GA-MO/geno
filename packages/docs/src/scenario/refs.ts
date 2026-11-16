@@ -3,6 +3,16 @@ import path from 'node:path';
 import ts from 'typescript';
 import type { CodeRef } from './model.js';
 
+/**
+ * A link that opens a repo file. The published site sets DOCS_SOURCE_URL to the commit's files on GitHub, because a
+ * `vscode://` link names a path on the machine that built the page.
+ */
+export function codeUrl(repoRoot: string, file: string, line?: number): string {
+  const source = process.env['DOCS_SOURCE_URL'];
+  if (source === undefined || source === '') return `vscode://file${path.join(repoRoot, file)}${line === undefined ? '' : `:${line}`}`;
+  return `${source.replace(/\/$/, '')}/${encodeURI(file)}${line === undefined ? '' : `#L${line}`}`;
+}
+
 export type Resolution = { readonly ok: true; readonly ref: CodeRef } | { readonly ok: false; readonly reason: string };
 
 export interface SourceIndex {
@@ -104,7 +114,7 @@ export function sourceIndex(repoRoot: string): SourceIndex {
         line = findDeclaration(declarations.get(file)!, anchor);
       }
       if (typeof line === 'string') return { ok: false, reason: `${file}: ${line}` };
-      return { ok: true, ref: { path: file, anchor, line, url: `vscode://file${path.join(repoRoot, file)}:${line}` } };
+      return { ok: true, ref: { path: file, anchor, line, url: codeUrl(repoRoot, file, line) } };
     },
     literalExists(text) {
       corpus ??= LITERAL_SOURCES.flatMap((dir) =>
