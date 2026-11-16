@@ -1,4 +1,5 @@
 ---
+import { withBase } from '../lib/base';
 import { hopPath } from '../map/hop';
 import { deriveMap, layoutMap } from '../map/map';
 import { siteFor } from '../scenario/site';
@@ -72,7 +73,7 @@ const lanesOf = (process: string) => map.lanes.filter((lane) => site.lanes.lanes
                         <ul>
                           {node.visits.map((visit) => (
                             <li>
-                              <a href={`${visit.href}#at=${visit.step}`}>{visit.title}</a>
+                              <a href={withBase(`${visit.href}#at=${visit.step}`)}>{visit.title}</a>
                             </li>
                           ))}
                         </ul>

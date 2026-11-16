@@ -1,4 +1,5 @@
 ---
+import { withBase } from '../lib/base';
 import { codeSegments } from '../scenario/labels';
 import type { Scenario } from '../scenario/model';
 import { storyOutline } from '../scenario/story';
@@ -71,7 +72,7 @@ const steps = Object.keys(scenario.via).length;
                   {link.title} <span class="tour-missing">ยังไม่มีหน้า</span>
                 </>
               ) : (
-                <a href={link.href}>{link.title}</a>
+                <a href={withBase(link.href)}>{link.title}</a>
               )}
             </li>
           ))}

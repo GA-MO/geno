@@ -1,4 +1,5 @@
 ---
+import { withBase } from '../lib/base';
 import { siteFor } from '../scenario/site';
 import { ACTOR_NAME, storyBeats, WHO_LABEL } from '../scenario/story';
 
@@ -17,8 +18,8 @@ const chapters = site.catalog.chapters.map((chapter) => {
 
 <div class="home not-prose">
   <div class="mb-6 flex flex-wrap gap-3">
-    <a class="rounded-full bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground" href="/scenarios/turn/with-tools/">เริ่มทัวร์แรก</a>
-    <a class="rounded-full border border-fd-border px-4 py-2 text-sm font-medium" href="/start/how-to-read/">วิธีอ่านทัวร์</a>
+    <a class="rounded-full bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground" href={withBase('/scenarios/turn/with-tools/')}>เริ่มทัวร์แรก</a>
+    <a class="rounded-full border border-fd-border px-4 py-2 text-sm font-medium" href={withBase('/start/how-to-read/')}>วิธีอ่านทัวร์</a>
   </div>
   <section class="home-flagships" aria-labelledby="flagships">
     <h2 id="flagships">เริ่มจากทัวร์เหล่านี้</h2>
@@ -26,7 +27,7 @@ const chapters = site.catalog.chapters.map((chapter) => {
       {
         flagships.map(({ scenario, beats }) => (
           <li>
-            <a class="card flagship" href={scenario.href}>
+            <a class="card flagship" href={withBase(scenario.href)}>
               <span class="card-title">{scenario.title}</span>
               <span class="flagship-strip" aria-label={`${beats.length} จังหวะ`}>
                 {beats.map((beat) => (
@@ -49,7 +50,7 @@ const chapters = site.catalog.chapters.map((chapter) => {
       {
         chapters.map(({ chapter, count, stories }) => (
           <li>
-            <a class="card" href={`/scenarios/#ch-${chapter.number}`}>
+            <a class="card" href={withBase(`/scenarios/#ch-${chapter.number}`)}>
               <span class="card-title">{chapter.thai}</span>
               <span class="card-state">
                 {count} ทัวร์{stories > 0 && <> มีเรื่องเล่า {stories}</>}

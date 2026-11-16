@@ -14,6 +14,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @g-code/docs dev --port 4347
 เปิด `http://localhost:4347` แล้วหยุด server ด้วย `pnpm exec astro dev stop` ใน `packages/docs`
 ถ้าจะ build ทั้งเว็บ ใช้ `pnpm docs:build`
 
+เว็บจริงอยู่ที่ https://ga-mo.github.io/geno/ และ `.github/workflows/docs.yml` deploy ทุกครั้งที่ push `main` ที่แตะ `packages/docs`
+ใต้ path `/geno/` ลิงก์ในหน้า markdown เขียนเป็น `/start/glossary/` ได้ตามเดิม ส่วนลิงก์ในโค้ดของ component ต้องผ่าน `withBase` จาก `src/lib/base.ts`
+ถ้าจะลอง build แบบเดียวกับ Pages ใช้ `DOCS_BASE=/geno pnpm docs:build` build จะล้มถ้ามีลิงก์ที่ไม่มี `/geno` นำหน้า
+
 ## เขียนหน้าใหม่
 
 1. สร้างไฟล์ `.md` หรือ `.mdx` ในโฟลเดอร์ของหมวด เช่น `src/content/docs/concepts/`

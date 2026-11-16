@@ -3,6 +3,7 @@ import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import { DocsPage, type DocsPageProps } from 'fumadocs-ui/layouts/docs/page';
 import { RootProvider } from 'fumadocs-ui/provider/astro';
 import type { ReactNode } from 'react';
+import { withBase } from '../lib/base';
 import SearchDialog from './SearchDialog';
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
 export function Docs({ tree, pathname, page, children }: Props) {
   return (
     <RootProvider pathname={pathname} theme={{ attribute: ['class', 'data-theme'], defaultTheme: 'light', enableSystem: false }} search={{ SearchDialog }}>
-      <DocsLayout tree={tree} nav={{ title: 'Geno ทำงานอย่างไร' }}>
+      <DocsLayout tree={tree} nav={{ title: 'Geno ทำงานอย่างไร', url: withBase('/') }}>
         <DocsPage {...page} tableOfContent={{ enabled: page.toc !== undefined && page.toc.length > 0 }}>
           {children}
         </DocsPage>

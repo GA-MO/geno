@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { withBase } from '../lib/base.js';
 import type { Scenario } from '../scenario/model.js';
 import {
   ACTOR_NAME,
@@ -545,7 +546,7 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart, playing
         <p className="end-row">
           <EndPill ending={ending} />
           {ending.to?.href === undefined ? null : (
-            <a href={ending.to.href} className="end-link">
+            <a href={withBase(ending.to.href)} className="end-link">
               {ending.to.title}
             </a>
           )}

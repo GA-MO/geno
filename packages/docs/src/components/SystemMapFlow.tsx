@@ -1,6 +1,7 @@
 import { BaseEdge, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type EdgeProps, type Node, type NodeProps, type Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useReducer, useRef } from 'react';
+import { withBase } from '../lib/base.js';
 import { hopPath } from '../map/hop.js';
 import type { PositionedMap } from '../map/map.js';
 import { codeSegments } from '../scenario/labels.js';
@@ -173,7 +174,7 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
               <ul>
                 {part.visits.map((visit) => (
                   <li key={visit.scenario}>
-                    <a href={`${visit.href}#at=${visit.step}`}>{visit.title}</a>
+                    <a href={withBase(`${visit.href}#at=${visit.step}`)}>{visit.title}</a>
                   </li>
                 ))}
               </ul>
@@ -194,7 +195,7 @@ function HopVisits({ title, hop }: { readonly title: string; readonly hop: Hop }
       <ul>
         {hop.visits.map((visit) => (
           <li key={visit.scenario}>
-            <a href={`${visit.href}#at=${visit.step}`}>{visit.title}</a>
+            <a href={withBase(`${visit.href}#at=${visit.step}`)}>{visit.title}</a>
           </li>
         ))}
       </ul>

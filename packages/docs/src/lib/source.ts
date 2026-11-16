@@ -2,6 +2,7 @@ import path from 'node:path';
 import { getCollection, type CollectionEntry } from 'astro:content';
 import { structure, type StructuredData } from 'fumadocs-core/mdx-plugins';
 import { loader, type StaticSource } from 'fumadocs-core/source';
+import { withBase } from './base';
 
 const CONTENT = 'src/content/docs';
 
@@ -12,7 +13,12 @@ const files: Files['files'] = [
   ...(await getCollection('meta')).map((meta) => ({ type: 'meta' as const, path: path.relative(CONTENT, meta.filePath!), data: meta.data })),
 ];
 
-export const source = loader({ source: { files }, baseUrl: '/' });
+// meta.json's `[name](/path)` links carry no `$ref` and, unlike pages, do not get the base from `baseUrl`.
+export const source = loader({
+  source: { files },
+  baseUrl: withBase('/'),
+  pageTree: { transformers: [{ file: (node) => (node.$ref === undefined && node.url.startsWith('/') ? { ...node, url: withBase(node.url) } : node) }] },
+});
 
 export function structuredDataOf(entry: CollectionEntry<'docs'>): StructuredData {
   return structure(entry.body ?? '');

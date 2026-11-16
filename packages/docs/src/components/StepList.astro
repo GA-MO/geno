@@ -1,4 +1,5 @@
 ---
+import { withBase } from '../lib/base';
 import { codeSegments, endText, PARTY_LABELS, TURN_END_LABELS } from '../scenario/labels';
 import type { OutlineItem, PartKey, Scenario } from '../scenario/model';
 import { briefOf } from '../scenario/tour';
@@ -48,7 +49,7 @@ const laneOf = (column: number) => scenario.columns[column]!.label;
           )}
           {step.flow.kind === 'leave' && (
             <p class="tour-ending">
-              ไปต่อที่ {step.flow.to.href === undefined ? step.flow.to.title : <a href={step.flow.to.href}>{step.flow.to.title}</a>}
+              ไปต่อที่ {step.flow.to.href === undefined ? step.flow.to.title : <a href={withBase(step.flow.to.href)}>{step.flow.to.title}</a>}
             </p>
           )}
           {step.flow.kind === 'fork' && (

@@ -1,4 +1,5 @@
 ---
+import { withBase } from '../lib/base';
 import { siteFor } from '../scenario/site';
 
 const site = siteFor();
@@ -19,7 +20,7 @@ const chapterOf = (href: string) => href.split('/')[2];
           <ul class="card-grid">
             {mine.map((page) => (
               <li>
-                <a class="card" href={page.href}>
+                <a class="card" href={withBase(page.href)}>
                   <span class="card-title">{page.title}</span>
                   <span class={`card-state${page.story ? ' story' : ''}`}>{page.story ? 'มีเรื่องเล่า' : 'มีแต่ขั้นในโค้ด'}</span>
                 </a>
